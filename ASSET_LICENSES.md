@@ -63,6 +63,12 @@
 남은 일(채택할 때): 실제 모델 파일(glTF)을 원본 zip과 함께 저장소에 넣고, 원본 파일명·배포 경로·수정 내역(축소·재색상·본 보완)을 위 표에 기록한다.
 `License.txt` 캡처에는 팩 이름이 보이지 않으므로, 원본 zip을 넣을 때 그 안의 `License.txt`를 함께 보관해 다시 확인한다.
 
+## 검토했지만 채택하지 않은 에셋
+
+| 확인일 | 에셋 | 받은 파일 | 확인 결과 | 판정 |
+|---|---|---|---|---|
+| 2026-11-25 | Hooded Adventurer (Quaternius, Poly Pizza ID `y9KWOVG21R`로 추정) | 사용자가 올린 `Hooded_Adventurer_by_Quaternius_-_y9KWOVG21R.glb` (SHA256 `703d20f5…3608b`, 보관 안 함) | 파일 안에 라이선스 표기 없음(generator "FBX2glTF v0.9.7"만). 뼈대 62개, 동작 24개(Idle, Walk, Run, Wave, Interact, Roll, 총·칼·주먹 공격 등, 물건 들고 걷기 없음). 키 1.89(실제 어른 비율), 어두운 도적풍 옷. 비교 화면 `docs/asset-evidence/2026-11-25_hooded-adventurer_scale-check.png` | 그림체가 "아기자기한 꼬마 요정"과 맞지 않아 채택하지 않음. 라이선스(개별 페이지·소속 팩)는 미확인 |
+
 ## 코드 의존성(소프트웨어 라이선스, 별도 관리)
 
 | 패키지 | 버전 | 라이선스 |
