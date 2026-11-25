@@ -62,10 +62,22 @@
 2. **Authentication → 설정 → 승인된 도메인**에 게임을 올릴 주소(`jink67-gm.github.io`)를 추가한다(`localhost`는 기본으로 있다).
 3. **Realtime Database → 규칙**: 이 저장소의 `database.rules.json` 내용을 붙여 넣고 「게시」.
 4. 설정값: 저장소에는 키를 넣지 않는다. `.env.example`을 `.env.local`로 복사해 값을 채운다(`.env.local`은 Git에 올라가지 않는다).
-   배포(GitHub Pages)할 때는 GitHub 저장소의 Actions 비밀 값으로 넣어 빌드한다(STEP 09).
+   배포(GitHub Pages)할 때는 GitHub 저장소의 Actions 비밀 값으로 넣어 빌드한다(아래 「배포」).
 
 값이 없으면 「방 만들기」·「참가」가 "설정이 아직 없어요"로 멈추고, 「한 기기에서 둘이」는 그대로 된다.
 방 정보는 3시간 뒤 만료된다. 실명은 쓰지 않는다(자동 요정 별명).
+
+### 배포 (GitHub Pages)
+
+`main`에 올리면 `.github/workflows/pages.yml`이 시험 → 빌드 → 배포한다. 주소: https://jink67-gm.github.io/Lastgift/
+
+처음 한 번:
+1. GitHub 저장소 → Settings → Pages → Build and deployment → Source: **GitHub Actions**
+2. Settings → Secrets and variables → Actions → New repository secret으로 다섯 개를 넣는다(값은 `.env.local`과 같다):
+   `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_DATABASE_URL`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`
+3. Actions 탭 → 「Pages 배포」 → Run workflow (또는 main에 다시 올리기)
+
+비밀 값이 빠져 있으면 배포 전에 멈추고 빠진 이름을 알려 준다.
 
 ### 키 도용 막기
 
