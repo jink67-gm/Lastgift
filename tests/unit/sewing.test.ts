@@ -10,6 +10,7 @@ import {
   needsSwap,
   planAction,
   playerLeft,
+  playerRejoined,
   step,
   STAMINA_DRAIN,
   STAMINA_MAX,
@@ -347,5 +348,21 @@ describe('체력·교대(3~4인)', () => {
     expect(r.state.crate.lifted).toBe(false);
     expect(r.state.crate.x).toBe(at.x);
     expect(r.state.players.find((p) => p.id === 'a')!.connected).toBe(false);
+  });
+
+  it('다시 들어온 요정은 손잡이 없이 되살아나고, 팀이 작업실로 넘어갔으면 작업실 안전 위치에 선다', () => {
+    const sim = lifted(['a', 'b']);
+    let st = playerLeft(sim.s, 'a').state;
+    st = playerRejoined(st, 'a');
+    const a = st.players.find((p) => p.id === 'a')!;
+    expect(a.connected).toBe(true);
+    expect(a.holding).toBeNull();
+    // 작업실 확정 뒤 뒤뜰에 남아 있던 요정
+    st = playerLeft(st, 'a').state;
+    st = { ...st, space: 'workshop', transition: 1 };
+    st = playerRejoined(st, 'a');
+    expect(st.players.find((p) => p.id === 'a')!.z).toBeLessThan(CH2.boundaryZ);
+    expect(st.space).toBe('workshop');
+    expect(st.transition).toBe(1); // 공간 확정을 다시 하지 않는다
   });
 });

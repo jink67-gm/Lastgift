@@ -101,7 +101,7 @@ test('앞 요정이 먼저 문을 넘고, 뒤 요정이 문턱에서 멈췄다�
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
-  await page.goto('/?chapter=2&test');
+  await page.goto('/?chapter=2&local&test');
   await page.waitForFunction(() => !!window.__lastgift?.sewing);
   expect((await page.evaluate(() => window.__lastgift.run())).chapterId).toBe(2);
 

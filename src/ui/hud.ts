@@ -10,6 +10,11 @@ const CSS = `
 #hud .chip svg { width: 28px; height: 28px; }
 #hud .timer.low { color: #ffd84a; }
 #hud .save-error { display: none; }
+#hud .team { display: none; gap: 6px; }
+#hud .team.on { display: flex; }
+#hud .team .m { position: relative; width: 26px; height: 26px; border-radius: 50% 50% 6px 6px; border: 2px solid #fff; }
+#hud .team .m.off { opacity: 0.35; }
+#hud .team .m.off::after { content: ''; position: absolute; left: -4px; right: -4px; top: 11px; height: 3px; background: #ffd84a; transform: rotate(-35deg); }
 #hud .save-error.on { display: flex; }
 #overlay { position: fixed; inset: 0; z-index: 30; display: none; place-items: center;
   background: rgba(27, 36, 51, 0.55); color: #fff; font: 800 96px/1 system-ui, sans-serif; }
@@ -41,6 +46,8 @@ export type OverlayView =
 
 export interface Hud {
   setTime(ms: number): void;
+  /** 팀원 연결 상태(모자 색, 끊기면 흐리게 + 빗금) */
+  setTeam(team: { color: string; connected: boolean }[]): void;
   setSaveError(on: boolean): void;
   setOverlay(v: OverlayView): void;
   /** 시간 초과 화면의 「다시 하기」 */
@@ -56,11 +63,14 @@ export function createHud(doc: Document): Hud {
   hud.id = 'hud';
   hud.innerHTML = `
     <div class="chip timer" role="timer" aria-label="남은 팀 시간">${CLOCK}<span class="t">30:00</span></div>
-    <div class="chip save-error" role="status" aria-label="저장하지 못했어요">${SAVE_ERR}</div>`;
+    <div class="chip save-error" role="status" aria-label="저장하지 못했어요">${SAVE_ERR}</div>
+    <div class="chip team" aria-label="팀원 연결 상태"></div>`;
   doc.body.appendChild(hud);
   const timer = hud.querySelector<HTMLDivElement>('.timer')!;
   const t = timer.querySelector<HTMLSpanElement>('.t')!;
   const saveErr = hud.querySelector<HTMLDivElement>('.save-error')!;
+  const teamEl = hud.querySelector<HTMLDivElement>('.team')!;
+  let lastTeam = '';
 
   const overlay = doc.createElement('div');
   overlay.id = 'overlay';
@@ -78,6 +88,15 @@ export function createHud(doc: Document): Hud {
         lastText = text;
       }
       timer.classList.toggle('low', ms <= 60_000);
+    },
+    setTeam(team) {
+      const key = team.map((m) => `${m.color}${m.connected ? 1 : 0}`).join();
+      if (key === lastTeam) return;
+      lastTeam = key;
+      teamEl.classList.toggle('on', team.length > 0);
+      teamEl.innerHTML = team
+        .map((m) => `<span class="m ${m.connected ? '' : 'off'}" style="background:${m.color}" role="img" aria-label="${m.connected ? '연결됨' : '연결 끊김'}"></span>`)
+        .join('');
     },
     setSaveError(on) {
       saveErr.classList.toggle('on', on);

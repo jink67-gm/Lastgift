@@ -14,18 +14,22 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test --project=chromium",
+    "test:net": "node scripts/with-emulators.mjs \"LASTGIFT_NET=1 vitest run && playwright test --project=net\"",
+    "test:rules": "node scripts/with-emulators.mjs \"LASTGIFT_NET=1 vitest run\""
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jink67-gm/lastgift.git"
   },
   "dependencies": {
+    "firebase": "13.4.0",
     "three": "0.187.0"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
     "@types/three": "0.187.0",
+    "firebase-tools": "15.37.0",
     "typescript": "7.0.2",
     "vite": "8.3.8",
     "vitest": "5.1.1"

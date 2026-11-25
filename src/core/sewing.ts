@@ -440,3 +440,25 @@ export function playerLeft(s: SewingState, playerId: string): { state: SewingSta
 export function needsSwap(s: SewingState, p: CarryPlayer): boolean {
   return p.holding !== null && s.crate.lifted && p.stamina <= STAMINA_WARN;
 }
+
+/** 작업실이 확정된 뒤 다시 들어온 요정이 설 안전 위치(대기 구역 안) */
+const WORKSHOP_SAFE = [
+  { x: -0.8, z: -3.2 },
+  { x: 0.8, z: -3.2 },
+  { x: -0.8, z: -4.6 },
+  { x: 0.8, z: -4.6 },
+];
+
+/**
+ * 연결이 끊겼던 요정이 다시 들어왔다. 방장의 현재 공간·소유권을 그대로 두고 그 요정만 되살린다.
+ * 팀이 이미 작업실로 넘어갔는데 그 요정이 뒤쪽에 남아 있었다면 작업실 안전 위치로 옮긴다.
+ */
+export function playerRejoined(s: SewingState, playerId: string): SewingState {
+  const i = s.players.findIndex((q) => q.id === playerId);
+  if (i < 0) return s;
+  const p = s.players[i]!;
+  if (p.connected) return s;
+  let pos = { x: p.x, z: p.z };
+  if (s.space === 'workshop' && p.z >= CH2.boundaryZ) pos = WORKSHOP_SAFE[i % WORKSHOP_SAFE.length]!;
+  return { ...s, players: s.players.map((q) => (q.id === playerId ? { ...q, ...pos, connected: true, holding: null, moving: false } : q)) };
+}
