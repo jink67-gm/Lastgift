@@ -1,0 +1,110 @@
+<!-- 시제품(게임 코드 아님): Quaternius Hooded Adventurer를 미니 요정으로 꾸민 비교 화면. 원래 임시 폴더 경로 기준이라 그대로는 열리지 않을 수 있다. STEP 04에서 게임 코드로 옮길 때 참고용. -->
+<!doctype html><html><body style="margin:0"><canvas id=c></canvas>
+<script type="module">
+import * as THREE from '/@fs/home/user/lastgift/node_modules/three/build/three.module.js';
+import { GLTFLoader } from '/@fs/home/user/lastgift/node_modules/three/examples/jsm/loaders/GLTFLoader.js';
+import * as SkeletonUtils from '/@fs/home/user/lastgift/node_modules/three/examples/jsm/utils/SkeletonUtils.js';
+const S = '/@fs/tmp/claude-0/-home-user/57ffa77d-4985-5801-b4a5-13162013fbb6/scratchpad';
+const view = new URLSearchParams(location.search).get('view') || 'front';
+const r = new THREE.WebGLRenderer({ canvas: c, antialias: true }); r.setSize(1280, 720); r.setPixelRatio(1);
+const s = new THREE.Scene(); s.background = new THREE.Color('#dfe7f4');
+s.add(new THREE.HemisphereLight('#fff', '#778', 2.3)); const d = new THREE.DirectionalLight('#fff', 1.5); d.position.set(2, 6, 6); s.add(d);
+const cam = new THREE.OrthographicCamera(-2.6, 2.6, 1.46, -1.46, 0.1, 100);
+if (view === 'front') { cam.position.set(0, 0.85, 20); cam.lookAt(0, 0.85, 0); }
+else { const yaw = Math.PI / 4, pitch = Math.atan(1 / Math.SQRT2); cam.position.set(Math.sin(yaw) * Math.cos(pitch) * 30, 0.6 + Math.sin(pitch) * 30, Math.cos(yaw) * Math.cos(pitch) * 30); cam.lookAt(0, 0.6, 0); }
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(12, 6), new THREE.MeshStandardMaterial({ color: '#eef3fb' })); ground.rotation.x = -Math.PI / 2; s.add(ground);
+const L = new GLTFLoader(); const load = (u) => new Promise((res, rej) => L.load(u, res, undefined, rej));
+const src = await load(`${S}/assetcheck/hooded.glb`);
+const clip = (n) => src.animations.find(a => a.name === 'CharacterArmature|' + n);
+
+// 부위별 색(메시 이름 + 재질 이름)
+const PAINT = {
+  Medieval_Head: { Black: '#111111', Brown: '#3a2414', White: '#8a5a2b', Skin: '#f1c9a5', DarkBrown: null /* 후드 숨김 */ },
+  Medieval_Body: { Black: '#2f8a3e', DarkBrown: '#256b31', LightBrown: '#7a4a24', Skin: '#f1c9a5', Gold: '#f2c14e', Metal: '#f7f7f7' },
+  Medieval_Legs: { Black: '#c8323c' },
+  Medieval_Feet: { LightBrown: '#8a5a32', DarkBrown: '#5a3620' },
+};
+
+function hatTexture(base, pattern, accent) {
+  const n = 256, cv = document.createElement('canvas'); cv.width = n; cv.height = n; const g = cv.getContext('2d');
+  g.fillStyle = base; g.fillRect(0, 0, n, n); g.fillStyle = accent;
+  if (pattern === 'stripes') for (let y = 0; y < n; y += 48) g.fillRect(0, y, n, 18);
+  if (pattern === 'dots') for (let y = 16; y < n; y += 40) for (let x = (y / 40) % 2 ? 20 : 0; x < n; x += 40) { g.beginPath(); g.arc(x, y, 9, 0, 7); g.fill(); }
+  if (pattern === 'stars') for (let y = 24; y < n; y += 52) for (let x = (y / 52) % 2 ? 30 : 4; x < n; x += 60) { g.beginPath(); for (let i = 0; i < 10; i++) { const a = Math.PI / 5 * i - Math.PI / 2, rr = i % 2 ? 6 : 14; g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } g.fill(); }
+  if (pattern === 'checks') for (let y = 0; y < n; y += 32) for (let x = (y / 32) % 2 ? 32 : 0; x < n; x += 64) g.fillRect(x, y, 32, 32);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 1); return t;
+}
+
+/** 끝이 뒤로 휘어 늘어지는 요정 모자(미터 단위, 원점 = 모자 밑동 가운데) */
+function elfHat(base, pattern, accent) {
+  const g = new THREE.Group();
+  const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0.17, -0.01), new THREE.Vector3(0.02, 0.32, -0.05), new THREE.Vector3(0.08, 0.41, -0.13), new THREE.Vector3(0.16, 0.4, -0.22), new THREE.Vector3(0.22, 0.31, -0.25)]);
+  const N = 40, R = 0.17, tube = new THREE.TubeGeometry(curve, N, R, 24, false);
+  const pos = tube.attributes.position, v = new THREE.Vector3(), cpt = new THREE.Vector3();
+  for (let i = 0; i <= N; i++) {
+    const t = i / N, rad = 0.155 * Math.pow(1 - t, 0.85) + 0.012; curve.getPointAt(t, cpt);
+    for (let j = 0; j <= 24; j++) { const k = i * 25 + j; v.fromBufferAttribute(pos, k).sub(cpt).multiplyScalar(rad / R).add(cpt); pos.setXYZ(k, v.x, v.y, v.z); }
+  }
+  tube.computeVertexNormals();
+  g.add(new THREE.Mesh(tube, new THREE.MeshStandardMaterial({ map: hatTexture(base, pattern, accent), roughness: 0.9, side: THREE.DoubleSide })));
+  const fur = new THREE.MeshStandardMaterial({ color: '#fbfbf7', roughness: 1 });
+  const brim = new THREE.Mesh(new THREE.TorusGeometry(0.158, 0.045, 10, 28), fur); brim.rotation.x = Math.PI / 2; brim.position.y = 0.01; g.add(brim);
+  const tip = curve.getPointAt(1); const pom = new THREE.Mesh(new THREE.IcosahedronGeometry(0.05, 2), fur); pom.position.copy(tip).add(new THREE.Vector3(0, -0.03, -0.01)); g.add(pom);
+  return g;
+}
+
+const LOOKS = [['#d23a3a', 'stripes', '#ffffff'], ['#2f6fd0', 'dots', '#ffffff'], ['#2f9a4a', 'stars', '#fff3a8'], ['#e0b021', 'checks', '#5a3b12']];
+function make(x, anim, t, look, rotY = 0) {
+  const g = SkeletonUtils.clone(src.scene); g.position.x = x; g.rotation.y = rotY; s.add(g);
+  g.traverse(o => {
+    if (!o.isMesh) return; o.material = o.material.clone();
+    if (o.name.includes('Sword')) { o.visible = false; return; }
+    let p = o; while (p && !PAINT[p.name]) p = p.parent; const table = p ? PAINT[p.name] : null;
+    if (table && o.material.name in table) { const col = table[o.material.name]; if (col === null) o.visible = false; else o.material.color.set(col); }
+    o.material.metalness = 0; o.material.roughness = 0.85;
+  });
+  const bone = (n) => { let b; g.traverse(o => { if (o.isBone && o.name === n) b = o; }); return b; };
+  bone('Head').scale.setScalar(1.75);
+  for (const n of ['UpperLegL', 'UpperLegR', 'LowerLegL', 'LowerLegR']) bone(n).scale.set(1.25, 0.52, 1.25);
+  bone('Torso').scale.set(1.18, 0.85, 1.18);
+  for (const n of ['FootL', 'FootR']) { const f = bone(n); if (f) f.scale.set(1.1, 0.55, 1.1); }
+  const m = new THREE.AnimationMixer(g); m.clipAction(clip(anim)).play(); m.update(t); g.updateMatrixWorld(true);
+  let b = new THREE.Box3().setFromObject(g); g.scale.setScalar(0.95 / (b.max.y - b.min.y)); g.updateMatrixWorld(true);
+  b = new THREE.Box3().setFromObject(g); g.position.y -= b.min.y; g.updateMatrixWorld(true);
+  const head = bone('Head'), ws = head.getWorldScale(new THREE.Vector3()).x, hp = head.getWorldPosition(new THREE.Vector3());
+  const top = new THREE.Box3().setFromObject(g).max.y;
+  // 눈썹(머리의 Brown 재질)과 머리(Skin·머리카락) 크기를 실제로 재서 모자를 맞춘다
+  const box = (pred) => { const b = new THREE.Box3(); g.traverse(o => { if (o.isMesh && o.visible && pred(o)) b.union(new THREE.Box3().setFromObject(o)); }); return b; };
+  const inHead = (o) => { let p = o; while (p) { if (p.name === 'Medieval_Head') return true; p = p.parent; } return false; };
+  const rotSave = g.rotation.y; g.rotation.y = 0; g.updateMatrixWorld(true);   // 돌리기 전 방향으로 잰다
+  const brow = box(o => inHead(o) && o.material.name === 'Brown');
+  const headB = box(o => inHead(o) && (o.material.name === 'Skin' || o.material.name === 'White'));
+  const hp0 = head.getWorldPosition(new THREE.Vector3());
+  const headSize = headB.getSize(new THREE.Vector3());
+  const wantR = Math.max(headSize.x, headSize.z) / 2 * 1.02;   // 털 테두리 안쪽이 머리를 감싸도록
+  const k = wantR / 0.158;                                       // elfHat 기본 테두리 반지름 0.158 m
+  const tubeR = 0.045 * k;
+  const hat = elfHat(...look); hat.scale.setScalar(k / ws);
+  // 털 테두리 아래쪽이 눈썹 바로 위(5 mm)에 오게 → 이마를 덮는다. 뒤로 살짝 젖혀 위에서 봐도 얼굴이 보이게
+  const at = new THREE.Vector3(hp0.x, brow.max.y + 0.005 + tubeR - 0.01 * k, (headB.min.z + headB.max.z) / 2 - 0.01);
+  head.add(hat); hat.position.copy(head.worldToLocal(at.clone()));
+  const qInv = head.getWorldQuaternion(new THREE.Quaternion()).invert(); hat.quaternion.copy(qInv).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.22, 0, 0)));
+  g.rotation.y = rotSave; g.updateMatrixWorld(true);
+  window.__fit = window.__fit || []; window.__fit.push({ browTop: +brow.max.y.toFixed(3), headTop: +headB.max.y.toFixed(3), headW: +headSize.x.toFixed(3), hatScale: +k.toFixed(2) });
+  g.rotation.y = 0; g.updateMatrixWorld(true);
+  for (const sx of [-1, 1]) {
+    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.12, 10), new THREE.MeshStandardMaterial({ color: '#f1c9a5', roughness: 0.85 }));
+    ear.scale.setScalar(1 / ws); head.add(ear);
+    const side = new THREE.Vector3(sx * 0.15, 0, 0);
+    ear.position.copy(head.worldToLocal(hp0.clone().add(side).add(new THREE.Vector3(0, (top - hp.y) * 0.35 - 0.05, 0))));
+    ear.quaternion.copy(qInv).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -sx * 1.2)));
+  }
+  g.rotation.y = rotSave; g.updateMatrixWorld(true);
+}
+const rot = view === 'front' ? 0 : 0.35;
+make(-1.8, 'Idle', 0.5, LOOKS[0], rot);
+make(-0.6, 'Wave', 0.7, LOOKS[1], rot);
+make(0.6, 'Walk', 0.35, LOOKS[2], rot);
+make(1.8, 'Interact', 0.6, LOOKS[3], rot);
+r.render(s, cam); window.__sizes = window.__fit; window.__ready = true;
+</script></body></html>

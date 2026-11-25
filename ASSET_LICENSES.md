@@ -39,11 +39,12 @@
 ## 외부 에셋 후보(아직 게임에 넣지 않음)
 
 후보는 배포 목록에 넣지 않는다. 게임에 넣을 때 실제 모델 파일을 저장소에 복사하고 위 표로 옮긴다.
-증빙 보관 경로: `docs/asset-evidence/quaternius-animated-animals/`
+증빙 보관 경로: `docs/asset-evidence/quaternius-animated-animals/`, `docs/asset-evidence/quaternius-modular-women/`
 
 | 확인일 | 모델명 | 제작자 | 공식 팩 URL | 개별 모델 URL | 실제 라이선스 표기 | 동봉 파일 확인 | 채택 상태 |
 |---|---|---|---|---|---|---|---|
 | 2026-11-25 | Shiba Inu (시바견, 콩이 후보) | Quaternius | https://quaternius.com/packs/ultimateanimatedanimals.html | https://poly.pizza/m/y4wdQpg767 | 팩 페이지 `License` → `CC0`(creativecommons.org/publicdomain/zero/1.0/) · 개별 페이지 "퍼블릭 도메인(CC0)", 포함 항목 "애니메이션 동물 팩 12개 모델" | 동봉 `License.txt` "CC0 1.0 Universal (CC0 1.0) Public Domain Dedication" 확인(사용자 화면 캡처). 모델 파일은 아직 저장소에 없음 | 후보(CC0 확인 완료) |
+| 2026-11-25 | Hooded Adventurer (요정 몸 후보) | Quaternius | https://quaternius.com/packs/ultimatemodularwomen.html | Poly Pizza ID `y9KWOVG21R`(받은 파일 이름 기준) | 팩 페이지 `License` → `CC0`(creativecommons.org/publicdomain/zero/1.0/), "10 Different characters with 24 animations… free to use in personal and commercial projects" · Poly Pizza "2022년 4월 10일 • FBX/GLTF 형식 • 퍼블릭 도메인(CC0)", 제작자 쿼터니우스, 포함 항목 "궁극의 모듈형 여성용 팩 10개 모델" | 받은 GLB 직접 확인: 파일 안 라이선스 표기 없음(generator "FBX2glTF v0.9.7"), 동작 24개·4부분 구조가 팩 설명과 일치. 원본 `assets-src/quaternius/Hooded_Adventurer_by_Quaternius_-_y9KWOVG21R.glb`(SHA256 `703d20f5…3608b`). 팩 zip의 `License.txt`는 미확인 | 후보(CC0 확인 완료) |
 | 2026-11-25 | Husky (허스키, 콩이 후보) | Quaternius | https://quaternius.com/packs/ultimateanimatedanimals.html | https://poly.pizza/m/wcWiuEqwzq | 팩 페이지 `License` → `CC0` · 개별 페이지 "퍼블릭 도메인(CC0)", 포함 항목 "애니메이션 동물 팩 12개 모델" | 위와 같은 동봉 `License.txt` 확인. 모델 파일은 아직 저장소에 없음 | 후보(CC0 확인 완료) |
 
 ### 2026-11-25 확인 기록(Shiba Inu·Husky)
@@ -63,11 +64,16 @@
 남은 일(채택할 때): 실제 모델 파일(glTF)을 원본 zip과 함께 저장소에 넣고, 원본 파일명·배포 경로·수정 내역(축소·재색상·본 보완)을 위 표에 기록한다.
 `License.txt` 캡처에는 팩 이름이 보이지 않으므로, 원본 zip을 넣을 때 그 안의 `License.txt`를 함께 보관해 다시 확인한다.
 
-## 검토했지만 채택하지 않은 에셋
+### 2026-11-25 Hooded Adventurer 확인 기록
 
-| 확인일 | 에셋 | 받은 파일 | 확인 결과 | 판정 |
-|---|---|---|---|---|
-| 2026-11-25 | Hooded Adventurer (Quaternius, Poly Pizza ID `y9KWOVG21R`로 추정) | 사용자가 올린 `Hooded_Adventurer_by_Quaternius_-_y9KWOVG21R.glb` (SHA256 `703d20f5…3608b`, 보관 안 함) | 파일 안에 라이선스 표기 없음(generator "FBX2glTF v0.9.7"만). 뼈대 62개, 동작 24개(Idle, Walk, Run, Wave, Interact, Roll, 총·칼·주먹 공격 등, 물건 들고 걷기 없음). 키 1.89(실제 어른 비율), 어두운 도적풍 옷. 비교 화면 `docs/asset-evidence/2026-11-25_hooded-adventurer_scale-check.png` | 그림체가 "아기자기한 꼬마 요정"과 맞지 않아 채택하지 않음. 라이선스(개별 페이지·소속 팩)는 미확인 |
+| 확인 대상 | 결과(원문) | 확인 방법 · 증빙 |
+|---|---|---|
+| 공식 팩 페이지 | "Quaternius • Ultimate Modular Women Pack", 정보 칸 `License` → `CC0`, "February 2022 10 Different characters with 24 animations! Each character is divided into 4 models" | 직접 받아 HTML 확인 |
+| Poly Pizza 개별 페이지 | 제작자 쿼터니우스, "2022년 4월 10일 • FBX /GLTF 형식 • 퍼블릭 도메인(CC0)", 포함 항목 "궁극의 모듈형 여성용 팩 10개 모델". 캡처 위쪽이 잘려 모델 이름은 화면에 없음 | 사용자 캡처(브라우저 번역) `2026-11-25_polypizza_hooded-adventurer.jpg` |
+| 받은 파일 | 동작 24개(Idle, Walk, Run, Wave, Interact 등), 메시 4부분(Head·Body·Legs·Feet)+칼, 뼈 62개 → 팩 설명과 일치 | 직접 분석 |
+
+미니 요정 꾸미기 시제품(머리 1.75배·다리 짧게·옷 다시 칠하기·후드 숨김·눈 검정·이마~눈썹 위까지 덮는 요정 모자·뾰족 귀):
+`tools/prototypes/mini-elf-hooded.html`, 화면 `docs/asset-evidence/quaternius-modular-women/2026-11-25_mini-elf-prototype_*.png`. 게임에는 아직 넣지 않았다.
 
 ## 코드 의존성(소프트웨어 라이선스, 별도 관리)
 
