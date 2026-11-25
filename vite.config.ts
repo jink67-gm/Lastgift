@@ -8,6 +8,8 @@ export default defineConfig({
   build: {
     target: 'es2022',
     outDir: 'dist',
+    // three.js 본체만 약 530 kB(gzip 약 130 kB)라 기본 경고 기준(500 kB)을 넘는다.
+    chunkSizeWarningLimit: 800,
   },
   test: {
     include: ['tests/unit/**/*.test.ts'],

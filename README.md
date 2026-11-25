@@ -12,6 +12,14 @@
 | `npm run typecheck` | 타입 검사 |
 | `npm run build` | 타입 검사 후 `dist/` 생성 (GitHub Pages 배포용) |
 | `npm run preview` | 빌드 결과를 로컬에서 열기 |
+| `npm run test:e2e` | 빌드 후 실제 Chromium에서 키 입력 테스트 (Playwright) |
+
+## 지금 할 수 있는 것
+
+- 눈 광장에서 요정 1명을 WASD 또는 방향키로 움직인다. 위·아래·좌·우는 화면 기준이다.
+- 한글 입력 상태에서도 동작한다(물리 키 위치 `event.code`로 판정).
+- 썰매·산타·트리·집·벤치·가로등에 막히고 벽을 따라 미끄러진다. 광장 밖으로 나가지 않는다.
+- 주소 끝에 `?test`를 붙이면 자동 검사용 창구(`window.__lastgift`)가 열린다.
 
 ## 환경
 
@@ -20,7 +28,11 @@ Node.js 22 이상 · Vite 8.3.8 · TypeScript 7.0.2 · Three.js 0.187.0 · Vites
 ## 폴더
 
 ```
-src/core/      게임 규칙 (three.js를 쓰지 않는 순수 TS)
-src/main.ts    화면 시작점
-tests/unit/    규칙 테스트
+src/core/      게임 규칙 (three.js를 쓰지 않는 순수 TS): 화면→바닥 방향, 충돌, 이동
+src/input/     키보드 → Intent(입력 장치와 무관한 의도)
+src/data/      광장 배치, 요정 모자 4종
+src/scene/     three.js 모델(직접 제작 기본 도형)
+src/main.ts    화면 시작점, 고정 틱(60Hz) 루프
+tests/unit/    규칙 테스트 (Vitest)
+tests/e2e/     실제 브라우저 테스트 (Playwright)
 ```
