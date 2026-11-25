@@ -56,17 +56,32 @@
 
 ### Firebase 설정 (한 번)
 
-이 게임만 쓰는 Firebase 프로젝트를 새로 만든다(무료 요금제로 충분하다. 처음 소개 신호만 잠깐 주고받는다).
+이 게임 전용 Firebase 프로젝트(`lastgift-cbaac`)를 쓴다. 무료 요금제(Spark)로 충분하다(처음 소개 신호만 잠깐 주고받는다).
 
-1. Firebase 콘솔에서 새 프로젝트를 만들고, 웹 앱을 하나 추가한다.
-2. Authentication → 로그인 방법: **익명** 사용.
-3. Realtime Database를 만들고 → 규칙: 이 저장소의 `database.rules.json` 내용을 붙여 넣고 「게시」.
-4. 프로젝트 설정 → 내 앱(웹)의 `firebaseConfig` 값(apiKey, authDomain, databaseURL, projectId, appId)을
-   `src/net/firebaseConfig.ts`에 넣는다. 이 값은 웹에 공개되는 정보다(방 보호는 보안 규칙이 맡는다).
-5. Authentication → 설정 → 승인된 도메인에 게임을 올릴 주소(예: GitHub Pages 도메인)가 있는지 확인한다.
+1. **Authentication → 시작하기 → 로그인 방법: 익명 사용 설정.**
+2. **Authentication → 설정 → 승인된 도메인**에 게임을 올릴 주소(`jink67-gm.github.io`)를 추가한다(`localhost`는 기본으로 있다).
+3. **Realtime Database → 규칙**: 이 저장소의 `database.rules.json` 내용을 붙여 넣고 「게시」.
+4. 설정값: 저장소에는 키를 넣지 않는다. `.env.example`을 `.env.local`로 복사해 값을 채운다(`.env.local`은 Git에 올라가지 않는다).
+   배포(GitHub Pages)할 때는 GitHub 저장소의 Actions 비밀 값으로 넣어 빌드한다(STEP 09).
 
-값을 넣기 전에는 「방 만들기」·「참가」가 "설정이 아직 없어요"로 멈추고, 「한 기기에서 둘이」는 그대로 된다.
+값이 없으면 「방 만들기」·「참가」가 "설정이 아직 없어요"로 멈추고, 「한 기기에서 둘이」는 그대로 된다.
 방 정보는 3시간 뒤 만료된다. 실명은 쓰지 않는다(자동 요정 별명).
+
+### 키 도용 막기
+
+Firebase 웹 설정값(apiKey 포함)은 빌드된 게임 파일에 들어가 **브라우저에서 누구나 볼 수 있는 공개 정보**다.
+`.env.local`로 빼면 저장소 코드에는 남지 않지만, 배포된 게임에서는 여전히 보인다. 그래서 아래로 막는다.
+
+| 방법 | 막는 것 | 어디서 |
+|---|---|---|
+| 보안 규칙(`database.rules.json`) | 키를 가져가도 `lastgiftRooms`의 정해진 모양 말고는 읽고 쓸 수 없다(크기 제한·3시간 만료·남의 신호 읽기 금지·그 밖의 경로 모두 거부) | Firebase 콘솔 → Realtime Database → 규칙 |
+| API 키 사용처 제한 | 다른 웹사이트에서 이 키로 로그인하지 못하게 한다 | Google Cloud 콘솔 → API 및 서비스 → 사용자 인증 정보 → "Browser key (auto created by Firebase)" |
+| 무료 요금제 유지 | 누가 마구 써도 요금이 나오지 않고 한도에서 멈춘다 | 결제 계정을 연결하지 않는다 |
+| App Check(선택) | 우리 게임 페이지에서 온 요청만 받는다(reCAPTCHA) | 배포 뒤 함께 설정 |
+
+API 키 사용처 제한 값:
+- 애플리케이션 제한사항 → **웹사이트**: `https://jink67-gm.github.io/*`, `http://localhost:5173/*`, `http://localhost:4173/*`
+- API 제한사항 → **키 제한**: `Identity Toolkit API`, `Token Service API` (Realtime Database는 이 키를 쓰지 않는다)
 
 ## 2장 재봉틀 운반 규칙 (명세서 §5, §3.2, `src/core/sewing.ts`)
 
@@ -106,7 +121,7 @@ src/session/   이 기기가 방장일 때 팀 시도 상태를 돌리는 연결
 src/scene/     three.js 모델(직접 제작 기본 도형)
 src/main.ts    시작점(주소로 장면 선택)
 src/game/      장면별 게임 루프: plaza(0장 시험), chapter2(로컬 2인·고르기), chapter2Net(방장·참가자), chapter2Screen(그리기)
-src/net/       Firebase 시그널링, WebRTC 연결, 메시지 형식·검사
+src/net/       Firebase 시그널링(설정값은 .env.local), WebRTC 연결, 메시지 형식·검사
 scripts/       with-emulators.mjs: 에뮬레이터를 켜고 규칙을 올린 뒤 명령 실행
 tests/unit/    규칙 테스트 (Vitest)
 tests/e2e/     실제 브라우저 테스트 (Playwright, 한 기기)

@@ -6,3 +6,8 @@ playwright-report/
 .vite/
 *.log
 .DS_Store
+
+# Firebase 설정값 등 로컬 환경 파일(양식인 .env.example만 올린다)
+.env
+.env.*
+!.env.example
