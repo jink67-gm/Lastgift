@@ -43,7 +43,7 @@
 
 | 확인일 | 모델명 | 제작자 | 공식 팩 URL | 개별 모델 URL | 실제 라이선스 표기 | 동봉 파일 확인 | 채택 상태 |
 |---|---|---|---|---|---|---|---|
-| 2026-11-25 | Shiba Inu (시바견, 콩이 후보) | Quaternius | https://quaternius.com/packs/ultimateanimatedanimals.html | https://poly.pizza/m/y4wdQpg767 | 팩 페이지 `License` → `CC0`(creativecommons.org/publicdomain/zero/1.0/) · 개별 페이지 "퍼블릭 도메인(CC0)", 포함 항목 "애니메이션 동물 팩 12개 모델" | 동봉 `License.txt` "CC0 1.0 Universal (CC0 1.0) Public Domain Dedication" 확인(사용자 화면 캡처). 모델 파일은 아직 저장소에 없음 | 후보(CC0 확인 완료) |
+| 2026-11-25 | Shiba Inu (시바견, 콩이 후보) | Quaternius | https://quaternius.com/packs/ultimateanimatedanimals.html | https://poly.pizza/m/y4wdQpg767 | 팩 페이지 `License` → `CC0`(creativecommons.org/publicdomain/zero/1.0/) · 개별 페이지 "퍼블릭 도메인(CC0)", 포함 항목 "애니메이션 동물 팩 12개 모델" | 동봉 `License.txt` CC0(사용자 캡처). 받은 GLB 직접 확인: 파일 안 라이선스 표기 없음(generator "FBX2glTF v0.9.7"), 뼈 46개(꼬리 3·목 3·귀 4×2), 동작 12종(같은 동작이 이름만 달리 두 벌). 원본 `assets-src/quaternius/Shiba_Inu_by_Quaternius_-_y4wdQpg767.glb`(SHA256 `9cbd4f1e…3fff54a`) | 후보(CC0 확인 완료, 콩이로 쓸 예정) |
 | 2026-11-25 | Hooded Adventurer (요정 몸 후보) | Quaternius | https://quaternius.com/packs/ultimatemodularwomen.html | Poly Pizza ID `y9KWOVG21R`(받은 파일 이름 기준) | 팩 페이지 `License` → `CC0`(creativecommons.org/publicdomain/zero/1.0/), "10 Different characters with 24 animations… free to use in personal and commercial projects" · Poly Pizza "2022년 4월 10일 • FBX/GLTF 형식 • 퍼블릭 도메인(CC0)", 제작자 쿼터니우스, 포함 항목 "궁극의 모듈형 여성용 팩 10개 모델" | 받은 GLB 직접 확인: 파일 안 라이선스 표기 없음(generator "FBX2glTF v0.9.7"), 동작 24개·4부분 구조가 팩 설명과 일치. 원본 `assets-src/quaternius/Hooded_Adventurer_by_Quaternius_-_y9KWOVG21R.glb`(SHA256 `703d20f5…3608b`). 팩 zip의 `License.txt`는 미확인 | 후보(CC0 확인 완료) |
 | 2026-11-25 | Husky (허스키, 콩이 후보) | Quaternius | https://quaternius.com/packs/ultimateanimatedanimals.html | https://poly.pizza/m/wcWiuEqwzq | 팩 페이지 `License` → `CC0` · 개별 페이지 "퍼블릭 도메인(CC0)", 포함 항목 "애니메이션 동물 팩 12개 모델" | 위와 같은 동봉 `License.txt` 확인. 모델 파일은 아직 저장소에 없음 | 후보(CC0 확인 완료) |
 
@@ -63,6 +63,16 @@
 판정: 공식 팩 페이지·두 개별 모델 페이지·번들 페이지·동봉 `License.txt`가 모두 **CC0**로 일치한다. 다른 조건은 발견되지 않았다.
 남은 일(채택할 때): 실제 모델 파일(glTF)을 원본 zip과 함께 저장소에 넣고, 원본 파일명·배포 경로·수정 내역(축소·재색상·본 보완)을 위 표에 기록한다.
 `License.txt` 캡처에는 팩 이름이 보이지 않으므로, 원본 zip을 넣을 때 그 안의 `License.txt`를 함께 보관해 다시 확인한다.
+
+### 2026-11-25 시바견(콩이) 파일 검수
+
+| 항목 | 결과 |
+|---|---|
+| 원본 크기 | 키 약 3.1, 몸길이 약 4.3(단위가 커서 그대로 쓰면 안 된다) |
+| 게임 크기 안 | ×0.15 → 머리까지 약 0.46 m, 몸길이 약 0.64 m(미니 요정 0.95 m의 허리쯤) |
+| 동작 12종 | Idle, Idle_2, Idle_2_HeadLow, Walk, Gallop, Gallop_Jump, Jump_ToIdle, Eating, Attack, Idle_HitReact_Left/Right, Death. 꼬리 흔들기·볼 비비기·공 밀기는 없음 → 꼬리·목·머리 뼈를 코드로 움직여 만든다 |
+| 색 | 변환 과정에서 어둡고 금속 느낌(metalness 0.4)이라, 주황 털 `#d9822b`·크림 `#f6ead8`·금속감 0으로 다시 칠함 |
+| 비교 화면 | `docs/asset-evidence/quaternius-animated-animals/2026-11-25_kongi-shiba-prototype_game.png`, 시제품 `tools/prototypes/kongi-shiba-and-elves.html` |
 
 ### 2026-11-25 Hooded Adventurer 확인 기록
 
