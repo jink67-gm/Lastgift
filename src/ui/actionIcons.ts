@@ -1,0 +1,28 @@
+// 행동 그림(직접 제작 SVG). 글 대신 그림으로 "지금 누르면 무슨 일이 일어나는지" 보여 준다.
+import type { Action } from '../core/carry';
+
+export type ActionIcon = 'pick' | 'drop' | 'tooHeavy' | 'blocked' | 'none';
+
+const HAND =
+  '<path d="M20 44c-5-5-9-11-9-15 0-2 2-3 4-2l5 5V13a3 3 0 0 1 6 0v12V9a3 3 0 0 1 6 0v16V11a3 3 0 0 1 6 0v14-9a3 3 0 0 1 6 0v18c0 7-4 12-10 13h-6c-4 0-6-1-8-3z" fill="#fff" stroke="#1b2433" stroke-width="2.5" stroke-linejoin="round"/>';
+
+const SVG: Record<ActionIcon, string> = {
+  // 손 + 위쪽 화살표: 들기
+  pick: `<svg viewBox="0 0 64 64" aria-hidden="true">${HAND}<path d="M52 30V8m-7 7 7-7 7 7" fill="none" stroke="#ffd84a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  // 상자 + 아래쪽 화살표 + 바닥선: 내려놓기
+  drop: `<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="16" y="26" width="24" height="20" rx="2" fill="#e05252" stroke="#1b2433" stroke-width="2.5"/><path d="M28 26v20M16 34h24" stroke="#ffd84a" stroke-width="3"/><path d="M50 8v30m-7-7 7 7 7-7" fill="none" stroke="#ffd84a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 54h48" stroke="#fff" stroke-width="4" stroke-linecap="round"/></svg>`,
+  // 두 손 + 상자: 혼자 못 든다(친구와 함께)
+  tooHeavy: `<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="14" y="30" width="36" height="18" rx="2" fill="#8a6a4a" stroke="#1b2433" stroke-width="2.5"/><circle cx="10" cy="30" r="7" fill="#fff" stroke="#1b2433" stroke-width="2.5"/><circle cx="54" cy="30" r="7" fill="#fff" stroke="#1b2433" stroke-width="2.5"/><path d="M24 20h16" stroke="#ffd84a" stroke-width="4" stroke-linecap="round"/><path d="M20 14l-4 6 4 6M44 14l4 6-4 6" fill="none" stroke="#ffd84a" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  // 상자 + 막힘 표시: 여기에는 놓을 수 없다
+  blocked: `<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="16" y="22" width="24" height="20" rx="2" fill="#e05252" stroke="#1b2433" stroke-width="2.5"/><circle cx="44" cy="40" r="13" fill="#1b2433" stroke="#fff" stroke-width="3"/><path d="M38 34l12 12M50 34 38 46" stroke="#fff" stroke-width="4" stroke-linecap="round"/></svg>`,
+  // 빈 손: 할 일이 없다
+  none: `<svg viewBox="0 0 64 64" aria-hidden="true" opacity="0.55">${HAND}</svg>`,
+};
+
+export function iconFor(a: Action): ActionIcon {
+  return a.kind;
+}
+
+export function iconSvg(icon: ActionIcon): string {
+  return SVG[icon];
+}

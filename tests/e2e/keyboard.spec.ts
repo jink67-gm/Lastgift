@@ -1,17 +1,7 @@
 // 실제 브라우저에서 물리 키 입력으로 요정을 움직여 본다.
 import { expect, test, type Page } from '@playwright/test';
 
-interface Hook {
-  player(): { x: number; z: number; facing: number; moving: boolean };
-  setPlayer(x: number, z: number): void;
-  toScreen(x: number, z: number): { x: number; y: number };
-  insideCollider(): boolean;
-}
-declare global {
-  interface Window {
-    __lastgift: Hook;
-  }
-}
+import './hook';
 
 const player = (page: Page) => page.evaluate(() => window.__lastgift.player());
 
@@ -21,7 +11,6 @@ async function open(page: Page) {
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   await page.goto('/?test');
   await page.waitForFunction(() => !!window.__lastgift);
-  await page.locator('canvas').click(); // 포커스
   return errors;
 }
 
@@ -122,4 +111,32 @@ test('키를 누른 채 창이 포커스를 잃으면 요정이 멈춘다', asyn
   await page.keyboard.up('KeyW');
   expect(b.moving).toBe(false);
   expect(Math.hypot(b.x - a.x, b.z - a.z)).toBeLessThan(0.01);
+});
+
+test('E로 선물을 들고, 다시 E로 앞에 내려놓는다', async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => window.__lastgift.setPlayer(4.7, 1.5, Math.PI / 2));
+  await page.waitForTimeout(100);
+  await expect(page.locator('#key-hint')).toBeVisible(); // [E] + 들기 그림
+  await page.keyboard.down('KeyE');
+  await page.waitForTimeout(500); // 길게 눌러도 한 번
+  await page.keyboard.up('KeyE');
+  let sketch = (await page.evaluate(() => window.__lastgift.items())).find((i) => i.id === 'sketchbook')!;
+  expect(sketch.carriedBy).toBe('p0');
+  await page.keyboard.press('KeyE');
+  await page.waitForTimeout(100);
+  sketch = (await page.evaluate(() => window.__lastgift.items())).find((i) => i.id === 'sketchbook')!;
+  expect(sketch.carriedBy).toBeNull();
+  expect(await page.evaluate(() => window.__lastgift.actions())).toEqual(['pick', 'drop']);
+});
+
+test('무거운 재봉틀은 E를 눌러도 혼자 들리지 않는다', async ({ page }) => {
+  await open(page);
+  // 재봉틀 상자(-7, 0, 길이 1.6) 오른쪽 끝 앞에서 왼쪽(-x)을 본다
+  await page.evaluate(() => window.__lastgift.setPlayer(-5.75, 0, -Math.PI / 2));
+  await page.keyboard.press('KeyE');
+  await page.waitForTimeout(100);
+  expect(await page.evaluate(() => window.__lastgift.actions())).toEqual(['tooHeavy']);
+  const sewing = (await page.evaluate(() => window.__lastgift.items())).find((i) => i.id === 'sewing')!;
+  expect(sewing.carriedBy).toBeNull();
 });

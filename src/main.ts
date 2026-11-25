@@ -1,17 +1,24 @@
-// 광장 장면: 요정 1명을 키보드로 움직인다(고정 회전 쿼터뷰).
+// 광장 장면: 요정 1명을 키보드 또는 터치로 움직이고 선물을 들고 놓는다(고정 회전 쿼터뷰).
 import * as THREE from 'three';
+import { applyAction, chooseTarget, planAction, type Action, type Item } from './core/carry';
+import { overlaps, type Collider } from './core/collision';
 import { stepPlayer, ELF_RADIUS, type PlayerState, type World } from './core/player';
-import { overlaps } from './core/collision';
 import { ELF_LOOKS } from './data/elves';
+import { PLAZA_GIFTS, SEWING_SIZE } from './data/gifts';
 import { ELF_SPAWN, PLAZA_BOUNDS, PLAZA_COLLIDERS } from './data/plaza';
 import { attachKeyboard, KeyState } from './input/keyboard';
+import { mergeIntents } from './input/merge';
 import { createElf } from './scene/elf';
+import { createGift, createTargetRing } from './scene/gifts';
 import { createPlaza } from './scene/plaza';
+import { iconFor } from './ui/actionIcons';
+import { createControls } from './ui/controls';
 
 const CAMERA_YAW = Math.PI / 4; // 게임 중 바뀌지 않는다
 const CAMERA_PITCH = Math.atan(1 / Math.SQRT2);
 const VIEW_HEIGHT = 16; // 화면 세로에 담기는 월드 길이(m)
 const SIM_DT = 1 / 60; // 고정 틱
+const ME = 'p0';
 
 const host = document.getElementById('game');
 if (!host) throw new Error('#game 요소가 없습니다');
@@ -36,13 +43,38 @@ const CAM_OFFSET = new THREE.Vector3(
 ).multiplyScalar(40);
 const camTarget = new THREE.Vector3(ELF_SPAWN.x, 0, ELF_SPAWN.z);
 
-const world: World = { colliders: PLAZA_COLLIDERS, bounds: PLAZA_BOUNDS, cameraYaw: CAMERA_YAW };
+// 무거운 재봉틀 상자는 혼자 들 수 없으므로 길을 막는 충돌체가 된다.
+const sewing = PLAZA_GIFTS.find((g) => !g.light)!;
+const colliders: Collider[] = [
+  ...PLAZA_COLLIDERS,
+  { kind: 'box', x: sewing.x, z: sewing.z, hx: SEWING_SIZE.w / 2, hz: SEWING_SIZE.d / 2 },
+];
+const world: World = { colliders, bounds: PLAZA_BOUNDS, cameraYaw: CAMERA_YAW };
+
 let player: PlayerState = { x: ELF_SPAWN.x, z: ELF_SPAWN.z, facing: 0, moving: false };
+let items: readonly Item[] = PLAZA_GIFTS.map((g) => ({
+  id: g.id, x: g.x, z: g.z, light: g.light, carriedBy: null,
+  ...(g.light ? {} : { reach: SEWING_SIZE.w / 2 }),
+}));
+const actionLog: Action[] = [];
+
 const elf = createElf(ELF_LOOKS[0]!);
 scene.add(elf.root);
+// 가벼운 선물은 실제 비율보다 크게 그려 1280×720에서도 무엇인지 알아보게 한다.
+const giftViews = new Map(
+  PLAZA_GIFTS.map((g) => {
+    const v = createGift(g.kind);
+    if (g.light) v.scale.setScalar(1.6);
+    return [g.id, v] as const;
+  }),
+);
+for (const v of giftViews.values()) scene.add(v);
+const ring = createTargetRing();
+scene.add(ring);
 
 const keys = new KeyState();
 attachKeyboard(window, keys);
+const controls = createControls(document);
 
 function resize(): void {
   const w = host!.clientWidth;
@@ -68,6 +100,31 @@ function placeCamera(dt: number): void {
   camera.lookAt(camTarget);
 }
 
+function syncViews(timeSec: number): void {
+  elf.root.position.set(player.x, 0, player.z);
+  elf.root.rotation.y = player.facing;
+  elf.animate(timeSec, player.moving);
+  for (const it of items) {
+    const v = giftViews.get(it.id)!;
+    if (it.carriedBy === ME) {
+      // 머리 위로 번쩍 들고 간다
+      v.position.set(player.x, 1.45 + (player.moving ? Math.abs(Math.sin(timeSec * 14)) * 0.04 : 0), player.z);
+      v.rotation.y = player.facing;
+    } else {
+      v.position.set(it.x, 0, it.z);
+    }
+  }
+  const target = items.some((i) => i.carriedBy === ME) ? null : chooseTarget(player, items);
+  ring.visible = target !== null;
+  if (target) {
+    ring.position.x = target.x;
+    ring.position.z = target.z;
+    const s = target.light ? 1 : 1.9;
+    const pulse = 1 + Math.sin(timeSec * 6) * 0.06;
+    ring.scale.set(s * pulse, s * pulse, 1);
+  }
+}
+
 let last = performance.now();
 let acc = 0;
 let elapsed = 0;
@@ -75,15 +132,21 @@ renderer.setAnimationLoop((now) => {
   const frame = Math.min((now - last) / 1000, 0.25);
   last = now;
   acc += frame;
-  const intent = keys.sample();
+  const intent = mergeIntents(keys.sample(), controls.touch.sample());
+  // 행동은 프레임당 한 번만 판정한다(같은 입력을 두 번 쓰지 않는다).
+  if (intent.action.down) {
+    const a = planAction(ME, player, items, colliders, PLAZA_BOUNDS);
+    const next = applyAction(ME, items, a);
+    if (a.kind !== 'none') actionLog.push(a);
+    items = next;
+  }
   while (acc >= SIM_DT) {
     player = stepPlayer(player, intent.move, SIM_DT, world);
     acc -= SIM_DT;
     elapsed += SIM_DT;
   }
-  elf.root.position.set(player.x, 0, player.z);
-  elf.root.rotation.y = player.facing;
-  elf.animate(elapsed, player.moving);
+  syncViews(elapsed);
+  controls.update(iconFor(planAction(ME, player, items, colliders, PLAZA_BOUNDS)));
   placeCamera(frame);
   renderer.render(scene, camera);
 });
@@ -93,17 +156,18 @@ if (import.meta.env.DEV || new URLSearchParams(location.search).has('test')) {
   const v = new THREE.Vector3();
   (window as unknown as Record<string, unknown>).__lastgift = {
     player: () => ({ ...player }),
-    setPlayer: (x: number, z: number) => {
-      player = { ...player, x, z };
+    setPlayer: (x: number, z: number, facing?: number) => {
+      player = { ...player, x, z, facing: facing ?? player.facing };
       camTarget.set(x, 0, z);
     },
+    items: () => items.map((i) => ({ ...i })),
+    actions: () => actionLog.map((a) => a.kind),
+    touchMode: () => controls.touchMode,
     /** 바닥 위 한 점의 현재 화면 좌표(CSS px) */
     toScreen: (x: number, z: number) => {
       v.set(x, 0, z).project(camera);
       return { x: ((v.x + 1) / 2) * host.clientWidth, y: ((1 - v.y) / 2) * host.clientHeight };
     },
-    insideCollider: () => PLAZA_COLLIDERS.some((c) => overlaps(player, ELF_RADIUS - 1e-3, c)),
-    colliders: PLAZA_COLLIDERS,
-    bounds: PLAZA_BOUNDS,
+    insideCollider: () => colliders.some((c) => overlaps(player, ELF_RADIUS - 1e-3, c)),
   };
 }
