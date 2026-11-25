@@ -17,6 +17,7 @@ import { createControls } from '../ui/controls';
 import { createHud } from '../ui/hud';
 import { createLobby } from '../ui/lobby';
 import { createChapter2Screen } from './chapter2Screen';
+import type { Models } from '../scene/models';
 
 const SIM_DT = 1 / 60;
 const LOCAL_PLAYERS = ['p0', 'p1'] as const;
@@ -41,17 +42,17 @@ export function toSewingInput(i: Intent): SewingInput {
   return { move: i.move, actionDown: i.action.down, actionHeld: i.action.held };
 }
 
-export function startChapter2(): void {
+export function startChapter2(models: Models): void {
   const q = new URLSearchParams(location.search);
   const emu = q.has('emu');
-  if (q.has('local')) return startLocal();
+  if (q.has('local')) return startLocal(models);
   if (q.has('host')) {
-    void import('./chapter2Net').then((m) => m.startHost(emu));
+    void import('./chapter2Net').then((m) => m.startHost(emu, models));
     return;
   }
   const join = q.get('join');
   if (join) {
-    void import('./chapter2Net').then((m) => m.startGuest(normalizeRoomCode(join), emu));
+    void import('./chapter2Net').then((m) => m.startGuest(normalizeRoomCode(join), emu, models));
     return;
   }
   // 고르기 화면
@@ -69,9 +70,9 @@ export function startChapter2(): void {
 }
 
 /** 한 기기에서 둘이(로컬 2인) */
-function startLocal(): void {
+function startLocal(models: Models): void {
   const host = document.getElementById('game')!;
-  const screen = createChapter2Screen(host);
+  const screen = createChapter2Screen(host, models);
   let sewing: SewingState = createSewing(LOCAL_PLAYERS);
   const events: SewingEvent[] = [];
 

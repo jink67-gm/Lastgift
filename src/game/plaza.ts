@@ -8,7 +8,8 @@ import { PLAZA_GIFTS, SEWING_SIZE } from '../data/gifts';
 import { ELF_SPAWN, PLAZA_BOUNDS, PLAZA_COLLIDERS } from '../data/plaza';
 import { attachKeyboard, KeyState } from '../input/keyboard';
 import { mergeIntents } from '../input/merge';
-import { createElf } from '../scene/elf';
+import { createElfAvatar } from '../scene/elfAvatar';
+import type { Models } from '../scene/models';
 import { createGift, createTargetRing } from '../scene/gifts';
 import { createPlaza } from '../scene/plaza';
 import { browserStorage, CheckpointStore } from '../save/store';
@@ -17,10 +18,10 @@ import { iconFor } from '../ui/actionIcons';
 import { createControls } from '../ui/controls';
 import { createHud } from '../ui/hud';
 
-export function startPlaza(): void {
+export function startPlaza(models: Models): void {
   const CAMERA_YAW = Math.PI / 4; // 게임 중 바뀌지 않는다
   const CAMERA_PITCH = Math.atan(1 / Math.SQRT2);
-  const VIEW_HEIGHT = 16; // 화면 세로에 담기는 월드 길이(m)
+  const VIEW_HEIGHT = 12; // 화면 세로에 담기는 월드 길이(m). 가까이 둬서 요정·선물을 크게 본다
   const SIM_DT = 1 / 60; // 고정 틱
   const ME = 'p0';
 
@@ -37,7 +38,7 @@ export function startPlaza(): void {
   const moon = new THREE.DirectionalLight('#ffffff', 1.3);
   moon.position.set(-8, 16, 6);
   scene.add(moon);
-  scene.add(createPlaza());
+  scene.add(createPlaza(models));
 
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   const CAM_OFFSET = new THREE.Vector3(
@@ -62,7 +63,7 @@ export function startPlaza(): void {
   }));
   const actionLog: Action[] = [];
 
-  const elf = createElf(ELF_LOOKS[0]!);
+  const elf = createElfAvatar(models, ELF_LOOKS[0]!);
   scene.add(elf.root);
   // 가벼운 선물은 실제 비율보다 크게 그려 1280×720에서도 무엇인지 알아보게 한다.
   const giftViews = new Map(

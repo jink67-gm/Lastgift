@@ -5,7 +5,8 @@ import { gripPos, needsSwap, planAction, type SewingAction, type SewingState } f
 import { CH2 } from '../data/chapter2';
 import { ELF_LOOKS } from '../data/elves';
 import { createChapter2, createStaminaBar, createSwapSign } from '../scene/chapter2';
-import { createElf } from '../scene/elf';
+import { createElfAvatar } from '../scene/elfAvatar';
+import type { Models } from '../scene/models';
 import { createGift, createTargetRing } from '../scene/gifts';
 
 const CAMERA_YAW = Math.PI / 4;
@@ -30,7 +31,7 @@ export interface Chapter2Screen {
   toScreen(x: number, z: number): { x: number; y: number };
 }
 
-export function createChapter2Screen(host: HTMLElement): Chapter2Screen {
+export function createChapter2Screen(host: HTMLElement, models: Models): Chapter2Screen {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   host.appendChild(renderer.domElement);
@@ -68,7 +69,7 @@ export function createChapter2Screen(host: HTMLElement): Chapter2Screen {
   resize();
 
   const elves = Array.from({ length: MAX_ELVES }, (_, i) => {
-    const e = createElf(ELF_LOOKS[i]!);
+    const e = createElfAvatar(models, ELF_LOOKS[i]!);
     e.root.visible = false;
     scene.add(e.root);
     return e;

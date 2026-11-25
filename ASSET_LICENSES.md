@@ -1,6 +1,6 @@
 # 에셋 라이선스
 
-외부 게임 에셋은 CC0-1.0이 확인된 파일만 쓴다(명세서 §9). 지금 게임에 들어간 외부 에셋은 없다(아래 「확보한 팩」은 원본 보관만).
+외부 게임 에셋은 CC0-1.0이 확인된 파일만 쓴다(명세서 §9). 게임에 넣은 파일은 「게임에 넣은 외부 에셋」 표에 배포 경로와 함께 적는다.
 
 | 에셋 | 제작자 | URL | 라이선스 | 취득일 | 원본 파일 | 배포 경로 | 수정 내역 |
 |---|---|---|---|---|---|---|---|
@@ -11,6 +11,15 @@
 | 행동 그림 8종(들기, 놓기, 함께 들기, 놓을 수 없음, 교대, 걸쇠, 문 밀기, 빈 손) | 직접 제작(SVG) | - | 프로젝트 소유 | 2026-11-25 | - | `src/ui/actionIcons.ts` | - |
 
 글꼴은 번들하지 않고 기기 기본 글꼴을 쓴다.
+
+## 게임에 넣은 외부 에셋(배포됨)
+
+| 에셋 | 제작자 | 라이선스·증빙 | 원본 | 배포 경로 | 수정 내역 | 넣은 날 |
+|---|---|---|---|---|---|---|
+| Holiday Kit 2.0 조각 15개: cabin-wall, cabin-corner, cabin-doorway, cabin-window-a, cabin-wall-wreath, cabin-wall-roof, cabin-roof-snow, tree-snow-a, tree-snow-b, tree-decorated-snow, lantern, bench, snow-pile, rocks-medium, lights-colored + `Textures/colormap.png` | Kenney | CC0 · `docs/asset-evidence/kenney/holiday-kit_2.0_License.txt` | `assets-src/kenney/kenney_holiday-kit_2.0.zip` → `Models/GLB format/` | `public/models/kenney-holiday/` | 파일 수정 없음. 게임에서 ×2(집·트리), 벤치 ×1.25, 랜턴 ×1.5로 키우고 통나무집은 조각을 조립(`src/scene/kenney.ts`) | 2026-11-25 (STEP 04-1) |
+| Hooded Adventurer | Quaternius | CC0 · 아래 확인 기록 | `assets-src/quaternius/Hooded_Adventurer_by_Quaternius_-_y9KWOVG21R.glb` | `public/models/quaternius/hooded-adventurer.glb` | 파일 수정 없음. 게임에서 미니 요정으로 꾸밈(머리 1.75배·다리 짧게·다시 칠하기·후드·칼 숨김·요정 모자·귀, `src/scene/miniElf.ts`) | 2026-11-25 (STEP 04-1) |
+
+배포 확인: `npm run build` 뒤 `dist/models/`에 위 파일만 들어간다(Kenney 16개, Quaternius 1개).
 
 ## 확보한 외부 에셋 팩(원본 보관, 아직 게임에 넣지 않음)
 
@@ -44,7 +53,7 @@
 | 확인일 | 모델명 | 제작자 | 공식 팩 URL | 개별 모델 URL | 실제 라이선스 표기 | 동봉 파일 확인 | 채택 상태 |
 |---|---|---|---|---|---|---|---|
 | 2026-11-25 | Shiba Inu (시바견, 콩이 후보) | Quaternius | https://quaternius.com/packs/ultimateanimatedanimals.html | https://poly.pizza/m/y4wdQpg767 | 팩 페이지 `License` → `CC0`(creativecommons.org/publicdomain/zero/1.0/) · 개별 페이지 "퍼블릭 도메인(CC0)", 포함 항목 "애니메이션 동물 팩 12개 모델" | 동봉 `License.txt` CC0(사용자 캡처). 받은 GLB 직접 확인: 파일 안 라이선스 표기 없음(generator "FBX2glTF v0.9.7"), 뼈 46개(꼬리 3·목 3·귀 4×2), 동작 12종(같은 동작이 이름만 달리 두 벌). 원본 `assets-src/quaternius/Shiba_Inu_by_Quaternius_-_y4wdQpg767.glb`(SHA256 `9cbd4f1e…3fff54a`) | 후보(CC0 확인 완료, 콩이로 쓸 예정) |
-| 2026-11-25 | Hooded Adventurer (요정 몸 후보) | Quaternius | https://quaternius.com/packs/ultimatemodularwomen.html | Poly Pizza ID `y9KWOVG21R`(받은 파일 이름 기준) | 팩 페이지 `License` → `CC0`(creativecommons.org/publicdomain/zero/1.0/), "10 Different characters with 24 animations… free to use in personal and commercial projects" · Poly Pizza "2022년 4월 10일 • FBX/GLTF 형식 • 퍼블릭 도메인(CC0)", 제작자 쿼터니우스, 포함 항목 "궁극의 모듈형 여성용 팩 10개 모델" | 받은 GLB 직접 확인: 파일 안 라이선스 표기 없음(generator "FBX2glTF v0.9.7"), 동작 24개·4부분 구조가 팩 설명과 일치. 원본 `assets-src/quaternius/Hooded_Adventurer_by_Quaternius_-_y9KWOVG21R.glb`(SHA256 `703d20f5…3608b`). 팩 zip의 `License.txt`는 미확인 | 후보(CC0 확인 완료) |
+| 2026-11-25 | Hooded Adventurer (요정 몸, **게임에 넣음**) | Quaternius | https://quaternius.com/packs/ultimatemodularwomen.html | Poly Pizza ID `y9KWOVG21R`(받은 파일 이름 기준) | 팩 페이지 `License` → `CC0`(creativecommons.org/publicdomain/zero/1.0/), "10 Different characters with 24 animations… free to use in personal and commercial projects" · Poly Pizza "2022년 4월 10일 • FBX/GLTF 형식 • 퍼블릭 도메인(CC0)", 제작자 쿼터니우스, 포함 항목 "궁극의 모듈형 여성용 팩 10개 모델" | 받은 GLB 직접 확인: 파일 안 라이선스 표기 없음(generator "FBX2glTF v0.9.7"), 동작 24개·4부분 구조가 팩 설명과 일치. 원본 `assets-src/quaternius/Hooded_Adventurer_by_Quaternius_-_y9KWOVG21R.glb`(SHA256 `703d20f5…3608b`). 팩 zip의 `License.txt`는 미확인 | 후보(CC0 확인 완료) |
 | 2026-11-25 | Husky (허스키, 콩이 후보) | Quaternius | https://quaternius.com/packs/ultimateanimatedanimals.html | https://poly.pizza/m/wcWiuEqwzq | 팩 페이지 `License` → `CC0` · 개별 페이지 "퍼블릭 도메인(CC0)", 포함 항목 "애니메이션 동물 팩 12개 모델" | 위와 같은 동봉 `License.txt` 확인. 모델 파일은 아직 저장소에 없음 | 후보(CC0 확인 완료) |
 
 ### 2026-11-25 확인 기록(Shiba Inu·Husky)

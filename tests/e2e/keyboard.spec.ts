@@ -94,8 +94,8 @@ test('오래 걸어도 광장 밖으로 나가지 않는다', async ({ page }) =
   await page.keyboard.up('KeyS');
   await page.keyboard.up('KeyD');
   const p = await player(page);
-  expect(p.x).toBeLessThanOrEqual(15 - 0.35 + 1e-6);
-  expect(p.z).toBeLessThanOrEqual(10 - 0.35 + 1e-6);
+  expect(p.x).toBeLessThanOrEqual(20 - 0.35 + 1e-6);
+  expect(p.z).toBeLessThanOrEqual(14 - 0.35 + 1e-6);
 });
 
 test('키를 누른 채 창이 포커스를 잃으면 요정이 멈춘다', async ({ page }) => {

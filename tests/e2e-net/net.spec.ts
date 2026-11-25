@@ -302,7 +302,8 @@ test('세 기기: 쉬던 요정이 넘겨받아도 재봉틀은 하나, 재전�
   // 운반 중인 친구에게 바짝 붙지 않도록 아래쪽으로 돌아, 손잡이가 손 닿는 범위(0.75 m) 안에 들면 멈춘다
   const g = grip(s.crate, 1);
   const near = (p: P) => Math.hypot(p.x - g.x, p.z - g.z) < 0.75;
-  await team.walk('p2', { x: g.x + 1.0, z: g.z + 1.1 }, 0.25);
+  // 경유점은 빨랫줄 기둥(4.9, 10.6)에서 떨어뜨린다(기둥과 겹치는 점은 도달할 수 없다)
+  await team.walk('p2', { x: g.x + 0.6, z: g.z + 1.0 }, 0.25);
   for (let k = 0; k < 5; k++) {
     await team.walk('p2', g, 0.05, near);
     await H.page.waitForTimeout(250); // 지연된 입력까지 반영된 뒤 다시 확인

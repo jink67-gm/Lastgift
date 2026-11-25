@@ -27,6 +27,7 @@ import { createHud, type Hud } from '../ui/hud';
 import { createLobby } from '../ui/lobby';
 import { chapter2Checkpoint, toSewingInput } from './chapter2';
 import { createChapter2Screen } from './chapter2Screen';
+import type { Models } from '../scene/models';
 
 const SIM_DT = 1 / 60;
 const SNAP_MS = 66; // 약 15Hz
@@ -67,9 +68,9 @@ interface SavedHostRoom {
   seats: [string, Slot][];
 }
 
-export async function startHost(emu: boolean): Promise<void> {
+export async function startHost(emu: boolean, models: Models): Promise<void> {
   const host = document.getElementById('game')!;
-  const screen = createChapter2Screen(host);
+  const screen = createChapter2Screen(host, models);
   const lobby = createLobby(document);
   const hud = createHud(document);
   const controls = createControls(document);
@@ -346,9 +347,9 @@ export async function startHost(emu: boolean): Promise<void> {
 
 // ── 참가자 ──────────────────────────────────────────────
 
-export async function startGuest(code: string, emu: boolean): Promise<void> {
+export async function startGuest(code: string, emu: boolean, models: Models): Promise<void> {
   const host = document.getElementById('game')!;
-  const screen = createChapter2Screen(host);
+  const screen = createChapter2Screen(host, models);
   const lobby = createLobby(document);
   const hud = createHud(document);
   const controls = createControls(document);

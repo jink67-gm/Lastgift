@@ -130,7 +130,9 @@ src/data/      장별 바닥값·기억, 광장 배치, 2장 공간 배치, 선�
 src/ui/        터치 스틱·행동 버튼, 행동 그림(SVG), HUD(팀 시계·팀원 연결·일시중지·시간 초과), 로비
 src/save/      팀 체크포인트(방마다 따로)와 개인 설정 저장
 src/session/   이 기기가 방장일 때 팀 시도 상태를 돌리는 연결 모듈
-src/scene/     three.js 모델(직접 제작 기본 도형)
+src/scene/     three.js 그리기: 모델 불러오기(models), 미니 요정(miniElf), Kenney 통나무집(kenney), 기본 도형 대체품
+public/models/ 게임에 쓰는 CC0 모델(쓰는 파일만 복사, 목록은 ASSET_LICENSES.md)
+assets-src/    내려받은 원본 에셋(배포 안 함)
 src/main.ts    시작점(주소로 장면 선택)
 src/game/      장면별 게임 루프: plaza(0장 시험), chapter2(로컬 2인·고르기), chapter2Net(방장·참가자), chapter2Screen(그리기)
 src/net/       Firebase 시그널링(설정값은 .env.local), WebRTC 연결, 메시지 형식·검사
