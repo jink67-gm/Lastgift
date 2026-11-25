@@ -1,6 +1,6 @@
 # 에셋 라이선스
 
-외부 게임 에셋은 CC0-1.0이 확인된 파일만 쓴다(명세서 §9). 현재 외부 에셋은 없다.
+외부 게임 에셋은 CC0-1.0이 확인된 파일만 쓴다(명세서 §9). 지금 게임에 들어간 외부 에셋은 없다(아래 「확보한 팩」은 원본 보관만).
 
 | 에셋 | 제작자 | URL | 라이선스 | 취득일 | 원본 파일 | 배포 경로 | 수정 내역 |
 |---|---|---|---|---|---|---|---|
@@ -11,6 +11,30 @@
 | 행동 그림 8종(들기, 놓기, 함께 들기, 놓을 수 없음, 교대, 걸쇠, 문 밀기, 빈 손) | 직접 제작(SVG) | - | 프로젝트 소유 | 2026-11-25 | - | `src/ui/actionIcons.ts` | - |
 
 글꼴은 번들하지 않고 기기 기본 글꼴을 쓴다.
+
+## 확보한 외부 에셋 팩(원본 보관, 아직 게임에 넣지 않음)
+
+| 확인일 | 팩 | 제작자 | 공식 URL | 동봉 라이선스 원문 | 원본 보관 | 증빙 | 채택 상태 |
+|---|---|---|---|---|---|---|---|
+| 2026-11-25 | Holiday Kit 2.0 (GLB·FBX·OBJ 각 99개, 텍스처 `colormap.png` 공용) | Kenney | https://kenney.nl/assets/holiday-kit | "License: (Creative Commons Zero, CC0) http://creativecommons.org/publicdomain/zero/1.0/" · "Creation date: 11-12-2024" | `assets-src/kenney/kenney_holiday-kit_2.0.zip` (SHA256 `fde4d514…8dd769`) | `docs/asset-evidence/kenney/holiday-kit_2.0_License.txt` | 확보(CC0 확인). STEP 04에서 쓸 파일만 복사 예정 |
+| 2026-11-25 | Mini Characters 2.0 (GLB·FBX·OBJ 각 43개, 사람 20종·보조기구·소품) | Kenney | https://kenney.nl/assets/mini-characters | 같은 문구 · "Creation date: 07-11-2026" | `assets-src/kenney/kenney_mini-characters_2.0.zip` (SHA256 `add348e9…d1bb7`) | `docs/asset-evidence/kenney/mini-characters_2.0_License.txt` | 확보(CC0 확인). STEP 04에서 쓸 파일만 복사 예정 |
+
+두 팩 모두 Kenney가 만든 파일만 들어 있다(제3자 파일 없음). 사용자가 kenney.nl에서 내려받아 올린 zip이다.
+
+### 2026-11-25 첫 검수(명세서 §9)
+
+비교 화면: `docs/asset-evidence/kenney/2026-11-25_scale-check.png` (지금 게임의 요정 키 약 1.36 m, 재봉틀 상자 1.4 × 0.6 m와 나란히)
+
+| 확인 항목 | 결과 |
+|---|---|
+| 단위·기준점 | 1단위 = 1 m로 보면 문틀 `cabin-doorway` 높이 1.0, 벽 한 칸 1.0 × 1.0. 모든 모델의 원점이 바닥(최저 y ≈ 0)이라 그대로 세울 수 있다 |
+| 사람 키 | `character-female-a` 약 0.81, `character-male-b` 약 0.67(같은 팩 문 높이 1.0과 맞는 비율) |
+| 트리 | `tree-decorated-snow` 높이 2.29, 꼭대기 별 있음(4장 트리 후보) |
+| 문 | `cabin-door-rotate`에 `open`, `close`, `open-and-close` 애니메이션 있음(2장 덧문 후보) |
+| 사람 애니메이션 | 모든 캐릭터 공통 32개: `idle`, `walk`, `sprint`, `pick-up`, `holding-both`(상자 들기), `interact-right/left`(스위치·문), `emote-yes/no`, `sit`, `crouch` 등. 손 흔들기·브이·볼 비비기는 없음 |
+| 지금 게임과의 크기 차이 | Kenney 사람·문은 지금 요정(1.36 m)·덧문(2.1 m)보다 작다. 그대로 쓰면 맞지 않으므로 STEP 04에서 Kenney 모델 전체에 같은 배율(약 ×2: 문 2.0 m, 어른 약 1.6 m)을 주고, 요정은 사람보다 작게(약 ×1.4) 맞추는 안을 검토 |
+| 참고 | `character-female-a`는 목발을 짚은 모습(접근성 다양성 캐릭터). 팩에 휠체어·흰 지팡이·보청기 소품도 있다 |
+| 양말 | `sock-red`(높이 0.62)는 있지만 산타 얼굴 자수는 없음 → 5장 빈 양말은 직접 덧그림 필요 |
 
 ## 외부 에셋 후보(아직 게임에 넣지 않음)
 
