@@ -33,3 +33,11 @@ export function screenToGround(screen: Vec2, cameraYaw: number): Ground {
     z: -sx * sin - sy * cos,
   };
 }
+
+/** screenToGround의 역변환: 바닥 방향을 화면 기준 입력으로 바꾼다(테스트·자동 조작용). */
+export function groundToScreen(g: Ground, cameraYaw: number): Vec2 {
+  const cos = Math.cos(cameraYaw);
+  const sin = Math.sin(cameraYaw);
+  // [gx, gz] = [[cos, -sin], [-sin, -cos]] · [sx, sy]  (역행렬은 자기 자신)
+  return { x: g.x * cos - g.z * sin, y: -g.x * sin - g.z * cos };
+}

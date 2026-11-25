@@ -19,7 +19,19 @@ export interface CircleCollider {
   r: number;
 }
 
-export type Collider = BoxCollider | CircleCollider;
+/** 회전한 사각형. 긴 축 a = (sin yaw, cos yaw), 옆 축 b = (cos yaw, -sin yaw) */
+export interface ObbCollider {
+  kind: 'obb';
+  x: number;
+  z: number;
+  yaw: number;
+  /** a축 반 길이 */
+  ha: number;
+  /** b축 반 길이 */
+  hb: number;
+}
+
+export type Collider = BoxCollider | CircleCollider | ObbCollider;
 
 export interface Bounds {
   minX: number;
@@ -30,6 +42,16 @@ export interface Bounds {
 
 /** 원이 충돌체와 겹친 만큼 밀어낼 벡터. 겹치지 않으면 null. */
 function pushOut(p: Ground, radius: number, c: Collider): Ground | null {
+  if (c.kind === 'obb') {
+    const ax = Math.sin(c.yaw), az = Math.cos(c.yaw);
+    const bx = Math.cos(c.yaw), bz = -Math.sin(c.yaw);
+    const dx = p.x - c.x, dz = p.z - c.z;
+    const la = dx * ax + dz * az;
+    const lb = dx * bx + dz * bz;
+    const local = pushOut({ x: la, z: lb }, radius, { kind: 'box', x: 0, z: 0, hx: c.ha, hz: c.hb });
+    if (!local) return null;
+    return { x: local.x * ax + local.z * bx, z: local.x * az + local.z * bz };
+  }
   if (c.kind === 'circle') {
     const dx = p.x - c.x;
     const dz = p.z - c.z;
@@ -103,4 +125,49 @@ export function moveCircle(
     }
   }
   return p;
+}
+
+// ── 사각형끼리 겹침(분리축 검사) ─────────────────────────
+
+interface Rect {
+  x: number;
+  z: number;
+  /** 두 축 단위벡터와 반 길이 */
+  ax: [number, number];
+  bx: [number, number];
+  ha: number;
+  hb: number;
+}
+
+function rectOf(c: BoxCollider | ObbCollider): Rect {
+  if (c.kind === 'box') return { x: c.x, z: c.z, ax: [1, 0], bx: [0, 1], ha: c.hx, hb: c.hz };
+  return { x: c.x, z: c.z, ax: [Math.sin(c.yaw), Math.cos(c.yaw)], bx: [Math.cos(c.yaw), -Math.sin(c.yaw)], ha: c.ha, hb: c.hb };
+}
+
+function rectsOverlap(p: Rect, q: Rect): boolean {
+  const dx = q.x - p.x, dz = q.z - p.z;
+  for (const [nx, nz] of [p.ax, p.bx, q.ax, q.bx]) {
+    const rp = p.ha * Math.abs(p.ax[0] * nx + p.ax[1] * nz) + p.hb * Math.abs(p.bx[0] * nx + p.bx[1] * nz);
+    const rq = q.ha * Math.abs(q.ax[0] * nx + q.ax[1] * nz) + q.hb * Math.abs(q.bx[0] * nx + q.bx[1] * nz);
+    if (Math.abs(dx * nx + dz * nz) >= rp + rq) return false;
+  }
+  return true;
+}
+
+/** 회전한 사각형(운반 상자)이 충돌체와 겹치는가 */
+export function obbOverlaps(o: ObbCollider, c: Collider): boolean {
+  if (c.kind === 'circle') return pushOut({ x: c.x, z: c.z }, c.r, o) !== null;
+  return rectsOverlap(rectOf(o), rectOf(c));
+}
+
+/** 회전한 사각형의 네 꼭짓점 */
+export function obbCorners(o: ObbCollider): Ground[] {
+  const ax = Math.sin(o.yaw) * o.ha, az = Math.cos(o.yaw) * o.ha;
+  const bx = Math.cos(o.yaw) * o.hb, bz = -Math.sin(o.yaw) * o.hb;
+  return [
+    { x: o.x + ax + bx, z: o.z + az + bz },
+    { x: o.x + ax - bx, z: o.z + az - bz },
+    { x: o.x - ax + bx, z: o.z - az + bz },
+    { x: o.x - ax - bx, z: o.z - az - bz },
+  ];
 }

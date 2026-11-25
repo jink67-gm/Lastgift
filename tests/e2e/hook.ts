@@ -5,11 +5,25 @@ export interface LastGiftHook {
   items(): { id: string; x: number; z: number; light: boolean; carriedBy: string | null }[];
   actions(): string[];
   touchMode(): boolean;
-  run(): { phase: string; remaining: number; chapterId: number; retryCount: number; pauseReasons: string[]; resumeAt: number | null; runId: string };
+  run(): {
+    phase: string;
+    remaining: number;
+    chapterId: number;
+    retryCount: number;
+    pauseReasons: string[];
+    resumeAt: number | null;
+    runId: string;
+    memories: number[];
+    completedChapters: number[];
+  };
   runEffects(): string[];
   skipTime(ms: number): void;
   toScreen(x: number, z: number): { x: number; y: number };
   insideCollider(): boolean;
+  // 2장(?chapter=2)에서만 있는 창구
+  sewing(): unknown;
+  sewingEvents(): { type: string; [k: string]: unknown }[];
+  savedCheckpoint(): string | null;
 }
 
 declare global {

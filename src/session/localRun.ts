@@ -5,6 +5,7 @@ import {
   fromCheckpoint,
   reduce,
   remainingAt,
+  type Checkpoint,
   type ClientMeta,
   type RunCommand,
   type RunEffect,
@@ -29,15 +30,32 @@ export class LocalRun {
   readonly log: RunEffect[] = [];
   private seq = 0;
 
+  private readonly listeners: ((e: RunEffect) => void)[] = [];
+
+  /**
+   * @param firstCheckpoint 저장된 기록이 없을 때 시작할 장(개발용 장 바로 열기). 없으면 새 시도(0장).
+   */
   constructor(
     private readonly store: CheckpointStore,
     private readonly hud: Hud,
     readonly roomId: string,
     readonly playerId: string,
+    firstCheckpoint?: (runId: string, seed: number) => Checkpoint,
   ) {
     const saved = store.load(roomId);
-    this.state = saved ? fromCheckpoint(saved) : createRun(newId(), roomId, Math.floor(Math.random() * 2 ** 31));
+    const runId = newId();
+    const seed = Math.floor(Math.random() * 2 ** 31);
+    this.state = saved
+      ? fromCheckpoint(saved)
+      : firstCheckpoint
+        ? fromCheckpoint(firstCheckpoint(runId, seed))
+        : createRun(runId, roomId, seed);
     hud.onRetry(() => this.retry(performance.now()));
+  }
+
+  /** 리듀서가 낸 효과(저장·재시도·장 완료 등)를 받는다 */
+  onEffect(fn: (e: RunEffect) => void): void {
+    this.listeners.push(fn);
   }
 
   /** 참가자 이벤트 머리표(runId, epoch, playerId, eventId) */
@@ -51,6 +69,7 @@ export class LocalRun {
     for (const e of r.effects) {
       this.log.push(e);
       if (e.type === 'save') this.hud.setSaveError(!this.store.save(e.checkpoint).ok);
+      for (const fn of this.listeners) fn(e);
     }
   }
 

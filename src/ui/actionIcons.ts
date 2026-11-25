@@ -1,7 +1,7 @@
 // 행동 그림(직접 제작 SVG). 글 대신 그림으로 "지금 누르면 무슨 일이 일어나는지" 보여 준다.
 import type { Action } from '../core/carry';
 
-export type ActionIcon = 'pick' | 'drop' | 'tooHeavy' | 'blocked' | 'none';
+export type ActionIcon = 'pick' | 'drop' | 'tooHeavy' | 'blocked' | 'swap' | 'latch' | 'door' | 'none';
 
 const HAND =
   '<path d="M20 44c-5-5-9-11-9-15 0-2 2-3 4-2l5 5V13a3 3 0 0 1 6 0v12V9a3 3 0 0 1 6 0v16V11a3 3 0 0 1 6 0v14-9a3 3 0 0 1 6 0v18c0 7-4 12-10 13h-6c-4 0-6-1-8-3z" fill="#fff" stroke="#1b2433" stroke-width="2.5" stroke-linejoin="round"/>';
@@ -15,12 +15,23 @@ const SVG: Record<ActionIcon, string> = {
   tooHeavy: `<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="14" y="30" width="36" height="18" rx="2" fill="#8a6a4a" stroke="#1b2433" stroke-width="2.5"/><circle cx="10" cy="30" r="7" fill="#fff" stroke="#1b2433" stroke-width="2.5"/><circle cx="54" cy="30" r="7" fill="#fff" stroke="#1b2433" stroke-width="2.5"/><path d="M24 20h16" stroke="#ffd84a" stroke-width="4" stroke-linecap="round"/><path d="M20 14l-4 6 4 6M44 14l4 6-4 6" fill="none" stroke="#ffd84a" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   // 상자 + 막힘 표시: 여기에는 놓을 수 없다
   blocked: `<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="16" y="22" width="24" height="20" rx="2" fill="#e05252" stroke="#1b2433" stroke-width="2.5"/><circle cx="44" cy="40" r="13" fill="#1b2433" stroke="#fff" stroke-width="3"/><path d="M38 34l12 12M50 34 38 46" stroke="#fff" stroke-width="4" stroke-linecap="round"/></svg>`,
+  // 두 손이 자리를 바꾸는 표시: 교대
+  swap: `<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="18" cy="32" r="10" fill="#fff" stroke="#1b2433" stroke-width="2.5"/><circle cx="46" cy="32" r="10" fill="#ffd84a" stroke="#1b2433" stroke-width="2.5"/><path d="M14 16c6-8 30-8 36 0m0 0-1-8m1 8-8 1M50 48c-6 8-30 8-36 0m0 0 1 8m-1-8 8-1" fill="none" stroke="#ffd84a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  // 걸쇠 걸기: 문 + 고리
+  latch: `<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="10" y="10" width="26" height="44" rx="2" fill="#8a6a4a" stroke="#1b2433" stroke-width="2.5"/><path d="M36 30h16" stroke="#ffd84a" stroke-width="6" stroke-linecap="round"/><circle cx="52" cy="30" r="6" fill="none" stroke="#ffd84a" stroke-width="4"/></svg>`,
+  // 문 밀기: 열리는 문 + 화살표
+  door: `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 8h22v48H12z" fill="#3b3f4a"/><path d="M12 8l20 6v46l-20-4z" fill="#8a6a4a" stroke="#1b2433" stroke-width="2.5" stroke-linejoin="round"/><path d="M40 32h16m-6-6 6 6-6 6" fill="none" stroke="#ffd84a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   // 빈 손: 할 일이 없다
   none: `<svg viewBox="0 0 64 64" aria-hidden="true" opacity="0.55">${HAND}</svg>`,
 };
 
 export function iconFor(a: Action): ActionIcon {
   return a.kind;
+}
+
+/** 2장 운반 행동 → 그림 */
+export function sewingIcon(kind: 'grab' | 'handover' | 'release' | 'latch' | 'door' | 'none'): ActionIcon {
+  return ({ grab: 'pick', handover: 'swap', release: 'drop', latch: 'latch', door: 'door', none: 'none' } as const)[kind];
 }
 
 export function iconSvg(icon: ActionIcon): string {

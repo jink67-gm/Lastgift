@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { screenToGround } from '../../src/core/screenSpace';
+import { groundToScreen, screenToGround } from '../../src/core/screenSpace';
 
 const close = (a: number, b: number) => expect(a).toBeCloseTo(b, 6);
 
@@ -33,5 +33,16 @@ describe('screenToGround: 화면 기준 방향을 바닥 방향으로', () => {
   it('스틱을 반만 밀면 반 속도', () => {
     const d = screenToGround({ x: 0.5, y: 0 }, 1.1);
     close(Math.hypot(d.x, d.z), 0.5);
+  });
+});
+
+describe('groundToScreen', () => {
+  it('screenToGround를 되돌린다', () => {
+    for (const s of [{ x: 1, y: 0 }, { x: 0, y: 1 }, { x: -0.6, y: 0.8 }]) {
+      const g = screenToGround(s, Math.PI / 4);
+      const back = groundToScreen(g, Math.PI / 4);
+      expect(back.x).toBeCloseTo(s.x, 6);
+      expect(back.y).toBeCloseTo(s.y, 6);
+    }
   });
 });
