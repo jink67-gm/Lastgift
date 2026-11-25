@@ -82,8 +82,9 @@ export async function startHost(emu: boolean): Promise<void> {
   let sig: FirebaseSignaling;
   try {
     sig = await FirebaseSignaling.connect(emu);
-  } catch {
-    lobby.showMessage('연결하지 못했어요. 인터넷 연결을 확인해 주세요.', true);
+  } catch (e) {
+    const notSet = e instanceof RoomError && e.code === 'notConfigured';
+    lobby.showMessage(notSet ? '여러 기기 연결 설정(Firebase)이 아직 없어요.' : '연결하지 못했어요. 인터넷 연결을 확인해 주세요.', true);
     return;
   }
 
@@ -362,8 +363,9 @@ export async function startGuest(code: string, emu: boolean): Promise<void> {
   let sig: FirebaseSignaling;
   try {
     sig = await FirebaseSignaling.connect(emu);
-  } catch {
-    lobby.showGuest({ name: '', team: [], message: '연결하지 못했어요. 인터넷 연결을 확인해 주세요.', error: true });
+  } catch (e) {
+    const notSet = e instanceof RoomError && e.code === 'notConfigured';
+    lobby.showGuest({ name: '', team: [], message: notSet ? '여러 기기 연결 설정(Firebase)이 아직 없어요.' : '연결하지 못했어요. 인터넷 연결을 확인해 주세요.', error: true });
     return;
   }
   const name = elfNickname(sig.uid);

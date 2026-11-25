@@ -21,7 +21,7 @@ import {
   set,
   type Database,
 } from 'firebase/database';
-import { EMULATOR, emulatorConfig, firebaseConfig } from './firebaseConfig';
+import { EMULATOR, emulatorConfig, firebaseConfig, isFirebaseConfigured } from './firebaseConfig';
 
 export const ROOM_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 export const ROOM_CODE_LEN = 5;
@@ -59,7 +59,7 @@ export function normalizeRoomCode(s: string): string {
 }
 
 export class RoomError extends Error {
-  constructor(readonly code: 'notFound' | 'expired' | 'unavailable') {
+  constructor(readonly code: 'notFound' | 'expired' | 'unavailable' | 'notConfigured') {
     super(code);
   }
 }
@@ -74,6 +74,7 @@ export class FirebaseSignaling {
   private unsubs: (() => void)[] = [];
 
   static async connect(useEmulator: boolean): Promise<FirebaseSignaling> {
+    if (!useEmulator && !isFirebaseConfigured()) throw new RoomError('notConfigured');
     let app: FirebaseApp;
     try {
       app = initializeApp(useEmulator ? emulatorConfig : firebaseConfig, 'lastgift');

@@ -66,8 +66,8 @@ describe('lastgiftRooms 보안 규칙', () => {
     await denied(remove(ref(guest.db, `lastgiftRooms/${code}`)));
     await remove(ref(host.db, `lastgiftRooms/${code}`));
 
-    // 〈수학 대륙〉 경로(rooms)는 그 게임 규칙 그대로 남아 있다
-    await set(ref(host.db, 'rooms/1234/meta'), { host: host.uid });
-    await denied(set(ref(guest.db, 'rooms/1234/meta'), { host: guest.uid }));
+    // lastgiftRooms 밖은 아무도 읽고 쓸 수 없다
+    await denied(set(ref(host.db, 'other/x'), 1));
+    await denied(get(ref(host.db, 'other')));
   }, 30_000);
 });
