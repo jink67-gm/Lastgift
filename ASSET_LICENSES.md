@@ -14,29 +14,30 @@
 
 ## 외부 에셋 후보(아직 게임에 넣지 않음)
 
-후보는 배포 목록에 넣지 않는다. 채택하려면 실제로 내려받은 파일과 동봉 라이선스 `.txt`가 CC0인지 확인해야 한다.
+후보는 배포 목록에 넣지 않는다. 게임에 넣을 때 실제 모델 파일을 저장소에 복사하고 위 표로 옮긴다.
+증빙 보관 경로: `docs/asset-evidence/quaternius-animated-animals/`
 
 | 확인일 | 모델명 | 제작자 | 공식 팩 URL | 개별 모델 URL | 실제 라이선스 표기 | 동봉 파일 확인 | 채택 상태 |
 |---|---|---|---|---|---|---|---|
-| 2026-11-25 | Shiba Inu (콩이 후보) | Quaternius(팩 제작자 기준. 개별 페이지 미확인) | https://quaternius.com/packs/ultimateanimatedanimals.html | https://poly.pizza/m/y4wdQpg767 | 팩 페이지: `License` → `CC0`(링크 https://creativecommons.org/publicdomain/zero/1.0/). 개별 페이지: **이번에 확인 못 함**(Cloudflare 봇 차단) | 미검증(내려받은 파일 없음) | 후보 · 보류 |
-| 2026-11-25 | Husky (콩이 후보) | Quaternius(팩 제작자 기준. 개별 페이지 미확인) | https://quaternius.com/packs/ultimateanimatedanimals.html | https://poly.pizza/m/wcWiuEqwzq | 팩 페이지: `License` → `CC0`(같은 링크). 개별 페이지: **이번에 확인 못 함**(Cloudflare 봇 차단) | 미검증(내려받은 파일 없음) | 후보 · 보류 |
+| 2026-11-25 | Shiba Inu (시바견, 콩이 후보) | Quaternius | https://quaternius.com/packs/ultimateanimatedanimals.html | https://poly.pizza/m/y4wdQpg767 | 팩 페이지 `License` → `CC0`(creativecommons.org/publicdomain/zero/1.0/) · 개별 페이지 "퍼블릭 도메인(CC0)", 포함 항목 "애니메이션 동물 팩 12개 모델" | 동봉 `License.txt` "CC0 1.0 Universal (CC0 1.0) Public Domain Dedication" 확인(사용자 화면 캡처). 모델 파일은 아직 저장소에 없음 | 후보(CC0 확인 완료) |
+| 2026-11-25 | Husky (허스키, 콩이 후보) | Quaternius | https://quaternius.com/packs/ultimateanimatedanimals.html | https://poly.pizza/m/wcWiuEqwzq | 팩 페이지 `License` → `CC0` · 개별 페이지 "퍼블릭 도메인(CC0)", 포함 항목 "애니메이션 동물 팩 12개 모델" | 위와 같은 동봉 `License.txt` 확인. 모델 파일은 아직 저장소에 없음 | 후보(CC0 확인 완료) |
 
 ### 2026-11-25 확인 기록(Shiba Inu·Husky)
 
-| 확인 대상 | 결과(원문) | 확인 방법 |
+| 확인 대상 | 결과(원문) | 확인 방법 · 증빙 |
 |---|---|---|
 | 팩 페이지 라이선스 | 팩 정보 칸 `License` → `<a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0</a>`, "free to use in personal and commercial projects" | 직접 받아 HTML 확인 |
-| 팩 페이지의 모델 목록 | "This pack includes 12 different animals" — **Shiba Inu·Husky 이름은 나오지 않음** | 직접 받아 검색 |
 | 팩 페이지 위쪽 「License」 버튼 | `/license.html`(QAL)로 가는 사이트 공통 메뉴. 팩 전용 표기 아님 | HTML 확인 |
 | 제작자 FAQ | "Each kit's license is listed in the details panel on the right of its page, and it's also included as a .txt file in the download." / "each kit uses either CC0 or the QAL License" | 웹 읽기 |
-| 사이트 QAL 문서 | "Quaternius Asset License (QAL) v1.0", "Last updated: 8/28/2026". CC0는 언급 없음. "the version in effect at the time you obtained the Assets governs" | 웹 읽기 |
-| Poly Pizza 개별 모델 2개·번들 목록 | **확인 못 함.** 네트워크 허용 뒤에도 "Just a moment… Performing security verification"(Cloudflare 봇 차단)에서 멈춤. 우회하지 않음 | curl·Chromium |
-| 이전 조사 값(이번에 재확인 못 함) | 두 모델 모두 제작자 Quaternius, "Public Domain (CC0)", 번들에 포함 | 사용자 제공 이전 조사 |
+| Poly Pizza 시바견 | 제목 "시바견 - Quaternius 제작", 제작자 쿼터니우스, "2021년 9월 7일 • FBX/GLTF 형식 • 퍼블릭 도메인(CC0)", 포함 항목 "애니메이션 동물 팩 12개 모델" | 사용자 화면 캡처(브라우저 번역 화면) `2026-11-25_polypizza_shiba-inu.jpg` |
+| Poly Pizza 허스키 | 제목 "허스키 - Quaternius 제작", 제작자 쿼터니우스, "2021년 9월 7일 • FBX/GLTF 형식 • 퍼블릭 도메인(CC0)", 포함 항목 "애니메이션 동물 팩 12개 모델" | 사용자 화면 캡처 `2026-11-25_polypizza_husky.jpg` |
+| Poly Pizza 번들 | 제작자 쿼터니우스, "12가지 종류의 동물…개인 및 상업 프로젝트에서 무료로 사용", "최종 업데이트: 2022년 7월 9일 • 라이선스: 퍼블릭 도메인(CC0)" | 사용자 화면 캡처 `2026-11-25_polypizza_bundle.jpg` |
+| 내려받은 팩의 `License.txt` | "LowPoly Models by @Quaternius … License: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication https://creativecommons.org/publicdomain/zero/1.0/" | 사용자 화면 캡처 `2026-11-25_License-txt.jpg` |
+| 자동 접속 | poly.pizza는 Cloudflare 봇 차단으로 자동 확인 불가. 우회하지 않고 사용자 캡처로 대신함 | - |
 
-판정: 팩 페이지와 FAQ 기준으로 이 팩은 CC0로 표시된다. 다만 (1) 두 모델이 이 팩에 속한다는 근거와 개별 라이선스 표기를 이번에 직접 확인하지 못했고,
-(2) 내려받은 파일과 동봉 `.txt`를 확인하지 않았으므로 **CC0 기준 충족은 미확정**이다. 채택 전에 할 일:
-- 팩을 공식 배포처(팩 페이지의 Download)에서 받아, 동봉 라이선스 `.txt`가 CC0인지와 Shiba Inu·Husky 파일이 들어 있는지 확인하고 원본 zip을 보관.
-- Poly Pizza 개별 페이지는 사람이 브라우저로 열어 화면을 저장(증빙)하거나, 동봉 파일 확인으로 대신한다.
+판정: 공식 팩 페이지·두 개별 모델 페이지·번들 페이지·동봉 `License.txt`가 모두 **CC0**로 일치한다. 다른 조건은 발견되지 않았다.
+남은 일(채택할 때): 실제 모델 파일(glTF)을 원본 zip과 함께 저장소에 넣고, 원본 파일명·배포 경로·수정 내역(축소·재색상·본 보완)을 위 표에 기록한다.
+`License.txt` 캡처에는 팩 이름이 보이지 않으므로, 원본 zip을 넣을 때 그 안의 `License.txt`를 함께 보관해 다시 확인한다.
 
 ## 코드 의존성(소프트웨어 라이선스, 별도 관리)
 
