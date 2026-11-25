@@ -11,8 +11,11 @@ import { mergeIntents } from './input/merge';
 import { createElf } from './scene/elf';
 import { createGift, createTargetRing } from './scene/gifts';
 import { createPlaza } from './scene/plaza';
+import { browserStorage, CheckpointStore } from './save/store';
+import { LocalRun } from './session/localRun';
 import { iconFor } from './ui/actionIcons';
 import { createControls } from './ui/controls';
+import { createHud } from './ui/hud';
 
 const CAMERA_YAW = Math.PI / 4; // 게임 중 바뀌지 않는다
 const CAMERA_PITCH = Math.atan(1 / Math.SQRT2);
@@ -75,6 +78,14 @@ scene.add(ring);
 const keys = new KeyState();
 attachKeyboard(window, keys);
 const controls = createControls(document);
+const hud = createHud(document);
+
+// 팀 시도: 아직 방·네트워크가 없으므로 이 기기 혼자 방장('local' 방)이다.
+const run = new LocalRun(new CheckpointStore(browserStorage()), hud, 'local', ME);
+run.attachVisibility(document);
+run.dispatch({ type: 'start', at: performance.now() });
+// 공동 도입 연출은 아직 없으므로 바로 넘긴다(STEP 04에서 만든다).
+if (run.state.phase === 'cutscene') run.dispatch({ type: 'cutsceneDone', at: performance.now() });
 
 function resize(): void {
   const w = host!.clientWidth;
@@ -132,7 +143,10 @@ renderer.setAnimationLoop((now) => {
   const frame = Math.min((now - last) / 1000, 0.25);
   last = now;
   acc += frame;
-  const intent = mergeIntents(keys.sample(), controls.touch.sample());
+  run.frame(now);
+  const sampled = mergeIntents(keys.sample(), controls.touch.sample());
+  // 일시중지·시간 초과·연출 중에는 입력을 버린다(재개 순간 밀린 입력이 튀지 않게).
+  const intent = run.canPlay ? sampled : { move: { x: 0, y: 0 }, action: { down: false, held: false, up: false } };
   // 행동은 프레임당 한 번만 판정한다(같은 입력을 두 번 쓰지 않는다).
   if (intent.action.down) {
     const a = planAction(ME, player, items, colliders, PLAZA_BOUNDS);
@@ -146,7 +160,7 @@ renderer.setAnimationLoop((now) => {
     elapsed += SIM_DT;
   }
   syncViews(elapsed);
-  controls.update(iconFor(planAction(ME, player, items, colliders, PLAZA_BOUNDS)));
+  controls.update(run.canPlay ? iconFor(planAction(ME, player, items, colliders, PLAZA_BOUNDS)) : 'none');
   placeCamera(frame);
   renderer.render(scene, camera);
 });
@@ -163,6 +177,12 @@ if (import.meta.env.DEV || new URLSearchParams(location.search).has('test')) {
     items: () => items.map((i) => ({ ...i })),
     actions: () => actionLog.map((a) => a.kind),
     touchMode: () => controls.touchMode,
+    run: () => ({ ...run.state, remaining: Math.round(run.state.runningSince === null ? run.state.remainingMs : run.state.remainingMs - (performance.now() - run.state.runningSince)) }),
+    runEffects: () => run.log.map((e) => e.type),
+    /** 테스트용: 팀 시간을 ms만큼 바로 흘린다 */
+    skipTime: (ms: number) => {
+      if (run.state.runningSince !== null) run.state = { ...run.state, runningSince: run.state.runningSince - ms };
+    },
     /** 바닥 위 한 점의 현재 화면 좌표(CSS px) */
     toScreen: (x: number, z: number) => {
       v.set(x, 0, z).project(camera);

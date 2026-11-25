@@ -5,6 +5,9 @@ export interface LastGiftHook {
   items(): { id: string; x: number; z: number; light: boolean; carriedBy: string | null }[];
   actions(): string[];
   touchMode(): boolean;
+  run(): { phase: string; remaining: number; chapterId: number; retryCount: number; pauseReasons: string[]; resumeAt: number | null; runId: string };
+  runEffects(): string[];
+  skipTime(ms: number): void;
   toScreen(x: number, z: number): { x: number; y: number };
   insideCollider(): boolean;
 }
