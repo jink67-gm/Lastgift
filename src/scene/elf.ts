@@ -52,7 +52,7 @@ function star(g: CanvasRenderingContext2D, cx: number, cy: number, r: number): v
 
 /**
  * 요정 자세(화면 전용, 판정과 무관):
- * - carry: 'light' 가벼운 선물을 가슴 앞에 안고(span: 안은 물건의 가로 폭, 요정 몸 기준 m) / 'grip' 무거운 짐 손잡이를 잡고 섬 / 'heavy' 함께 들고 감(느린 걸음)
+ * - carry: 'light' 가벼운 선물을 두 손 위에 얹어 가슴 앞에 / 'grip' 무거운 짐 손잡이를 잡고 섬 / 'heavy' 함께 들고 감(느린 걸음)
  * - act: 집기·놓기·잡기 동작 진행(0~1, 0이면 없음) — 살짝 웅크렸다 손을 뻗는다
  * - tired: 체력 25% 이하로 들고 있음 — 팔이 떨린다(손을 턴다)
  */
@@ -60,7 +60,7 @@ export interface ElfPose {
   carry: 'none' | 'light' | 'grip' | 'heavy';
   act: number;
   tired: boolean;
-  /** 안은 물건의 가로 폭(요정 크기 1 기준 m). 이만큼 팔을 벌려 두 손이 물건 옆면에 닿게 한다 */
+  /** 손 위에 얹은 물건의 가로 폭(요정 크기 1 기준 m). 두 손이 물건 바닥 아래에 오게 손 사이를 맞춘다 */
   span?: number;
 }
 
@@ -72,6 +72,11 @@ export interface ElfView {
   animate(timeSec: number, moving: boolean, pose?: ElfPose): void;
   /** 두 손목의 월드 위치(손에 든 물건을 손 위에 얹는다). 손 뼈가 없는 기본 도형 요정은 false */
   hands?(l: THREE.Vector3, r: THREE.Vector3): boolean;
+  /**
+   * 손에 든 물건 자리: 두 손목 가운데(pos)와 방향(quat: +x 요정 왼쪽, +y 손바닥 위, +z 몸 앞).
+   * 두 손 높이 차이와 몸통 기울기를 그대로 따라가 걸을 때 물건이 손·몸과 함께 움직인다. 손 뼈가 없으면 false
+   */
+  carryFrame?(pos: THREE.Vector3, quat: THREE.Quaternion): boolean;
 }
 
 export function createElf(look: ElfLook): ElfView {

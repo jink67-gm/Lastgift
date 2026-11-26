@@ -1,36 +1,49 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { holdPlace, holdShape, placeHeld } from '../../src/scene/hold';
+import { createHoldTween, giftScale, placeOnGround, placeOnHands } from '../../src/scene/hold';
 
-describe('품에 안기', () => {
-  it('납작한 물건은 세워서 안는다(폭은 그대로, 높이·두께가 바뀐다)', () => {
-    const s = holdShape('sketchbook', new THREE.Vector3(0.42, 0.08, 0.32));
-    expect(s.upright).toBe(true);
-    expect(s.across).toBeCloseTo(0.42);
-    expect(s.height).toBeCloseTo(0.32);
-    expect(s.depth).toBeCloseTo(0.08);
-    expect(holdShape('pencils', new THREE.Vector3(0.3, 0.5, 0.3)).upright).toBe(false);
-  });
-  it('키 큰 물건은 낮춰서 윗면이 턱 높이를 넘지 않는다', () => {
-    const s = holdShape('pencils', new THREE.Vector3(0.3, 0.7, 0.3));
-    const p = holdPlace(s, { y: 0.88, fwd: 0.32 }, 1.2);
-    expect(p.top).toBeLessThanOrEqual(0.88 * 1.2 + 1e-9);
-    expect(p.bottom).toBeGreaterThanOrEqual(0.12 * 1.2);
-  });
-  it('몸과 겹치지 않게 배 앞에 둔다(두꺼운 물건은 더 앞으로)', () => {
-    const s = holdShape('repair', new THREE.Vector3(0.42, 0.3, 0.5));
-    expect(holdPlace(s, { y: 0.88, fwd: 0.2 }, 1.2).ahead).toBeCloseTo(0.12 + 0.25);
-  });
-  it('세운 물건은 가운데가 계산한 자리에 온다', () => {
+describe('손 위에 얹기', () => {
+  it('두 손목 가운데에서 손바닥만큼 위·앞에, 손과 같은 방향으로 놓는다', () => {
     const v = new THREE.Group();
-    v.add(new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.32).translate(0, 0.04, 0)));
-    const s = holdShape('sketchbook', new THREE.Vector3(0.42, 0.08, 0.32));
-    const p = placeHeld(v, s, { x: 0, z: 0, yaw: 0 }, { y: 0.88, fwd: 0.32 }, 1.2);
-    v.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(v);
-    expect(box.min.y).toBeCloseTo(p.bottom, 3);
-    expect(box.max.y).toBeCloseTo(p.top, 3);
-    expect((box.min.z + box.max.z) / 2).toBeCloseTo(p.ahead, 3);
-    expect(box.max.x - box.min.x).toBeCloseTo(0.42, 3);
+    const quat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2); // 요정이 +x를 본다
+    placeOnHands(v, { pos: new THREE.Vector3(1, 0.8, 2), quat }, { x: 1, z: 2, yaw: Math.PI / 2 }, 1.2);
+    expect(v.position.y).toBeCloseTo(0.8 + 0.025 * 1.2);
+    expect(v.position.x).toBeCloseTo(1 + 0.07 * 1.2); // 앞(+x)으로
+    expect(v.position.z).toBeCloseTo(2);
+    expect(v.quaternion.angleTo(quat)).toBeLessThan(1e-6);
+  });
+  it('손 뼈가 없으면 가슴 앞 기본 자리', () => {
+    const v = new THREE.Group();
+    placeOnHands(v, null, { x: 0, z: 0, yaw: 0 }, 1);
+    expect(v.position.z).toBeGreaterThan(0.2);
+    expect(v.position.y).toBeGreaterThan(0.4);
+  });
+  it('내려놓으면 눕혀 바닥에', () => {
+    const v = new THREE.Group();
+    v.rotation.set(0.3, 1, 0.2);
+    placeOnGround(v, 3, 4);
+    expect(v.position.toArray()).toEqual([3, 0, 4]);
+    expect(v.quaternion.angleTo(new THREE.Quaternion())).toBeLessThan(1e-6);
+  });
+  it('집을 때 바닥에서 손까지 순간 이동하지 않고 0.25초 동안 옮긴다', () => {
+    const tw = createHoldTween(0.25);
+    const v = new THREE.Group();
+    v.position.set(0, 0, 0);
+    tw.apply('a', v, false, 0);
+    // 들었다: 목표는 손(1, 1, 0)
+    v.position.set(1, 1, 0);
+    tw.apply('a', v, true, 0.1);
+    expect(v.position.x).toBeCloseTo(0); // 막 바뀐 순간은 이전 자리
+    v.position.set(1, 1, 0);
+    tw.apply('a', v, true, 0.225);
+    expect(v.position.x).toBeGreaterThan(0.2);
+    expect(v.position.x).toBeLessThan(0.8);
+    v.position.set(1, 1, 0);
+    tw.apply('a', v, true, 0.4);
+    expect(v.position.toArray()).toEqual([1, 1, 0]);
+  });
+  it('선물 크기는 요정 크기에 비례', () => {
+    expect(giftScale('ball', 1.2)).toBeCloseTo(0.8);
+    expect(giftScale('ball', 1)).toBeCloseTo(0.8 / 1.2);
   });
 });

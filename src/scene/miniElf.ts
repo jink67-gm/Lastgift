@@ -271,7 +271,11 @@ export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: stri
   };
   // 애니메이션 믹서는 값이 바뀌지 않은 뼈는 다시 쓰지 않는다(서 있기처럼 팔이 거의 안 움직이는 동작).
   // 그러면 매 프레임 더한 회전이 쌓여 팔이 빙글빙글 돈다 → 더하기 전의 "깨끗한" 값을 저장해 두고 매 프레임 되돌린 뒤 더한다
-  const armBones = [bones.ul, bones.ur, bones.ll, bones.lr].filter((b): b is THREE.Bone => !!b);
+  // 가슴(어깨·팔·머리의 부모): 들고 있으면 달리기의 몸통 비틀림을 덜어 낸다(아래 animate)
+  const chest = findBone(model, 'Chest');
+  const armBones = [bones.ul, bones.ur, bones.ll, bones.lr, findBone(model, 'ShoulderL'), findBone(model, 'ShoulderR'), chest].filter(
+    (b): b is THREE.Bone => !!b,
+  );
   const clean = armBones.map((b) => b.quaternion.clone());
   // 서 있는 동작의 팔 자세(만들 때 서 있기 동작으로 맞춰 둔 값). 물건을 들면 걷기의 팔 흔들기 대신 이 자세 위에 드는 각을 더한다
   const rest = armBones.map((b) => b.quaternion.clone());
@@ -282,23 +286,70 @@ export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: stri
     if (b && a !== 0) b.quaternion.multiply(tmp.setFromAxisAngle(zAxis, a));
   };
   // 자세별 팔 목표(위팔 앞으로 든 각, 아래팔 굽힘, 옆으로 벌림): 가슴 앞에 안기 / 손잡이 높이로 앞 / 빈손
-  // 가벼운 선물은 두 팔을 앞으로 모아 가슴에 안는다(손목 ≈ 키의 0.67, 몸 앞 0.27). 물건 폭에 맞춰 조금만 벌린다
-  // (크게 벌리면 팔을 양옆으로 뻗은 것처럼 어색하다)
-  const ARMS: Record<ElfPose['carry'], [number, number, number]> = { none: [0, 0, 0], light: [0.8, 0.9, 0], grip: [0.45, 0.25, 0], heavy: [0.7, 0.35, 0] };
-  /** 벌림 각 → 두 손목 사이(요정 크기 1 기준): 벌리지 않으면 0.29 m, 1 rad마다 0.235 m 넓어진다(위 자세에서 잰 값) */
-  const spreadFor = (span: number) => Math.min(0.6, Math.max(0, (span + 0.03 - 0.29) / 0.235));
+  // 가벼운 선물은 두 팔을 앞으로 모아 두 손 위에 얹는다(쟁반을 받치듯 아래팔이 거의 수평, 손목 높이 ≈ 키의 0.65)
+  const ARMS: Record<ElfPose['carry'], [number, number]> = { none: [0, 0], light: [0.6, 1.0], grip: [0.45, 0.25], heavy: [0.7, 0.35] };
+  // 손 위에 얹은 물건 폭에 맞춰 두 손 사이를 좁히거나 넓힌다: 두 손이 물건 바닥 아래(가장자리 조금 안쪽)에 오게.
+  // 위 자세에서 잰 값(요정 크기 1): 벌림 각 → 두 손목 사이
+  const SPREAD: [number, number][] = [[-0.6, 0.186], [-0.4, 0.219], [-0.2, 0.258], [0, 0.303], [0.2, 0.351], [0.4, 0.403]];
+  const spreadFor = (span: number) => {
+    const want = span * 0.75;
+    if (want <= SPREAD[0]![1]) return SPREAD[0]![0];
+    for (let i = 1; i < SPREAD.length; i++) {
+      const [a0, w0] = SPREAD[i - 1]!, [a1, w1] = SPREAD[i]!;
+      if (want <= w1) return a0 + ((want - w0) / (w1 - w0)) * (a1 - a0);
+    }
+    return SPREAD[SPREAD.length - 1]![0];
+  };
   const yAxis = new THREE.Vector3(0, 1, 0);
+  let spread = 0;
   const walk = action('Walk');
   let last = -1;
   let gait: 'idle' | 'run' | 'walk' = 'idle';
   let up = 0;
   let low = 0;
-  let spread = 0;
   const actionOf = (g: typeof gait) => (g === 'run' ? run : g === 'walk' ? walk ?? run : idle);
   const wl = findBone(model, 'WristL');
   const wr = findBone(model, 'WristR');
+  // 손에 든 물건 방향: 몸통이 서 있을 때(만든 때) 방향에서 얼마나 기울고 돌았는지를 물건에도 준다
+  root.updateMatrixWorld(true);
+  /** 서 있을 때(만든 때, 요정 방향 0) 가슴 방향 */
+  const chestRest = chest ? chest.getWorldQuaternion(new THREE.Quaternion()) : null;
+  const chestRestInv = chestRest ? chestRest.clone().invert() : null;
+  const sRoot = new THREE.Quaternion(), sCur = new THREE.Quaternion(), sPar = new THREE.Quaternion();
+  /** 들고 있을 때 몸통 흔들림을 덜어 내는 정도(1 = 서 있을 때 그대로) */
+  const STEADY = 0.8;
+  const cL = new THREE.Vector3(), cR = new THREE.Vector3(), cX = new THREE.Vector3(), cY = new THREE.Vector3(), cZ = new THREE.Vector3();
+  const cRoot = new THREE.Quaternion(), cT = new THREE.Quaternion(), cM = new THREE.Matrix4();
   return {
     root,
+    carryFrame(pos, quat) {
+      if (!wl || !wr) return false;
+      wl.getWorldPosition(cL);
+      wr.getWorldPosition(cR);
+      pos.addVectors(cL, cR).multiplyScalar(0.5);
+      // 앞: 요정이 보는 방향을 몸통이 기운·돈 만큼 돌린 것
+      root.getWorldQuaternion(cRoot);
+      cZ.set(0, 0, 1);
+      if (chest && chestRestInv) {
+        chest.getWorldQuaternion(cT);
+        cT.premultiply(cRoot.clone().invert()).multiply(chestRestInv); // 요정 기준 가슴의 움직임
+        cZ.applyQuaternion(cT);
+      }
+      cZ.applyQuaternion(cRoot);
+      // 옆: 오른손 → 왼손(두 손 높이가 다르면 물건도 기운다)
+      cX.subVectors(cL, cR);
+      if (cX.lengthSq() < 1e-8) return false;
+      cX.normalize();
+      cZ.addScaledVector(cX, -cZ.dot(cX)).normalize();
+      cY.crossVectors(cZ, cX);
+      if (cY.y < 0) {
+        // 손 이름이 좌우 반대인 모델이면 뒤집는다
+        cX.negate();
+        cY.negate();
+      }
+      quat.setFromRotationMatrix(cM.makeBasis(cX, cY, cZ));
+      return true;
+    },
     hands(l, r) {
       if (!wl || !wr) return false;
       wl.getWorldPosition(l);
@@ -327,13 +378,22 @@ export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: stri
       const holdK = 1 - Math.exp(-dt * 12);
       holdW += ((pose.carry === 'none' ? 0 : 1) - holdW) * holdK;
       if (holdW > 0.001) armBones.forEach((b, i) => b.quaternion.slerp(rest[i]!, holdW));
+      // 들고 있으면 가슴을 서 있을 때 방향 쪽으로 되돌린다: 다리·엉덩이는 달리고 윗몸은 반듯하게(물건이 흔들리지 않게).
+      // 엉덩이·배가 비튼 만큼을 가슴에서 되돌려야 하므로 요정 기준 방향으로 계산한다
+      if (chest && chestRest && chest.parent && holdW > 0.001) {
+        root.updateMatrixWorld(true);
+        root.getWorldQuaternion(sRoot).invert();
+        chest.getWorldQuaternion(sCur).premultiply(sRoot);
+        sCur.slerp(chestRest, holdW * STEADY);
+        chest.parent.getWorldQuaternion(sPar).premultiply(sRoot);
+        chest.quaternion.copy(sPar.invert().multiply(sCur));
+      }
       // 팔: 목표 자세로 부드럽게(뼈는 매 프레임 동작 값으로 돌아오므로 그 위에 더한다)
-      const [tu, tl, ts0] = ARMS[pose.carry];
-      const ts = pose.carry === 'light' && pose.span ? spreadFor(pose.span) : ts0;
+      const [tu, tl] = ARMS[pose.carry];
+      const ts = pose.carry === 'light' && pose.span ? spreadFor(pose.span) : 0;
       const k = 1 - Math.exp(-dt * 10);
       up += (tu - up) * k;
       low += (tl - low) * k;
-      spread += (ts - spread) * k;
       const reach = Math.sin(Math.PI * pose.act); // 집기·놓기: 아래 앞으로 손을 뻗는다
       const shake = pose.tired ? Math.sin(timeSec * 34) * 0.18 : 0; // 지쳐서 손을 턴다
       const u = up * (1 - reach) + 0.9 * reach;
@@ -341,8 +401,9 @@ export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: stri
       raise(bones.ur, u - shake);
       raise(bones.ll, -low);
       raise(bones.lr, low);
-      // 큰 물건을 안을 때 팔을 옆으로 벌린다(든 뒤의 위팔 Y축)
-      if (spread) {
+      // 두 손 사이를 물건 폭에 맞춘다(든 뒤의 위팔 Y축: + 벌리기, - 모으기)
+      spread += (ts - spread) * k;
+      if (Math.abs(spread) > 1e-4) {
         bones.ul?.quaternion.multiply(tmp.setFromAxisAngle(yAxis, -spread));
         bones.ur?.quaternion.multiply(tmp.setFromAxisAngle(yAxis, spread));
       }

@@ -11,7 +11,7 @@ import { mergeIntents } from '../input/merge';
 import { createElfAvatar } from '../scene/elfAvatar';
 import type { Models } from '../scene/models';
 import { createGift, createTargetRing } from '../scene/gifts';
-import { giftScale, holdShape, placeHeld, placeOnGround } from '../scene/hold';
+import { createHoldTween, giftScale, holdSpan, placeOnGround, placeOnHands } from '../scene/hold';
 import { createPlaza } from '../scene/plaza';
 import { browserStorage, CheckpointStore } from '../save/store';
 import { LocalRun } from '../session/localRun';
@@ -68,12 +68,12 @@ export function startPlaza(models: Models): void {
 
   const elf = createElfAvatar(models, ELF_LOOKS[0]!);
   scene.add(elf.root);
-  // 가벼운 선물은 요정이 가슴에 안을 수 있는 크기(0장과 같은 비율)
+  // 가벼운 선물은 요정이 두 손에 얹을 수 있는 크기(0장과 같은 비율)
   const giftViews = new Map(
     PLAZA_GIFTS.map((g) => {
       const v = createGift(g.kind);
       if (g.light) v.scale.setScalar(giftScale(g.kind, 1));
-      return [g.id, { v, shape: holdShape(g.kind, new THREE.Box3().setFromObject(v).getSize(new THREE.Vector3())) }] as const;
+      return [g.id, { v, span: holdSpan(v, 1) }] as const;
     }),
   );
   for (const { v } of giftViews.values()) scene.add(v);
@@ -116,24 +116,23 @@ export function startPlaza(models: Models): void {
     camera.lookAt(camTarget);
   }
 
-  const hl = new THREE.Vector3();
-  const hr = new THREE.Vector3();
+  const cf = { pos: new THREE.Vector3(), quat: new THREE.Quaternion() };
+  const holdTween = createHoldTween();
   function syncViews(timeSec: number): void {
     elf.root.position.set(player.x, 0, player.z);
     elf.root.rotation.y = player.facing;
     const held = items.find((i) => i.carriedBy === ME);
-    elf.animate(timeSec, player.moving, { carry: held ? 'light' : 'none', act: 0, tired: false, span: held ? giftViews.get(held.id)!.shape.across : undefined });
+    elf.animate(timeSec, player.moving, { carry: held ? 'light' : 'none', act: 0, tired: false, span: held ? giftViews.get(held.id)!.span : undefined });
     elf.root.updateMatrixWorld(true);
     for (const it of items) {
-      const { v, shape } = giftViews.get(it.id)!;
+      const { v } = giftViews.get(it.id)!;
       if (it.carriedBy === ME) {
-        // 두 팔을 모아 가슴에 안고 간다(얼굴을 가리지 않게, 손이 옆면을 감싸게)
-        const fx = Math.sin(player.facing), fz = Math.cos(player.facing);
-        const hands = elf.hands?.(hl, hr) ? { y: (hl.y + hr.y) / 2, fwd: ((hl.x + hr.x) / 2 - player.x) * fx + ((hl.z + hr.z) / 2 - player.z) * fz } : null;
-        placeHeld(v, shape, { x: player.x, z: player.z, yaw: player.facing }, hands, 1);
+        // 두 손 위에 얹고 간다(손·몸통과 함께 움직인다)
+        placeOnHands(v, elf.carryFrame?.(cf.pos, cf.quat) ? cf : null, { x: player.x, z: player.z, yaw: player.facing }, 1);
       } else {
         placeOnGround(v, it.x, it.z);
       }
+      holdTween.apply(it.id, v, it.carriedBy === ME, timeSec);
     }
     const target = items.some((i) => i.carriedBy === ME) ? null : chooseTarget(player, items);
     ring.visible = target !== null;

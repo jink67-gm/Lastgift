@@ -1,7 +1,7 @@
 // 0장 · 광장에 떨어진 선물 다섯 개: 그림 이름표를 보고 네 배달지 표식 아래로 나눈다(명세서 §4 0장, §5).
 //   ?chapter=0  한 기기에서 둘이(1P WASD+E·터치, 2P 방향키+Enter). 여러 기기 연결은 STEP 07 통합 때 붙인다.
 // 프롤로그(단체사진·썰매 불시착)는 STEP 04-3에서 이 장 앞에 붙인다.
-import { giftScale, holdShape, placeHeld, placeOnGround } from '../scene/hold';
+import { createHoldTween, giftScale, holdSpan, placeOnGround, placeOnHands } from '../scene/hold';
 import * as THREE from 'three';
 import { gripPos, needsSwap, type SewingInput } from '../core/sewing';
 import { createSorting, planAction, step, type SortAction, type SortEvent, type SortState } from '../core/sorting';
@@ -46,6 +46,10 @@ const PLAYERS = ['p0', 'p1'] as const;
  * 시험 모드에서만 ?elf=배율로 바꿔 비교할 수 있다. 판정(충돌 반지름·손잡이 거리)은 그대로다.
  */
 const ELF_SCALE = testParams.has('test') && testParams.get('elf') ? Number(testParams.get('elf')) : 1.2;
+/** 시험 모드 느리게(동작을 여러 장으로 찍어 확인할 때). 1 = 평소 */
+const TEST_SLOW = testParams.has('test') && testParams.get('slow') ? Number(testParams.get('slow')) : 1;
+/** 시험 모드 확대(동작을 가까이서 확인할 때). 1 = 평소 */
+const TEST_ZOOM = testParams.has('test') && testParams.get('zoom') ? Number(testParams.get('zoom')) : 1;
 /** 가벼운 선물은 가슴에 두 손으로 안는다(머리 위로 들면 긴 모자 위에 떠 보였다, `scene/hold.ts`) */
 
 function iconOf(a: SortAction): ActionIcon {
@@ -182,17 +186,20 @@ export function startChapter0(models: Models): void {
       v.scale.setScalar(giftScale(g.kind, ELF_SCALE));
       setShadows(v, true);
       scene.add(v);
-      const size = new THREE.Box3().setFromObject(v).getSize(new THREE.Vector3());
+      const span = holdSpan(v, ELF_SCALE);
       const outline = createOutline(v, 0.035);
       const tag = createTag(g.dest);
       scene.add(tag);
       // 품에 안을 때 쓰는 크기(가로·세로·높이, 원점은 바닥 가운데). 윤곽을 붙이기 전에 잰다
-      return [g.id, { v, tag, outline, size, kind: g.kind }] as const;
+      return [g.id, { v, tag, outline, span }] as const;
     }),
   );
 
-  /** 품에 안은 선물의 자리(시험 훅용) */
-  const heldAt = new Map<string, { ahead: number; bottom: number; top: number }>();
+  /** 화면 확인용(시험 모드만): 제자리에서 걷는 동작만 보이는 요정 */
+  const runInPlace = new Set<string>();
+  const holdTween = createHoldTween();
+  /** 손에 든 선물 자리(두 손목 가운데·방향) */
+  const cf = { pos: new THREE.Vector3(), quat: new THREE.Quaternion() };
   const fader = createOcclusionFader(scene, camera);
   /** 요정별 마지막 손 동작(집기·놓기·잡기) 시각 */
   const actAt = new Map<string, number>();
@@ -215,7 +222,7 @@ export function startChapter0(models: Models): void {
       fpsT = 0;
       fpsN = 0;
     }
-    const frame = Math.min(raw, 0.25);
+    const frame = Math.min(raw, 0.25) / TEST_SLOW;
     last = now;
     acc += frame;
     run.frame(now);
@@ -280,11 +287,11 @@ export function startChapter0(models: Models): void {
       e.root.rotation.y = ps.yaw;
       const held = sort.items.find((it) => it.carriedBy === p.id);
       const since = elapsed - (actAt.get(p.id) ?? -9);
-      e.animate(elapsed, p.moving, {
+      e.animate(elapsed, p.moving || runInPlace.has(p.id), {
         carry: p.holding !== null ? (c.lifted ? 'heavy' : 'grip') : held ? 'light' : 'none',
         act: since >= 0 && since < 0.35 ? since / 0.35 : 0,
         tired: needsSwap(sw, p),
-        span: held ? holdShape(gifts.get(held.id)!.kind, gifts.get(held.id)!.size).across / ELF_SCALE : undefined,
+        span: held ? gifts.get(held.id)!.span : undefined,
       });
       e.root.updateMatrixWorld(true);
       if (p.holding !== null && c.lifted && e.hands?.(hl, hr)) {
@@ -317,8 +324,7 @@ export function startChapter0(models: Models): void {
     crateTag.visible = !sort.crateSorted;
     crateTag.position.set(cs.x, lift + 1.05, cs.z);
 
-    // 가벼운 선물: 가슴 아래에 품는다. 두 손이 물건 옆면 아래쪽을 잡고(팔을 물건 폭만큼 벌린다),
-    // 물건 윗면은 턱 높이를 넘지 않게 낮춘다(얼굴이 물건에 파묻히지 않게). 몸과 겹치지 않게 배 앞에 둔다
+    // 가벼운 선물: 든 요정의 두 손 위에 얹는다. 손·몸통과 한 덩어리로 움직인다(`scene/hold.ts`)
     for (const it of sort.items) {
       const g = gifts.get(it.id)!;
       const idx = it.carriedBy ? sw.players.findIndex((q) => q.id === it.carriedBy) : -1;
@@ -326,15 +332,14 @@ export function startChapter0(models: Models): void {
       if (idx >= 0) {
         const e = elves[idx]!;
         const ps = shown.get(sw.players[idx]!.id)!;
-        const fx = Math.sin(ps.yaw), fz = Math.cos(ps.yaw);
-        const hands = e.hands?.(hl, hr) ? { y: (hl.y + hr.y) / 2, fwd: ((hl.x + hr.x) / 2 - ps.x) * fx + ((hl.z + hr.z) / 2 - ps.z) * fz } : null;
-        heldAt.set(it.id, placeHeld(g.v, holdShape(g.kind, g.size), ps, hands, ELF_SCALE));
+        placeOnHands(g.v, e.carryFrame?.(cf.pos, cf.quat) ? cf : null, ps, ELF_SCALE);
         // 이름표: 요정 머리 위
         g.tag.position.set(ps.x, 1.9 * ELF_SCALE, ps.z);
       } else {
         placeOnGround(g.v, it.x, it.z);
         g.tag.position.set(it.x, 0.95, it.z);
       }
+      holdTween.apply(it.id, g.v, idx >= 0, elapsed);
     }
     controls.update(iconOf(mine));
     markers.update(frame);
@@ -346,6 +351,12 @@ export function startChapter0(models: Models): void {
       want = frameFor(sw.players.filter((p) => p.connected), goalOf(), aspect, CAMERA_YAW, CAMERA_PITCH);
       const held = deadZone(camTarget, want);
       want = { ...want, x: held.x, z: held.z };
+      if (TEST_ZOOM !== 1) {
+        // 확대 확인: 1P 몸 가운데(키 절반 높이)를 화면 가운데에
+        const p0 = sw.players[0]!;
+        const lift = (0.6 * ELF_SCALE) / Math.tan(CAMERA_PITCH) / Math.SQRT2;
+        want = { x: p0.x - lift, z: p0.z - lift, viewH: baseViewH(aspect) / TEST_ZOOM };
+      }
     }
     // 광장 밖도 눈밭·울타리·골목·먼 마을이 채우므로 가장자리 가까이까지 따라간다
     // 터치 기기: 아래 모서리의 스틱·행동 버튼에 요정이 깔리지 않게 화면을 조금 아래로(요정이 화면에서 위쪽에) 둔다
@@ -466,11 +477,33 @@ export function startChapter0(models: Models): void {
           const fwd = (x: number, z: number) => (x - ps.x) * fx + (z - ps.z) * fz;
           return {
             id,
-            hands: ok ? { y: (l.y + r.y) / 2, fwd: fwd((l.x + r.x) / 2, (l.z + r.z) / 2), apart: l.distanceTo(r) } : null,
+            hands: ok ? { y: (l.y + r.y) / 2, fwd: fwd((l.x + r.x) / 2, (l.z + r.z) / 2), apart: l.distanceTo(r), l: l.toArray(), r: r.toArray() } : null,
             chin,
-            gift: gv && it && heldAt.has(it.id) ? { id: it.id, ...heldAt.get(it.id)! } : null,
+            gift:
+              gv && it
+                ? (() => {
+                    const b = new THREE.Box3();
+                    gv.v.updateMatrixWorld(true);
+                    gv.v.traverse((o) => {
+                      if ((o as THREE.Mesh).isMesh && o.parent?.name !== 'outline') b.expandByObject(o);
+                    });
+                    const mid = ok ? l.clone().add(r).multiplyScalar(0.5) : null;
+                    return {
+                      id: it.id,
+                      across: gv.span * ELF_SCALE,
+                      bottom: b.min.y,
+                      top: b.max.y,
+                      ahead: fwd((b.min.x + b.max.x) / 2, (b.min.z + b.max.z) / 2),
+                      /** 선물 원점(바닥 가운데)이 두 손목 가운데에서 떨어진 거리 */
+                      fromHands: mid ? gv.v.position.distanceTo(mid) : null,
+                      origin: { x: gv.v.position.x, y: gv.v.position.y, z: gv.v.position.z },
+                    };
+                  })()
+                : null,
           };
         }),
+      /** 화면 확인용(시험 모드만): 제자리에서 걷는 동작(카메라가 움직이지 않아 같은 자리에서 여러 장 찍을 수 있다) */
+      debugRunInPlace: (id: string, on: boolean) => (on ? runInPlace.add(id) : runInPlace.delete(id)),
       /** 화면 확인용(시험 모드만): 요정 체력을 정한다 */
       debugStamina: (id: string, v: number) => {
         sort = { ...sort, sewing: { ...sort.sewing, players: sort.sewing.players.map((p) => (p.id === id ? { ...p, stamina: v } : p)) } };
@@ -482,8 +515,8 @@ export function startChapter0(models: Models): void {
         snapCamera = true;
         establish = 0;
       },
-      toScreen: (x: number, z: number) => {
-        const v = new THREE.Vector3(x, 0, z).project(camera);
+      toScreen: (x: number, z: number, y = 0) => {
+        const v = new THREE.Vector3(x, y, z).project(camera);
         return { x: ((v.x + 1) / 2) * host.clientWidth, y: ((1 - v.y) / 2) * host.clientHeight };
       },
     };
