@@ -6,6 +6,8 @@ import * as THREE from 'three';
 export interface WinterLight {
   /** 화면 중심과 화면 크기(m)에 맞춰 그림자 범위를 옮긴다 */
   follow(x: number, z: number, viewW: number, viewH: number): void;
+  /** 실시간 그림자 켜고 끄기(품질 설정). 재질을 다시 만들도록 장면을 넘긴다 */
+  setShadows(on: boolean, scene: THREE.Object3D): void;
 }
 
 const KEY_DIR = new THREE.Vector3(-5, 14, 7).normalize().multiplyScalar(30);
@@ -17,25 +19,39 @@ export function createWinterLight(scene: THREE.Scene, renderer: THREE.WebGLRende
   const key = new THREE.DirectionalLight('#fff0db', 2.5);
   scene.add(key);
   scene.add(key.target);
-  if (opts.shadows) {
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    key.castShadow = true;
-    key.shadow.mapSize.set(opts.mapSize, opts.mapSize);
-    key.shadow.bias = -0.0006;
-    key.shadow.normalBias = 0.03;
-    key.shadow.radius = 3;
-    // 그림자 세기를 낮춘다(요정의 작은 실루엣보다 그림자가 먼저 보이지 않게)
-    (key.shadow as THREE.LightShadow & { intensity?: number }).intensity = 0.62;
-    key.shadow.camera.near = 1;
-    key.shadow.camera.far = 80;
-  }
+  let shadowsOn = false;
+  const configure = (on: boolean) => {
+    shadowsOn = on;
+    renderer.shadowMap.enabled = on;
+    key.castShadow = on;
+    if (on) {
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      key.shadow.mapSize.set(opts.mapSize, opts.mapSize);
+      key.shadow.bias = -0.0006;
+      key.shadow.normalBias = 0.03;
+      key.shadow.radius = 3;
+      key.shadow.camera.near = 1;
+      key.shadow.camera.far = 80;
+      // 그림자 세기를 낮춘다(요정의 작은 실루엣보다 그림자가 먼저 보이지 않게)
+      (key.shadow as THREE.LightShadow & { intensity?: number }).intensity = 0.62;
+    }
+  };
+  configure(opts.shadows);
   let lastR = 0;
   return {
+    setShadows(on, root) {
+      if (on === shadowsOn) return;
+      configure(on);
+      lastR = 0;
+      root.traverse((o) => {
+        const m = (o as THREE.Mesh).material;
+        if (m) (Array.isArray(m) ? m : [m]).forEach((x) => (x.needsUpdate = true));
+      });
+    },
     follow(x, z, viewW, viewH) {
       key.position.set(x + KEY_DIR.x, KEY_DIR.y, z + KEY_DIR.z);
       key.target.position.set(x, 0, z);
-      if (!opts.shadows) return;
+      if (!shadowsOn) return;
       // 화면 대각선만큼(+ 키 큰 소품 그림자 여유) 덮는다. 크기가 조금 바뀔 때마다 다시 계산하지 않게 1 m 단위로
       const r = Math.ceil(Math.hypot(viewW, viewH) * 0.6 + 3);
       if (r !== lastR) {

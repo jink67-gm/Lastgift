@@ -75,4 +75,11 @@ describe('개인 설정', () => {
     kv.setItem('lastgift.settings.v1', JSON.stringify({ muted: 'yes', largeText: true, extra: 1 }));
     expect(loadSettings(kv)).toEqual({ ...DEFAULT_SETTINGS, largeText: true });
   });
+  it('그래픽 품질·FPS 표시 설정을 저장하고, 잘못된 값은 기본값으로', () => {
+    const kv = new MemoryKV();
+    saveSettings(kv, { ...DEFAULT_SETTINGS, quality: 'low', showFps: true });
+    expect(loadSettings(kv)).toMatchObject({ quality: 'low', showFps: true });
+    kv.setItem('lastgift.settings.v1', JSON.stringify({ quality: 'ultra', showFps: 'yes' }));
+    expect(loadSettings(kv)).toMatchObject({ quality: 'auto', showFps: false });
+  });
 });

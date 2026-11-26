@@ -10,7 +10,7 @@ import { CH0, markerOf, SORT_GIFTS } from '../data/chapter0';
 import { ELF_LOOKS } from '../data/elves';
 import { attachKeyboard, KeyState, KEYMAP_P1, KEYMAP_P2 } from '../input/keyboard';
 import { mergeIntents } from '../input/merge';
-import { browserStorage, CheckpointStore } from '../save/store';
+import { browserStorage, CheckpointStore, loadSettings, saveSettings } from '../save/store';
 import { createMarkers, createSkidTrails, createTag } from '../scene/chapter0';
 import { createWinterLight, setShadows } from '../scene/winterLight';
 import { createStaminaBar, createSwapSign } from '../scene/chapter2';
@@ -18,6 +18,11 @@ import { createElfAvatar } from '../scene/elfAvatar';
 import { createGift, createTargetRing } from '../scene/gifts';
 import type { Models } from '../scene/models';
 import { createOcclusionFader } from '../scene/occlusionFade';
+import { createOutline } from '../scene/outline';
+import { createSnowfall } from '../scene/snowfall';
+import { AutoQuality, effectiveQuality, snowCount, type Quality } from '../core/quality';
+import { createSettingsUi } from '../ui/settings';
+import { createOffscreenMarks } from '../ui/offscreen';
 import { createPlaza, townBench, townLamp } from '../scene/plaza';
 import { TOWN } from '../data/townScale';
 import { LocalRun } from '../session/localRun';
@@ -55,8 +60,7 @@ function iconOf(a: SortAction): ActionIcon {
 export function startChapter0(models: Models): void {
   const host = document.getElementById('game')!;
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  // ?quality=low: 해상도를 절반으로 그려 저사양 기기(와 자동 시험)의 부담을 줄인다
-  renderer.setPixelRatio(new URLSearchParams(location.search).get('quality') === 'low' ? 0.5 : Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // 품질 설정에서 다시 정한다(applyQuality)
   host.appendChild(renderer.domElement);
   const scene = new THREE.Scene();
   // 실제 그림자: 터치 기기(태블릿·폰)는 작은 그림자 지도, ?noshadow면 끈다(발밑 원형 그림자는 남는다)
@@ -111,6 +115,28 @@ export function startChapter0(models: Models): void {
   const controls = createControls(document);
   const hud = createHud(document);
 
+  // 개인 설정(그래픽 품질·눈발·FPS 표시): 이 기기에만 저장. ?quality=low는 시작 품질을 낮음으로 고정
+  const kv = browserStorage();
+  const settings = createSettingsUi(document, loadSettings(kv));
+  const forcedLow = low;
+  const auto = new AutoQuality();
+  let quality: Quality = forcedLow ? 'low' : effectiveQuality(settings.value.quality, null);
+  const snow = createSnowfall(() => renderer.getPixelRatio());
+  scene.add(snow.points);
+  function applyQuality(): void {
+    const q = forcedLow ? 'low' : effectiveQuality(settings.value.quality, auto.result);
+    quality = q;
+    renderer.setPixelRatio(q === 'low' ? 0.5 : Math.min(window.devicePixelRatio, 2));
+    resize();
+    light.setShadows(q === 'normal' && !params.has('noshadow'), scene);
+    snow.setCount(snowCount(q, settings.value.reducedSnow));
+  }
+  settings.onChange((s) => {
+    saveSettings(kv, s);
+    applyQuality();
+  });
+  const marks = createOffscreenMarks(document, PLAYERS.length);
+
   // 새 시도(0장). 프롤로그 연출은 아직 없으므로 바로 넘긴다(STEP 04-3)
   const run = new LocalRun(new CheckpointStore(browserStorage()), hud, 'dev-ch0', 'p0');
   run.attachVisibility(document);
@@ -147,6 +173,7 @@ export function startChapter0(models: Models): void {
   const crate = createGift('sewing');
   setShadows(crate, true);
   scene.add(crate);
+  const crateOutline = createOutline(crate, 0.06);
   const crateTag = createTag('tailor');
   scene.add(crateTag);
   const gifts = new Map(
@@ -156,9 +183,10 @@ export function startChapter0(models: Models): void {
       v.scale.setScalar(g.kind === 'ball' ? 1.35 : 1.6);
       setShadows(v, true);
       scene.add(v);
+      const outline = createOutline(v, 0.035);
       const tag = createTag(g.dest);
       scene.add(tag);
-      return [g.id, { v, tag }] as const;
+      return [g.id, { v, tag, outline }] as const;
     }),
   );
 
@@ -169,9 +197,22 @@ export function startChapter0(models: Models): void {
   let last = performance.now();
   let acc = 0;
   let elapsed = 0;
+  applyQuality();
+  let fpsT = 0;
+  let fpsN = 0;
   requestAnimationFrame(function loop(now) {
     requestAnimationFrame(loop);
-    const frame = Math.min((now - last) / 1000, 0.25);
+    const raw = (now - last) / 1000;
+    // 자동 품질: 시작 뒤 실제 프레임 시간을 보고 느리면 한 번 낮음으로
+    if (auto.feed(raw) && settings.value.quality === 'auto' && !forcedLow) applyQuality();
+    fpsT += raw;
+    fpsN++;
+    if (fpsT >= 0.5) {
+      settings.setFps(fpsN / fpsT, quality === 'low' ? '낮음' : '보통');
+      fpsT = 0;
+      fpsN = 0;
+    }
+    const frame = Math.min(raw, 0.25);
     last = now;
     acc += frame;
     run.frame(now);
@@ -325,6 +366,29 @@ export function startChapter0(models: Models): void {
     camera.position.copy(camTarget).add(camOffset);
     camera.lookAt(camTarget);
     light.follow(camTarget.x, camTarget.z, viewH * aspect, viewH / Math.sin(CAMERA_PITCH));
+    // 대상 윤곽: 지금 행동하면 집을 선물·잡을 재봉틀을 그 요정 모자 색으로(1P 먼저)
+    for (const g of gifts.values()) g.outline.set(null);
+    crateOutline.set(null);
+    sw.players.forEach((p, i) => {
+      if (!run.canPlay || !p.connected) return;
+      const a = planAction(sort, p.id);
+      const color = ELF_LOOKS[i]!.hat;
+      if (a.kind === 'pick') {
+        const o = gifts.get(a.itemId)!.outline;
+        if (!o.group.visible) o.set(color);
+      } else if (a.kind === 'sewing' && (a.sub.kind === 'grab' || a.sub.kind === 'handover') && !crateOutline.group.visible) crateOutline.set(color);
+    });
+    snow.update(frame, camTarget.x, camTarget.z, viewH * 1.3);
+    // 화면 밖 친구: 화면 가장자리에 모자 색 표시
+    marks.update(
+      sw.players.map((p, i) => {
+        const ps = shown.get(p.id) ?? p;
+        const v = new THREE.Vector3(ps.x, 0.7 * ELF_SCALE, ps.z).project(camera);
+        return p.connected ? { x: ((v.x + 1) / 2) * host.clientWidth, y: ((1 - v.y) / 2) * host.clientHeight, color: ELF_LOOKS[i]!.hat } : { x: host.clientWidth / 2, y: host.clientHeight / 2, color: '#fff' };
+      }),
+      host.clientWidth,
+      host.clientHeight,
+    );
     // 사람 크기 집·울타리가 요정·짐을 가리면 그 물체만 잠시 흐리게
     const pts: THREE.Vector3[] = [];
     for (const p of sw.players) if (p.connected) pts.push(new THREE.Vector3(p.x, 0.5 * ELF_SCALE, p.z), new THREE.Vector3(p.x, 1.05 * ELF_SCALE, p.z));

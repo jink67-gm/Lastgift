@@ -1,5 +1,6 @@
 // 팀 체크포인트(방장 기기)와 개인 설정을 따로 저장한다.
 // 저장소가 없거나(사생활 보호 모드) 가득 차도 게임은 계속되고, 실패는 결과로 알려 UI가 표시한다.
+import type { QualitySetting } from '../core/quality';
 import { SCHEMA_VERSION, type Checkpoint } from '../core/run';
 
 /** localStorage와 같은 모양. 테스트에서는 메모리 구현을 넣는다 */
@@ -80,9 +81,14 @@ export interface Settings {
   noShake: boolean;
   /** 확대 글씨 */
   largeText: boolean;
+  /** 그래픽 품질: 자동·낮음·보통 */
+  quality: QualitySetting;
+  /** 화면 구석 FPS 표시 */
+  showFps: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { muted: false, reducedSnow: false, noShake: false, largeText: false };
+export const DEFAULT_SETTINGS: Settings = { muted: false, reducedSnow: false, noShake: false, largeText: false, quality: 'auto', showFps: false };
+const QUALITY_VALUES: readonly QualitySetting[] = ['auto', 'low', 'normal'];
 
 export function loadSettings(kv: KeyValue | null): Settings {
   try {
@@ -90,7 +96,8 @@ export function loadSettings(kv: KeyValue | null): Settings {
     if (!raw) return { ...DEFAULT_SETTINGS };
     const v = JSON.parse(raw) as Partial<Settings>;
     const out = { ...DEFAULT_SETTINGS };
-    for (const k of Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]) if (typeof v[k] === 'boolean') out[k] = v[k];
+    for (const k of ['muted', 'reducedSnow', 'noShake', 'largeText', 'showFps'] as const) if (typeof v[k] === 'boolean') out[k] = v[k];
+    if (typeof v.quality === 'string' && QUALITY_VALUES.includes(v.quality)) out.quality = v.quality;
     return out;
   } catch {
     return { ...DEFAULT_SETTINGS };
