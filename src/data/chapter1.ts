@@ -186,6 +186,10 @@ function buildWalls(): Collider[] {
 }
 
 export const CH1_WALLS: readonly Collider[] = buildWalls();
+/** 충돌: 울타리·담·집 + 앞마당 엄폐물 */
+export function ch1Colliders(): readonly Collider[] {
+  return [...CH1_WALLS, ...COVER_COLLIDERS];
+}
 
 /** 월드 경계(넉넉하게): 실제 움직임은 울타리·담이 막는다 */
 export const CH1_BOUNDS: Bounds = (() => {
@@ -203,3 +207,46 @@ export const MAP_FEATURES = { mail: 'fish' as MailSymbol, mailSide: 'left' as co
 
 /** 사람 마을 치수 재확인(우편함·담 높이) */
 export const CH1_SIZES = { mailbox: TOWN.mailbox, lowWall: LOW_WALL_H, fence: TOWN.fence };
+
+// ── 04-4b: 망보기·현관 배달 ────────────────────────────────
+
+/** 유나 눈 자리(창 앞면 가운데, 골목 좌표) */
+export const YUNA_EYE = { s: YARD.back + 0.2, t: YUNA_WINDOW.t };
+
+/** 앞마당 엄폐물(골목 좌표, 반지름): 대문 → 눈사람 → 외바퀴 수레 → 덤불 → 현관. 요정보다 크다 */
+export const COVERS = [
+  { id: 'snowman', s: 45.0, t: 7.2, r: 0.8 },
+  { id: 'barrow', s: 47.2, t: 4.9, r: 0.85 },
+  { id: 'bush', s: 49.5, t: 4.5, r: 0.9 },
+  // 창 앞 왼쪽 장작 더미: 그 뒤가 앞마당 안 망보는 자리(창을 정면에서 엿본다)
+  { id: 'logs', s: 45.4, t: -3.6, r: 0.85 },
+] as const;
+
+/** 창 바로 아래(유나가 내려다보지 못하는 곳) */
+export const BLIND = { s0: YARD.back - 1.5, t0: YUNA_WINDOW.t - 2.0, t1: YUNA_WINDOW.t + 2.0 };
+
+/** 망보는 자리: 창이 정면으로 보이는 두 곳(담 밖 앞쪽, 앞마당 안 장작 더미 뒤) */
+export const LOOKOUTS = [
+  // peek: 그 자리에서 창을 엿보는 눈(담 위로 / 눈사람 옆으로 고개를 내민다)
+  { id: 'wall', s: 41.4, t: -5.2, peek: { s: 42.0, t: -5.0, y: 2.3 } },
+  { id: 'logs', s: 44.0, t: -3.3, peek: { s: 44.3, t: -3.35, y: 2.0 } },
+] as const;
+/** 망보는 자리로 보는 거리 */
+export const LOOKOUT_R = 1.1;
+
+/** 현관 발판(선물을 놓는 곳): 문 앞 */
+export const PORCH = { s: YARD.back - 0.9, t: 0.8 * HOUSE_SCALE, hs: 1.0, ht: 1.5 };
+
+/** 들킨 요정이 돌아가는 곳: 엄폐물에 숨은 적이 없으면 대문 밖 */
+export const OUTSIDE_GATE = { s: YARD.front - 1.4, t: (YARD.gate[0] + YARD.gate[1]) / 2 };
+
+export function inPorch(p: { x: number; z: number }): boolean {
+  const { s, t } = toLane(p);
+  return Math.abs(s - PORCH.s) <= PORCH.hs && Math.abs(t - PORCH.t) <= PORCH.ht;
+}
+
+/** 엄폐물 충돌(요정이 지나가지 못한다) */
+export const COVER_COLLIDERS: readonly Collider[] = COVERS.map((c) => {
+  const p = W(c.s, c.t);
+  return { kind: 'circle', x: p.x, z: p.z, r: c.r * 0.8 };
+});

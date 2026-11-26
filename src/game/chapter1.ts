@@ -5,7 +5,7 @@
 //   사람(유나·지우)은 사용자가 줄 에셋으로 넣는다(지금은 창가에 실루엣 자리).
 import * as THREE from 'three';
 import { baseViewH, deadZone, frameFor, type Pt } from '../core/framing';
-import { createChapter1, planAction, step, CAMERA_YAW, type Ch1Action, type Ch1Event, type Ch1State } from '../core/chapter1';
+import { createChapter1, gazeAt, lookoutAt, planAction, step, CAMERA_YAW, type Ch1Action, type Ch1Event, type Ch1State } from '../core/chapter1';
 import { AutoQuality, effectiveQuality, snowCount, type Quality } from '../core/quality';
 import type { SewingInput } from '../core/sewing';
 import { chapter } from '../data/chapters';
@@ -14,7 +14,7 @@ import { ELF_LOOKS } from '../data/elves';
 import { attachKeyboard, KeyState, KEYMAP_P1, KEYMAP_P2 } from '../input/keyboard';
 import { mergeIntents } from '../input/merge';
 import { browserStorage, CheckpointStore, loadSettings, saveSettings } from '../save/store';
-import { createChapter1Scene } from '../scene/chapter1';
+import { createChapter1Scene, FROST_LAYER } from '../scene/chapter1';
 import { createElfAvatar } from '../scene/elfAvatar';
 import { createGift, createTargetRing } from '../scene/gifts';
 import { createHoldTween, giftScale, holdSpan, placeOnGround, placeOnHands } from '../scene/hold';
@@ -30,6 +30,7 @@ import { createHud } from '../ui/hud';
 import { createMapView } from '../ui/mapView';
 import { createOffscreenMarks } from '../ui/offscreen';
 import { createSettingsUi } from '../ui/settings';
+import { createStorybook, drawWhale, type Storybook } from '../ui/storybook';
 import { toSewingInput } from './chapter2';
 
 const testParams = new URLSearchParams(location.search);
@@ -59,7 +60,8 @@ export function chapter1Checkpoint(roomId: string) {
 
 function iconOf(a: Ch1Action): ActionIcon {
   if (a.kind === 'pick') return 'pick';
-  if (a.kind === 'drop') return 'drop';
+  if (a.kind === 'drop' || a.kind === 'place') return 'drop';
+  if (a.kind === 'signal') return a.up ? 'signal' : 'none';
   if (a.kind === 'blocked') return 'blocked';
   if (a.kind === 'map') return a.open ? 'map' : 'mapClose';
   return 'none';
@@ -80,6 +82,16 @@ export function startChapter1(models: Models): void {
   scene.add(space.root);
 
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 300);
+  camera.layers.enable(FROST_LAYER); // 큰 화면은 창 성에가 보인다(유나가 어디를 보는지 모른다)
+  // 망보는 자리에서 창을 들여다보는 작은 화면(성에 층을 빼고 그린다)
+  const peekCam = new THREE.PerspectiveCamera(34, 4 / 3, 0.1, 120);
+  const peekFrame = document.createElement('div');
+  peekFrame.id = 'peek';
+  peekFrame.style.cssText =
+    'position:fixed;z-index:14;pointer-events:none;display:none;border:5px solid #fff;border-radius:16px;box-shadow:0 6px 20px rgba(0,0,0,0.45);box-sizing:border-box';
+  peekFrame.innerHTML =
+    '<svg viewBox="0 0 64 40" style="position:absolute;left:-14px;top:-14px;width:44px;height:28px;background:#1b2433;border-radius:14px;border:3px solid #fff;padding:2px"><ellipse cx="32" cy="20" rx="26" ry="14" fill="#fff"/><circle cx="32" cy="20" r="8" fill="#1b2433"/></svg>';
+  document.body.appendChild(peekFrame);
   const camOffset = new THREE.Vector3(Math.sin(CAMERA_YAW) * Math.cos(CAMERA_PITCH), Math.sin(CAMERA_PITCH), Math.cos(CAMERA_YAW) * Math.cos(CAMERA_PITCH)).multiplyScalar(60);
   const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   const camTarget = new THREE.Vector3(ESTABLISH.x, 0, ESTABLISH.z);
@@ -104,6 +116,94 @@ export function startChapter1(models: Models): void {
   resize();
 
   let state: Ch1State = createChapter1(PLAYERS);
+  // 손 신호(망보는 요정 머리 위 초록 손)·들킴 표시(창 위 빨간 느낌표)
+  const signTex = (draw: (g: CanvasRenderingContext2D) => void) => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    draw(c.getContext('2d')!);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  };
+  const handTex = signTex((g) => {
+    g.fillStyle = '#2f9a4a';
+    g.strokeStyle = '#fff';
+    g.lineWidth = 8;
+    g.beginPath();
+    g.arc(64, 64, 56, 0, Math.PI * 2);
+    g.fill();
+    g.stroke();
+    g.fillStyle = '#fff';
+    // 손바닥 + 손가락 넷 + 엄지
+    g.beginPath();
+    g.roundRect(42, 58, 44, 40, 12);
+    g.fill();
+    for (const [x, h] of [[44, 30], [55, 38], [66, 36], [77, 28]] as const) {
+      g.beginPath();
+      g.roundRect(x, 64 - h, 9, h + 6, 4.5);
+      g.fill();
+    }
+    g.beginPath();
+    g.roundRect(30, 66, 18, 9, 4.5);
+    g.fill();
+  });
+  const hands = PLAYERS.map(() => {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: handTex, depthTest: false }));
+    sp.scale.setScalar(1.1);
+    sp.renderOrder = 30;
+    sp.visible = false;
+    return sp;
+  });
+  const bangTex = signTex((g) => {
+    g.fillStyle = '#e0342f';
+    g.strokeStyle = '#fff';
+    g.lineWidth = 8;
+    g.beginPath();
+    g.arc(64, 64, 56, 0, Math.PI * 2);
+    g.fill();
+    g.stroke();
+    g.fillStyle = '#fff';
+    g.fillRect(56, 24, 16, 52);
+    g.beginPath();
+    g.arc(64, 94, 9, 0, Math.PI * 2);
+    g.fill();
+  });
+  const bang = new THREE.Sprite(new THREE.SpriteMaterial({ map: bangTex, depthTest: false }));
+  bang.scale.setScalar(1.6);
+  bang.renderOrder = 30;
+  bang.visible = false;
+  let caughtAt = -9;
+  /** 끝 장면 시각(초). -1이면 아직 */
+  let ending = -1;
+  const endCam = new THREE.PerspectiveCamera(40, 16 / 9, 0.1, 200);
+  // 유나의 새 스케치북(펼친 두 쪽): 오른쪽 쪽에 고래가 꼬리까지 그려진다
+  const bookCanvas = document.createElement('canvas');
+  bookCanvas.width = 512;
+  bookCanvas.height = 256;
+  const bookTex = new THREE.CanvasTexture(bookCanvas);
+  bookTex.colorSpace = THREE.SRGBColorSpace;
+  const book = new THREE.Group();
+  const pages = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.85), new THREE.MeshBasicMaterial({ map: bookTex, side: THREE.DoubleSide }));
+  book.add(pages);
+  const cover = new THREE.Mesh(new THREE.BoxGeometry(1.78, 0.9, 0.03), new THREE.MeshStandardMaterial({ color: '#d23a3a' }));
+  cover.position.z = -0.03;
+  book.add(cover);
+  book.visible = false;
+  let drawn = -1;
+  const drawBook = (p: number) => {
+    const g = bookCanvas.getContext('2d');
+    if (!g || Math.abs(p - drawn) < 0.01) return;
+    drawn = p;
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, 512, 256);
+    g.fillStyle = '#e8e8e8';
+    g.fillRect(254, 0, 4, 256);
+    g.fillStyle = '#888';
+    for (let i = 0; i < 9; i++) g.fillRect(252, 14 + i * 27, 8, 8);
+    drawWhale(g, 372, 150, 1.0, p, '#1f57c0', true, 9);
+    bookTex.needsUpdate = true;
+  };
+  let caughtWho = -1;
   const events: Ch1Event[] = [];
   const k1 = new KeyState(KEYMAP_P1);
   const k2 = new KeyState(KEYMAP_P2);
@@ -131,13 +231,23 @@ export function startChapter1(models: Models): void {
   const marks = createOffscreenMarks(document, PLAYERS.length);
   const maps = createMapView(document, PLAYERS.length);
 
+  // 처음 들어온 1장이면 지우 카드 그림책 먼저(시계는 그림책이 끝난 뒤 흐른다). 시험 모드는 &story일 때만
+  const hadSave = new CheckpointStore(browserStorage()).load('dev-ch1') !== null;
   const run = new LocalRun(new CheckpointStore(browserStorage()), hud, 'dev-ch1', 'p0', chapter1Checkpoint('dev-ch1'));
   run.attachVisibility(document);
   run.onEffect((e) => {
-    if (e.type === 'retry') state = createChapter1(PLAYERS);
+    if (e.type === 'retry') state = createChapter1(PLAYERS, run.state.seed);
   });
-  run.dispatch({ type: 'start', at: performance.now() });
-  if (run.state.phase === 'cutscene') run.dispatch({ type: 'cutsceneDone', at: performance.now() });
+  let story: Storybook | null = !hadSave && (!params.has('test') || params.has('story')) ? createStorybook(document) : null;
+  const begin = () => {
+    run.dispatch({ type: 'start', at: performance.now() });
+    if (run.state.phase === 'cutscene') run.dispatch({ type: 'cutsceneDone', at: performance.now() });
+  };
+  if (!story) begin();
+  state = createChapter1(PLAYERS, run.state.seed);
+  for (const h of hands) scene.add(h);
+  scene.add(bang);
+  space.yunaPlaceholder.parent?.add(book);
 
   // 요정·선물
   const elves = PLAYERS.map((_, i) => {
@@ -157,6 +267,7 @@ export function startChapter1(models: Models): void {
     CH1_START.items.map((g) => {
       const v = createGift(g.kind);
       v.scale.setScalar(giftScale(g.kind, ELF_SCALE));
+      v.userData.baseScale = giftScale(g.kind, ELF_SCALE);
       setShadows(v, true);
       scene.add(v);
       const span = holdSpan(v, ELF_SCALE);
@@ -210,6 +321,18 @@ export function startChapter1(models: Models): void {
     const fq = auto.feed(raw);
     if (fq) applyQuality();
     const frame = Math.min(raw, 0.25);
+    if (story) {
+      run.frame(now);
+      if (story.update(frame)) {
+        story.dispose();
+        story = null;
+        begin();
+        establish = reduceMotion ? 0 : ESTABLISH.sec;
+        snapCamera = true;
+      }
+      draw(frame);
+      return;
+    }
     acc += frame;
     run.frame(now);
     const live = run.canPlay;
@@ -223,6 +346,17 @@ export function startChapter1(models: Models): void {
         events.push(e);
         if (e.type === 'pick' || e.type === 'drop') actAt.set(e.playerId, elapsed);
         if (e.type === 'found') foundAt = elapsed;
+        if (e.type === 'complete' && ending < 0) {
+          run.dispatch({ type: 'completeChapter', at: performance.now(), chapterId: 1 });
+          ending = 0;
+        }
+        if (e.type === 'caught') {
+          caughtAt = elapsed;
+          const i = PLAYERS.indexOf(e.playerId as (typeof PLAYERS)[number]);
+          caughtWho = i;
+          elves[i]?.act?.('HitRecieve', { once: true });
+          shown.delete(e.playerId); // 마지막 엄폐물 뒤로 바로
+        }
       }
       inputs = Object.fromEntries(Object.entries(inputs).map(([k, v]) => [k, { ...v, actionDown: false }]));
       acc -= SIM_DT;
@@ -256,6 +390,12 @@ export function startChapter1(models: Models): void {
         pm.rotateX(-0.6);
       }
       maps.set(i, p.mapOpen, ELF_LOOKS[i]!.hat);
+      // 손 신호: 망보는 요정이 손을 흔들어 든다 + 머리 위 초록 손
+      const hs = hands[i]!;
+      hs.visible = p.handUp;
+      hs.position.set(ps.x, 2.25 * ELF_SCALE + Math.sin(elapsed * 6) * 0.05, ps.z);
+      if (p.handUp) e.act?.('Wave');
+      else if (elapsed - caughtAt > 0.7 || i !== caughtWho) e.act?.(null);
       const a = run.canPlay ? planAction(state, p.id) : ({ kind: 'none' } as const);
       if (i === 0) mine = a;
       const ring = rings[i]!;
@@ -276,6 +416,13 @@ export function startChapter1(models: Models): void {
     }
     controls.update(iconOf(mine));
     space.update(elapsed);
+    const gz = gazeAt(state.time, state.seed);
+    if (ending < 0) space.setGaze(gz.phase, gz.k, elapsed);
+    else if (updateEnding(frame)) return;
+    // 들킴: 창 위 빨간 느낌표
+    const bk = elapsed - caughtAt;
+    bang.visible = bk >= 0 && bk < 1.3;
+    if (bang.visible) bang.position.copy(space.windowCenter).add(new THREE.Vector3(0, 2.0 + Math.sin(bk * 12) * 0.08, 0));
     // 찾았을 때: 유나네 창가가 따뜻하게 한 번 숨쉰다
     if (foundAt >= 0) {
       const k = Math.max(0, 1 - (elapsed - foundAt) / 1.6);
@@ -330,6 +477,72 @@ export function startChapter1(models: Models): void {
     for (const p of state.players) if (p.connected) pts.push(new THREE.Vector3(p.x, 0.5 * ELF_SCALE, p.z), new THREE.Vector3(p.x, 1.05 * ELF_SCALE, p.z));
     fader.update(pts, frame);
     renderer.render(scene, camera);
+    // 망보는 자리에 선 요정이 있으면: 그 자리에서 창을 들여다본 작은 화면(화면 위쪽 가운데)
+    const lookIdx = state.players.findIndex((p) => p.connected && lookoutAt(p));
+    if (lookIdx >= 0) {
+      const p = state.players[lookIdx]!;
+      const W0 = host.clientWidth, H0 = host.clientHeight;
+      const w = Math.round(Math.min(W0 * 0.34, 360));
+      const h = Math.round(w * 0.72);
+      const x = W0 - w - 14;
+      const top = 76;
+      const spot = lookoutAt(p)!;
+      const eye = W(spot.peek.s, spot.peek.t);
+      peekCam.aspect = w / h;
+      peekCam.position.set(eye.x, spot.peek.y, eye.z);
+      peekCam.lookAt(space.windowCenter);
+      peekCam.updateProjectionMatrix();
+      renderer.setScissorTest(true);
+      renderer.setScissor(x, H0 - top - h, w, h);
+      renderer.setViewport(x, H0 - top - h, w, h);
+      renderer.render(scene, peekCam);
+      renderer.setScissorTest(false);
+      renderer.setViewport(0, 0, W0, H0);
+      peekFrame.style.display = 'block';
+      Object.assign(peekFrame.style, { left: `${x}px`, top: `${top}px`, width: `${w}px`, height: `${h}px`, borderColor: ELF_LOOKS[lookIdx]!.hat });
+    } else peekFrame.style.display = 'none';
+  }
+
+  /**
+   * 끝 장면(약 10초): 성에가 걷히고 사진기가 창가로 → 현관 선물이 사라진다(유나가 들여감) → 유나가 창가로 돌아와
+   * 새 스케치북을 펼치고 고래를 꼬리까지 그린다 → 번쩍 들어 올린다. 그리면 true(이번 프레임은 끝 장면으로 그렸다)
+   */
+  function updateEnding(frame: number): boolean {
+    ending += frame;
+    const t = ending;
+    const sg = (a: number, b: number) => Math.min(1, Math.max(0, (t - a) / (b - a)));
+    const ez = (x: number) => x * x * (3 - 2 * x);
+    // 성에 걷힘
+    const frost = space.frost as THREE.Mesh;
+    (frost.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - sg(0, 1.2));
+    // 현관 선물: 사라진다(들여감)
+    const take = sg(0.8, 1.6);
+    for (const g of gifts.values()) g.v.scale.setScalar(Math.max(0.001, (1 - take) * (g.v.userData.baseScale as number)));
+    peekFrame.style.display = 'none';
+    for (const h of hands) h.visible = false;
+    document.body.classList.add('cutscene');
+    // 유나: 창가로 돌아와 앉는다 → 그린다 → 든다
+    space.setGaze(t < 1.6 ? 'away' : t < 2.4 ? 'turn' : 'look', t < 1.6 ? 0 : sg(1.6, 2.4), t);
+    book.visible = t > 2.0;
+    const draw = ez(sg(2.6, 6.6));
+    drawBook(draw);
+    const lift = ez(sg(6.9, 7.8));
+    const base = space.yunaPlaceholder.position;
+    book.position.set(0, base.y + 0.35 + lift * 1.15, 1.5 * 0.75 + 0.05);
+    book.rotation.set(-1.0 * (1 - lift), 0, 0);
+    book.scale.setScalar(0.6 + 0.4 * ez(sg(2.0, 2.6)) + 0.15 * lift);
+    if (lift > 0) space.yunaPlaceholder.position.y = base.y + Math.abs(Math.sin(t * 7)) * 0.12 * lift;
+    // 사진기: 지금 화면에서 창 앞으로
+    const k = ez(sg(0, 1.4));
+    const wc = space.windowCenter;
+    const front = W(toLane(wc).s - 7.5, toLane(wc).t + 0.6);
+    const from = camera.position;
+    endCam.position.set(from.x + (front.x - from.x) * k, from.y + (3.4 - from.y) * k, from.z + (front.z - from.z) * k);
+    endCam.lookAt(wc.x, wc.y - 0.3 * k, wc.z);
+    endCam.aspect = aspect;
+    endCam.updateProjectionMatrix();
+    renderer.render(scene, endCam);
+    return true;
   }
 
   /** 앞세워 보여 줄 곳: 골목 끝 유나네 담(아직 못 찾았으면), 찾았으면 앞마당 */
@@ -342,6 +555,15 @@ export function startChapter1(models: Models): void {
   if (import.meta.env.DEV || params.has('test')) {
     (window as unknown as Record<string, unknown>).__lastgift = {
       ch1: () => JSON.parse(JSON.stringify(state)) as Ch1State,
+      story: () => (story ? story.t : null),
+      skipStory: () => story?.skip(),
+      ending: () => ending,
+      gaze: () => gazeAt(state.time, state.seed),
+      peek: () => peekFrame.style.display === 'block',
+      peekInfo: () => ({ window: space.windowCenter.toArray(), lane: toLane({ x: space.windowCenter.x, z: space.windowCenter.z }), cam: peekCam.position.toArray() }),
+      setTime: (t: number) => {
+        state = { ...state, time: t };
+      },
       ch1Events: () => events.map((e) => ({ ...e })),
       run: () => ({ ...run.state }),
       maps: () => PLAYERS.map((_, i) => maps.isOpen(i)),

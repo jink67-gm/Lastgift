@@ -60,3 +60,102 @@ test('1장: 선물을 들고 골목을 올라가고, 빈손 E로 지도를 펴�
   expect((await g(page)).found).toBe(true);
   expect(errors).toEqual([]);
 });
+
+type Hook = {
+  ch1(): S & { placed: string[]; complete: boolean; time: number };
+  ch1Events(): { type: string; playerId?: string }[];
+  run(): { phase: string; chapterId: number; memories: number[]; cutscene: string | null };
+  gaze(): { phase: string };
+  setTime(t: number): void;
+  story(): number | null;
+  ending(): number;
+  debugPlace(id: string, s: number, t: number, f: number): void;
+  lane(x: number, z: number): { s: number; t: number };
+};
+const H = <T>(page: Page, fn: (h: Hook) => T) => page.evaluate((f) => new Function('h', `return (${f})(h)`)((window as unknown as { __lastgift: Hook }).__lastgift), fn.toString()) as Promise<T>;
+
+test('1장 시작 그림책: 그동안 시계가 멈춰 있고, 건너뛰면 바로 플레이', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto('/?chapter=1&test&story&noshadow');
+  await page.waitForFunction(() => !!(window as unknown as { __lastgift?: { ch1?: unknown } }).__lastgift?.ch1, null, { timeout: 30_000 });
+  await expect(page.locator('#storybook')).toBeVisible();
+  await page.waitForTimeout(2500);
+  expect(await H(page, (h) => h.story())).toBeGreaterThan(1);
+  expect((await H(page, (h) => h.run())).phase).toBe('lobby');
+  await expect(page.locator('#hud .timer .t')).toHaveText('04:00');
+  await page.locator('#storybook button').click();
+  await page.waitForFunction(() => (window as unknown as { __lastgift: Hook }).__lastgift.story() === null);
+  await expect(page.locator('#storybook')).toHaveCount(0);
+  expect((await H(page, (h) => h.run())).phase).toBe('play');
+});
+
+test('1장 망보기: 망보는 자리에서만 창을 엿보는 작은 화면, 손 신호, 창밖을 볼 때 드러나면 대문 밖으로', async ({ page }) => {
+  test.setTimeout(90_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/?chapter=1&test&noshadow&noestablish');
+  await page.waitForFunction(() => !!(window as unknown as { __lastgift?: { ch1?: unknown } }).__lastgift?.ch1, null, { timeout: 30_000 });
+  await H(page, (h) => h.setTime(0.1));
+  await expect(page.locator('#peek')).toBeHidden();
+  // 2P가 담 밖 망보는 자리 → 작은 화면, Enter로 손 들기
+  await page.evaluate(() => (window as unknown as { __lastgift: Hook }).__lastgift.debugPlace('p1', 41.4, -5.2, Math.PI * 1.25));
+  await page.waitForTimeout(500);
+  await expect(page.locator('#peek')).toBeVisible();
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  expect((await H(page, (h) => h.ch1())).players[1]!).toMatchObject({ handUp: true });
+  // 유나가 창밖을 보기 직전, 1P를 앞마당 한가운데에 → 들켜서 대문 밖으로
+  const look = await H(page, (h) => {
+    for (let t = 0; t < 40; t += 0.02) {
+      h.setTime(t);
+      if (h.gaze().phase === 'look') return t;
+    }
+    return -1;
+  });
+  expect(look).toBeGreaterThan(0);
+  await page.evaluate((t) => {
+    const h = (window as unknown as { __lastgift: Hook }).__lastgift;
+    h.setTime(t - 0.3);
+    h.debugPlace('p0', 46.5, 1, Math.PI * 1.25);
+  }, look);
+  await page.waitForTimeout(900);
+  const ev = await H(page, (h) => h.ch1Events());
+  expect(ev.some((e) => e.type === 'caught' && e.playerId === 'p0')).toBe(true);
+  const p0 = (await H(page, (h) => h.ch1())).players[0]!;
+  const l = await page.evaluate(([x, z]) => (window as unknown as { __lastgift: Hook }).__lastgift.lane(x, z), [p0.x, p0.z] as const);
+  expect(l.s).toBeLessThan(42.5); // 대문 밖
+  expect(errors).toEqual([]);
+});
+
+test('1장 배달: 두 선물을 현관에 놓고 모두 물러나면 기억 1 → 유나가 창가에서 고래를 꼬리까지 그리는 끝 장면', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/?chapter=1&test&noshadow&noestablish');
+  await page.waitForFunction(() => !!(window as unknown as { __lastgift?: { ch1?: unknown } }).__lastgift?.ch1, null, { timeout: 30_000 });
+  await page.waitForTimeout(400);
+  await page.keyboard.press('KeyE');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  expect((await H(page, (h) => h.ch1())).items.every((i) => i.carriedBy)).toBe(true);
+  // 유나가 그림 그리는 동안 현관 앞으로(시각을 처음으로)
+  await page.evaluate(() => {
+    const h = (window as unknown as { __lastgift: Hook }).__lastgift;
+    h.setTime(0.1);
+    h.debugPlace('p0', 49.4, 0.2, Math.PI * 1.25);
+    h.debugPlace('p1', 49.4, 1.6, Math.PI * 1.25);
+  });
+  await page.waitForTimeout(500);
+  await page.keyboard.press('KeyE');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  expect((await H(page, (h) => h.ch1())).placed.sort()).toEqual(['pencils', 'sketchbook']);
+  expect((await H(page, (h) => h.run())).phase).toBe('play');
+  // 물러나면 완료
+  await page.evaluate(() => {
+    const h = (window as unknown as { __lastgift: Hook }).__lastgift;
+    h.debugPlace('p0', 40, 8, 0);
+    h.debugPlace('p1', 40, 9.5, 0);
+  });
+  await page.waitForFunction(() => (window as unknown as { __lastgift: Hook }).__lastgift.ending() > 1, null, { timeout: 30_000 });
+  expect(await H(page, (h) => h.run())).toMatchObject({ phase: 'cutscene', chapterId: 2, memories: [1], cutscene: 'chapter1End' });
+  expect((await H(page, (h) => h.ch1Events())).filter((e) => e.type === 'complete').length).toBe(1);
+});

@@ -12,6 +12,8 @@ import {
   YARD,
   YAW,
   YUNA_WINDOW,
+  COVERS,
+  LOOKOUTS,
   doorOf,
   gateOf,
   mailboxOf,
@@ -249,7 +251,7 @@ function lowWall(a: { s: number; t: number }, b: { s: number; t: number }): THRE
 
 // ── 유나네 돌출 창가 ─────────────────────────────────────
 /** 창가: 하얀 창틀 + 유리 + 따뜻한 방 안 + 책상. 사람(유나)은 사용자 에셋으로 넣는다(지금은 실루엣 판) */
-function bayWindow(): { group: THREE.Group; seat: THREE.Vector3; silhouette: THREE.Mesh } {
+function bayWindow(): { group: THREE.Group; seat: THREE.Vector3; silhouette: THREE.Group; frost: THREE.Mesh } {
   const g = new THREE.Group();
   const w = YUNA_WINDOW.width;
   const sill = YUNA_WINDOW.sill;
@@ -284,19 +286,42 @@ function bayWindow(): { group: THREE.Group; seat: THREE.Vector3; silhouette: THR
   const desk = new THREE.Mesh(new THREE.BoxGeometry(w * 0.85, 0.12, 0.7), std('#8a5a3a'));
   desk.position.set(0, sill + 0.05, depth - 0.55);
   g.add(desk);
-  // 유나 자리(사용자 에셋이 올 때까지 실루엣 판: 머리와 어깨)
-  const shape = new THREE.Shape();
-  shape.absarc(0, 0.95, 0.42, 0, Math.PI * 2, false);
-  const body = new THREE.Shape();
-  body.moveTo(-0.75, 0);
-  body.quadraticCurveTo(-0.7, 0.55, 0, 0.6);
-  body.quadraticCurveTo(0.7, 0.55, 0.75, 0);
-  body.lineTo(-0.75, 0);
-  const silGeo = new THREE.ShapeGeometry([shape, body]);
-  const silhouette = new THREE.Mesh(silGeo, new THREE.MeshBasicMaterial({ color: '#5b3a2a', transparent: true, opacity: 0.85 }));
-  silhouette.position.set(0, sill + 0.12, depth * 0.45);
-  silhouette.name = 'yunaPlaceholder';
-  g.add(silhouette);
+  // 유나 자리(사용자 에셋이 올 때까지 실루엣 판). 앞면(눈 있음)·뒷면(뒤통수)을 붙인 판을 돌려 "몸 돌리기"를 보인다
+  const yuna = new THREE.Group();
+  yuna.name = 'yunaPlaceholder';
+  const sil = (color: string) => {
+    const head = new THREE.Shape();
+    head.absarc(0, 0.95, 0.42, 0, Math.PI * 2, false);
+    const body = new THREE.Shape();
+    body.moveTo(-0.75, 0);
+    body.quadraticCurveTo(-0.7, 0.55, 0, 0.6);
+    body.quadraticCurveTo(0.7, 0.55, 0.75, 0);
+    body.lineTo(-0.75, 0);
+    const tails = [-1, 1].map((sx) => {
+      const t = new THREE.Shape();
+      t.absarc(sx * 0.5, 0.85, 0.16, 0, Math.PI * 2, false);
+      return t;
+    });
+    return new THREE.Mesh(new THREE.ShapeGeometry([head, body, ...tails]), new THREE.MeshBasicMaterial({ color, side: THREE.FrontSide }));
+  };
+  const front = sil('#6a4430');
+  front.position.z = 0.01;
+  yuna.add(front);
+  const face = new THREE.Mesh(new THREE.CircleGeometry(0.33, 20), new THREE.MeshBasicMaterial({ color: '#f3cfb2' }));
+  face.position.set(0, 0.93, 0.015);
+  yuna.add(face);
+  for (const sx of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.CircleGeometry(0.05, 10), new THREE.MeshBasicMaterial({ color: '#1b1210' }));
+    eye.position.set(sx * 0.12, 0.98, 0.02);
+    yuna.add(eye);
+  }
+  const backSide = sil('#3a2418');
+  backSide.rotation.y = Math.PI;
+  backSide.position.z = -0.01;
+  yuna.add(backSide);
+  yuna.position.set(0, sill + 0.12, depth * 0.45);
+  g.add(yuna);
+  const silhouette = yuna;
   // 유리(아주 옅게) + 가운데 창살
   const glass = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ color: '#cfe3ff', transparent: true, opacity: 0.18, roughness: 0.1, depthWrite: false }));
   glass.position.set(0, sill + h / 2, depth);
@@ -307,11 +332,184 @@ function bayWindow(): { group: THREE.Group; seat: THREE.Vector3; silhouette: THR
   const rail = new THREE.Mesh(new THREE.BoxGeometry(w + 0.3, 0.12, 0.2), frame);
   rail.position.set(0, sill + 0.02, depth + 0.02);
   g.add(rail);
+  // 성에: 멀리(큰 화면)서는 유리가 뿌옇게 보여 유나가 어디를 보는지 모른다. 망보는 자리의 작은 화면(층 0만)에서는 보이지 않는다
+  const frost = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.05, h - 0.05), new THREE.MeshBasicMaterial({ map: frostTexture(), transparent: true, opacity: 0.9, depthWrite: false }));
+  frost.position.set(0, sill + h / 2, depth + 0.03);
+  frost.layers.set(FROST_LAYER);
+  frost.renderOrder = 4;
+  g.add(frost);
   // 창 아래 눈 위 따뜻한 빛
   const pool = warmPool(2.6);
   pool.position.set(0, 0.006, depth + 1.4);
   g.add(pool);
-  return { group: g, seat: new THREE.Vector3(0, sill + 0.12, depth * 0.45), silhouette };
+  return { group: g, seat: new THREE.Vector3(0, sill + 0.12, depth * 0.45), silhouette, frost };
+}
+
+/** 성에 무늬(희뿌연 바탕 + 얼음 잎맥) */
+function frostTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const g = c.getContext('2d')!;
+  const bg = g.createRadialGradient(128, 128, 20, 128, 128, 180);
+  bg.addColorStop(0, 'rgba(235,244,255,0.78)');
+  bg.addColorStop(1, 'rgba(250,252,255,0.95)');
+  g.fillStyle = bg;
+  g.fillRect(0, 0, 256, 256);
+  let r = 11;
+  const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+  g.strokeStyle = 'rgba(170,200,235,0.8)';
+  g.lineWidth = 2;
+  for (let i = 0; i < 26; i++) {
+    let x = rnd() * 256, y = rnd() * 256, a = rnd() * Math.PI * 2;
+    g.beginPath();
+    g.moveTo(x, y);
+    for (let k = 0; k < 6; k++) {
+      x += Math.cos(a) * 12;
+      y += Math.sin(a) * 12;
+      g.lineTo(x, y);
+      g.moveTo(x, y);
+      g.lineTo(x + Math.cos(a + 0.8) * 7, y + Math.sin(a + 0.8) * 7);
+      g.moveTo(x, y);
+      a += (rnd() - 0.5) * 0.6;
+    }
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/** 큰 화면에만 보이는 층(창 성에) */
+export const FROST_LAYER = 1;
+
+// ── 앞마당 엄폐물 ────────────────────────────────────────
+function snowman(): THREE.Group {
+  const g = new THREE.Group();
+  const white = std('#f8fbff', { roughness: 1 });
+  for (const [y, r] of [[0.72, 0.78], [1.72, 0.56], [2.45, 0.4]] as const) {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(r, 20, 14), white);
+    b.position.y = y;
+    g.add(b);
+  }
+  const coal = std('#1e1e24');
+  for (const sx of [-1, 1]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), coal);
+    e.position.set(sx * 0.13, 2.55, 0.36);
+    g.add(e);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 1.0, 6), std('#6b4428'));
+    arm.position.set(sx * 0.85, 1.95, 0);
+    arm.rotation.z = sx * 1.0;
+    g.add(arm);
+  }
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.35, 8), std('#f07a2a'));
+  nose.rotation.x = Math.PI / 2;
+  nose.position.set(0, 2.45, 0.5);
+  g.add(nose);
+  const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.1, 8, 20), std('#d23a3a'));
+  scarf.rotation.x = Math.PI / 2;
+  scarf.position.y = 2.15;
+  g.add(scarf);
+  g.add(contactShadow(1.9, 1.9, 0.32));
+  return g;
+}
+
+function wheelbarrow(): THREE.Group {
+  const g = new THREE.Group();
+  const green = std('#3f7a5a', { roughness: 0.8 });
+  const tray = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.75, 1.15), green);
+  tray.position.set(0, 1.0, 0);
+  tray.rotation.z = 0.08;
+  g.add(tray);
+  const snow = new THREE.Mesh(new THREE.SphereGeometry(0.75, 16, 10), std('#f8fbff', { roughness: 1 }));
+  snow.scale.set(1.15, 0.55, 0.75);
+  snow.position.set(0, 1.4, 0);
+  g.add(snow);
+  const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.12, 8, 18), std('#2a2a2e'));
+  wheel.position.set(1.0, 0.42, 0);
+  g.add(wheel);
+  const wood = std('#8a5a3a');
+  for (const sz of [-1, 1]) {
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.6, 6), wood);
+    handle.rotation.z = Math.PI / 2 - 0.25;
+    handle.position.set(-1.25, 0.95, sz * 0.4);
+    g.add(handle);
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 6), wood);
+    leg.position.set(-0.55, 0.35, sz * 0.4);
+    g.add(leg);
+  }
+  g.add(contactShadow(2.4, 1.6, 0.3));
+  return g;
+}
+
+function bush(): THREE.Group {
+  const g = new THREE.Group();
+  const leaf = std('#3c6e4a', { roughness: 1 });
+  const snow = std('#f8fbff', { roughness: 1 });
+  for (const [x, z, r] of [[0, 0, 0.95], [0.6, 0.3, 0.7], [-0.55, 0.25, 0.72], [0.1, -0.5, 0.65]] as const) {
+    const b = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), leaf);
+    b.position.set(x, r * 0.9, z);
+    g.add(b);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(r * 0.85, 12, 8, 0, Math.PI * 2, 0, Math.PI / 3), snow);
+    cap.position.set(x, r * 1.15, z);
+    g.add(cap);
+  }
+  g.add(contactShadow(2.2, 2.2, 0.3));
+  return g;
+}
+
+function logs(): THREE.Group {
+  const g = new THREE.Group();
+  const bark = std('#7a4a2a', { roughness: 0.95 });
+  const cut = std('#d9b07a', { roughness: 0.9 });
+  const rows = [[-0.42, 0, 0.3], [0.42, 0, 0.3], [0, 0.55, 0.3], [-0.84, 0, 0.3], [0.84, 0, 0.3], [-0.42, 0.55, 0.3], [0.42, 0.55, 0.3], [0, 1.08, 0.3]] as const;
+  for (const [x, y] of rows) {
+    const log = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 1.5, 10), bark);
+    log.rotation.x = Math.PI / 2;
+    log.position.set(x, y + 0.28, 0);
+    g.add(log);
+    for (const z of [-0.751, 0.751]) {
+      const end = new THREE.Mesh(new THREE.CircleGeometry(0.27, 10), cut);
+      end.position.set(x, y + 0.28, z);
+      end.rotation.y = z > 0 ? 0 : Math.PI;
+      g.add(end);
+    }
+  }
+  const snow = new THREE.Mesh(roundedBox(1.9, 0.2, 1.4), std('#f8fbff', { roughness: 1 }));
+  snow.position.y = 1.62;
+  g.add(snow);
+  g.add(contactShadow(2.4, 1.8, 0.3));
+  return g;
+}
+
+/** 망보는 자리 바닥 표시: 눈 모양(여기 서면 창 안이 보인다) */
+function eyeMark(): THREE.Mesh {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  g.fillStyle = 'rgba(255,255,255,0.0)';
+  g.fillRect(0, 0, 128, 128);
+  g.strokeStyle = 'rgba(60,90,140,0.7)';
+  g.lineWidth = 6;
+  g.setLineDash([10, 8]);
+  g.beginPath();
+  g.arc(64, 64, 56, 0, Math.PI * 2);
+  g.stroke();
+  g.setLineDash([]);
+  g.fillStyle = 'rgba(60,90,140,0.75)';
+  g.beginPath();
+  g.ellipse(64, 64, 34, 18, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = 'rgba(255,255,255,0.95)';
+  g.beginPath();
+  g.arc(64, 64, 11, 0, Math.PI * 2);
+  g.fill();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2;
+  m.userData.flat = true;
+  return m;
 }
 
 export interface Ch1Scene {
@@ -321,6 +519,12 @@ export interface Ch1Scene {
   /** 창가 유나 자리(월드). 사용자 에셋으로 사람을 세울 곳 */
   yunaSeat: THREE.Vector3;
   yunaPlaceholder: THREE.Object3D;
+  /** 창 성에(끝 장면에서 걷는다) */
+  frost: THREE.Object3D;
+  /** 창가 유나 자리 모습(사용자 에셋이 오기 전 실루엣): 유나 시선 단계 */
+  setGaze(phase: 'away' | 'turn' | 'look' | 'back', k: number, t: number): void;
+  /** 창 가운데(월드, 망보는 작은 화면이 보는 곳) */
+  windowCenter: THREE.Vector3;
 }
 
 export function createChapter1Scene(models: Models, base: string, detail: Detail): Ch1Scene {
@@ -449,10 +653,36 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
     root.add(tr);
   }
 
+  // 앞마당 엄폐물·망보는 자리 표시
+  const makers = { snowman, barrow: wheelbarrow, bush, logs } as const;
+  for (const c of COVERS) {
+    const o = makers[c.id]();
+    o.position.copy(at(c.s, c.t));
+    o.rotation.y = YAW.back + (c.id === 'barrow' ? 0.6 : 0);
+    o.userData.fadeable = true;
+    root.add(o);
+  }
+  for (const l of LOOKOUTS) {
+    const m = eyeMark();
+    m.position.copy(at(l.s, l.t, 0.015));
+    root.add(m);
+  }
+  const windowCenter = win.group.localToWorld(new THREE.Vector3(0, YUNA_WINDOW.sill + YUNA_WINDOW.height / 2, 1.5));
+  const sil = win.silhouette;
+  const baseY = sil.position.y;
   return {
     root,
     yunaSeat,
-    yunaPlaceholder: win.silhouette,
+    yunaPlaceholder: sil,
+    frost: win.frost,
+    windowCenter,
+    setGaze(phase, k, t) {
+      // away: 등을 보이고 고개 숙여 그림(살짝 들썩) / turn: 일어나며 돌아선다 / look: 창밖을 본다 / back: 다시 돌아앉는다
+      const e = k * k * (3 - 2 * k);
+      const turn = phase === 'away' ? 0 : phase === 'turn' ? e : phase === 'look' ? 1 : 1 - e;
+      sil.rotation.y = Math.PI * (1 - turn);
+      sil.position.y = baseY - 0.28 * (1 - turn) + (phase === 'away' ? Math.abs(Math.sin(t * 5)) * 0.03 : 0);
+    },
     update(t) {
       for (const p of pots) if (p.spin) p.spin.rotation.z = -t * 2.2;
     },
