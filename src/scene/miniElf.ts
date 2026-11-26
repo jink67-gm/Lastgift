@@ -269,6 +269,13 @@ export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: stri
     ll: findBone(model, 'LowerArmL'),
     lr: findBone(model, 'LowerArmR'),
   };
+  // 애니메이션 믹서는 값이 바뀌지 않은 뼈는 다시 쓰지 않는다(서 있기처럼 팔이 거의 안 움직이는 동작).
+  // 그러면 매 프레임 더한 회전이 쌓여 팔이 빙글빙글 돈다 → 더하기 전의 "깨끗한" 값을 저장해 두고 매 프레임 되돌린 뒤 더한다
+  const armBones = [bones.ul, bones.ur, bones.ll, bones.lr].filter((b): b is THREE.Bone => !!b);
+  const clean = armBones.map((b) => b.quaternion.clone());
+  // 서 있는 동작의 팔 자세(만들 때 서 있기 동작으로 맞춰 둔 값). 물건을 들면 걷기의 팔 흔들기 대신 이 자세 위에 드는 각을 더한다
+  const rest = armBones.map((b) => b.quaternion.clone());
+  let holdW = 0;
   const zAxis = new THREE.Vector3(0, 0, 1);
   const tmp = new THREE.Quaternion();
   const raise = (b: THREE.Object3D | null | undefined, a: number) => {
@@ -307,7 +314,13 @@ export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: stri
         gait = want;
       }
       if (walk) walk.timeScale = 0.65; // 무거운 짐: 보폭은 그대로, 발을 천천히
+      armBones.forEach((b, i) => b.quaternion.copy(clean[i]!));
       mixer.update(dt);
+      armBones.forEach((b, i) => clean[i]!.copy(b.quaternion));
+      // 들고 있으면 팔을 흔들지 않는다(손이 물건에 붙어 있게)
+      const holdK = 1 - Math.exp(-dt * 12);
+      holdW += ((pose.carry === 'none' ? 0 : 1) - holdW) * holdK;
+      if (holdW > 0.001) armBones.forEach((b, i) => b.quaternion.slerp(rest[i]!, holdW));
       // 팔: 목표 자세로 부드럽게(뼈는 매 프레임 동작 값으로 돌아오므로 그 위에 더한다)
       const [tu, tl] = ARMS[pose.carry];
       const k = 1 - Math.exp(-dt * 10);

@@ -1,0 +1,25 @@
+<!doctype html><meta charset="utf-8"><title>들기 자세 팔 회전 재현</title>
+<body>
+<script type="module">
+// 물건을 든 자세(가벼운 선물·무거운 짐)로 여러 초 동작시키며 위팔의 각도가 계속 커지는지(빙글빙글) 기록한다
+import * as THREE from '/@fs/home/user/lastgift/node_modules/three/build/three.module.js';
+import { Models } from '/src/scene/models.ts';
+import { createMiniElf } from '/src/scene/miniElf.ts';
+import { ELF_LOOKS } from '/src/data/elves.ts';
+const models = await Models.load(['elf']);
+const e = createMiniElf(models, ELF_LOOKS[0]);
+let arm = null;
+e.root.traverse((o) => { if (o.name === 'UpperArmL') arm = o; });
+const log = [];
+const ref = new THREE.Quaternion();
+let t = 0;
+const run = (carry, moving, n) => {
+  for (let i = 0; i < n; i++) {
+    t += 1 / 60;
+    e.animate(t, moving, { carry, act: 0, tired: false });
+    if (i % 30 === 0) { e.root.updateMatrixWorld(true); log.push(`${carry} ${moving ? 'walk' : 'stand'} t=${t.toFixed(2)} upperArmL=${(2 * Math.acos(Math.min(1, Math.abs(arm.quaternion.dot(ref.identity())))) * 180 / Math.PI).toFixed(0)}°`); }
+  }
+};
+run('none', false, 60); run('light', false, 180); run('light', true, 180); run('heavy', true, 180); run('none', false, 60);
+window.log = log; window.done = true;
+</script>
