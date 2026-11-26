@@ -1,0 +1,32 @@
+<!-- 시제품(게임 코드 아님): 프롤로그 인물(산타·도토·콩이)을 0장 요정 둘과 나란히 세운 비교 화면.
+     vite 개발 서버로 연다: npx vite --port 5199 → http://localhost:5199/tools/prototypes/cast.html?view=front|game&clip=Idle_Neutral -->
+<!doctype html><html><body style="margin:0;background:#dfe7f4"><canvas id=c></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { Models } from '/src/scene/models.ts';
+import { createSanta, createDoto, createKongi } from '/src/scene/characters.ts';
+import { createElfAvatar } from '/src/scene/elfAvatar.ts';
+import { ELF_LOOKS } from '/src/data/elves.ts';
+const q = new URLSearchParams(location.search);
+const view = q.get('view') || 'front';
+const r = new THREE.WebGLRenderer({ canvas: c, antialias: true }); r.setSize(1280, 720); r.setPixelRatio(1);
+const s = new THREE.Scene(); s.background = new THREE.Color('#dfe7f4');
+s.add(new THREE.HemisphereLight('#fff', '#8a93a8', 2.2)); const d = new THREE.DirectionalLight('#fff4e0', 1.6); d.position.set(-3, 8, 7); s.add(d);
+const H = Number(q.get('h') || 6.2), fx = Number(q.get('x') || 0), fy = Number(q.get('y') || 2.4);
+const cam = new THREE.OrthographicCamera(-H * 16 / 18, H * 16 / 18, H / 2, -H / 2, 0.1, 200);
+if (view === 'front') { cam.position.set(fx, fy, 40); cam.lookAt(fx, fy, 0); }
+else { const yaw = Math.PI / 4, pitch = Math.PI / 6; cam.position.set(Math.sin(yaw) * Math.cos(pitch) * 40, 2 + Math.sin(pitch) * 40, Math.cos(yaw) * Math.cos(pitch) * 40); cam.lookAt(0, 2, 0); }
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 20), new THREE.MeshStandardMaterial({ color: '#eef3fb' })); ground.rotation.x = -Math.PI / 2; s.add(ground);
+const models = await Models.load(['elf', 'dog'], '/');
+const santa = createSanta(models); santa.root.position.set(-1.2, 0, 0); s.add(santa.root);
+const doto = createDoto(models); doto.root.position.set(1.6, 0, 0); doto.root.scale.setScalar(1.2); s.add(doto.root);
+const e0 = createElfAvatar(models, ELF_LOOKS[0]); e0.root.position.set(-3.6, 0, 0); e0.root.scale.setScalar(1.2); s.add(e0.root);
+const e1 = createElfAvatar(models, ELF_LOOKS[1]); e1.root.position.set(3.0, 0, 0); e1.root.scale.setScalar(1.2); s.add(e1.root);
+const dog = createKongi(models); dog.root.position.set(4.9, 0, 0); dog.root.rotation.y = -Math.PI / 2 + 0.5; s.add(dog.root);
+const clip = q.get('clip'); const look = Number(q.get('look') || 0);
+for (const v of [santa, doto, e0, e1]) { if (clip) v.act?.(clip); v.look?.(look); }
+let t = 0;
+for (let i = 0; i < 40; i++) { t += 1 / 30; for (const v of [santa, doto, e0, e1]) v.animate(t, false); dog.update(1 / 30); }
+r.render(s, cam);
+window.__ready = true;
+</script></body></html>

@@ -60,7 +60,13 @@ function hatTexture(base: string, pattern: HatPattern, accent: string): THREE.Ca
 }
 
 /** 끝이 위로 솟았다 옆·뒤로 휘어 늘어지는 요정 모자(미터, 원점 = 털 테두리 가운데) */
-function elfHat(look: ElfLook): THREE.Group {
+function elfHat(look: Pick<ElfLook, 'hat' | 'pattern' | 'accent'>): THREE.Group {
+  return pointyHat(look.hat, look.pattern, look.accent);
+}
+
+/** 끝이 휘어 늘어지는 털 테두리 모자. pattern이 null이면 한 색(산타 모자) */
+export function pointyHat(base: string, pattern: HatPattern | null, accent: string): THREE.Group {
+  const look = { hat: base, pattern, accent };
   const g = new THREE.Group();
   const curve = new THREE.CatmullRomCurve3([
     new THREE.Vector3(0, 0, 0),
@@ -87,7 +93,14 @@ function elfHat(look: ElfLook): THREE.Group {
     }
   }
   tube.computeVertexNormals();
-  g.add(new THREE.Mesh(tube, new THREE.MeshStandardMaterial({ map: hatTexture(look.hat, look.pattern, look.accent), roughness: 0.9, side: THREE.DoubleSide })));
+  g.add(
+    new THREE.Mesh(
+      tube,
+      look.pattern
+        ? new THREE.MeshStandardMaterial({ map: hatTexture(look.hat, look.pattern, look.accent), roughness: 0.9, side: THREE.DoubleSide })
+        : new THREE.MeshStandardMaterial({ color: look.hat, roughness: 0.9, side: THREE.DoubleSide }),
+    ),
+  );
   const fur = new THREE.MeshStandardMaterial({ color: '#fbfbf7', roughness: 1 });
   const brim = new THREE.Mesh(new THREE.TorusGeometry(0.158, 0.045, 10, 28), fur);
   brim.rotation.x = Math.PI / 2;
@@ -99,7 +112,7 @@ function elfHat(look: ElfLook): THREE.Group {
   return g;
 }
 
-function findBone(root: THREE.Object3D, name: string): THREE.Bone | null {
+export function findBone(root: THREE.Object3D, name: string): THREE.Bone | null {
   let b: THREE.Bone | null = null;
   root.traverse((o) => {
     if ((o as THREE.Bone).isBone && o.name === name) b = o as THREE.Bone;
@@ -148,9 +161,70 @@ function elfBoot(): THREE.Group {
   return g;
 }
 
-export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: string } = {}): ElfView | null {
+/** 같은 뼈대 모델(Hooded Adventurer)로 만드는 인물의 생김새. 요정·도토·산타가 함께 쓴다 */
+export interface RigBuild {
+  /** 모자 뺀 키(m) */
+  height: number;
+  head: number;
+  /** 다리 뼈 크기(가로·세로) */
+  legs: [number, number];
+  feet: [number, number];
+  /** 몸통 뼈 크기(가로·세로·앞뒤) */
+  torso: [number, number, number];
+  /** 배 뼈 크기(가로·세로·앞뒤, 산타의 둥근 배) */
+  abdomen?: [number, number, number];
+  paint: Record<string, Record<string, string | null>>;
+  /** 머리에 씌울 것(원점 = 털 테두리 가운데, 머리 반지름 0.158 기준 크기). null이면 없음 */
+  hat: (() => THREE.Group) | null;
+  /** 모자 앞뒤 기울기 */
+  hatTilt?: number;
+  /** 모자를 눈썹 위에서 더 올리는 정도(머리 높이 비율) */
+  hatLift?: number;
+  ears: boolean;
+  boots: boolean;
+  /** 발밑 그림자 반지름 */
+  shadowR: number;
+  /** 얼굴·몸에 덧붙이기(수염·고글·공구 등). 서 있는 자세에서 한 번 부른다 */
+  extra?: (ctx: RigCtx) => void;
+}
+
+/** 덧붙이기에 쓰는 측정값(서 있는 자세, 월드 = 인물 기준) */
+export interface RigCtx {
+  model: THREE.Object3D;
+  bone(name: string): THREE.Bone | null;
+  /** 얼굴(피부·머리카락) 상자 */
+  face: THREE.Box3;
+  /** 눈썹 상자 */
+  brow: THREE.Box3;
+  /** obj를 bone에 붙이되, 인물 기준 위치 worldPos·회전 euler(인물 기준)로 보이게 한다. 크기는 m 그대로 */
+  attach(bone: THREE.Object3D, obj: THREE.Object3D, worldPos: THREE.Vector3, euler?: THREE.Euler): void;
+}
+
+export function elfBuild(look: ElfLook): RigBuild {
+  return {
+    height: BODY_HEIGHT,
+    head: 1.75,
+    legs: [1.25, 0.52],
+    feet: [1.35, 0.62], // 장화를 도톰하게
+    torso: [1.28, 0.85, 1.28],
+    paint: PAINT,
+    hat: () => elfHat(look),
+    hatTilt: -0.22,
+    ears: true,
+    boots: true,
+    shadowR: 0.34,
+  };
+}
+
+export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: string; build?: RigBuild } = {}): ElfView | null {
+  return createRigged(models, opts.build ?? elfBuild(look), opts);
+}
+
+/** 뼈대 모델 인물을 만든다. 모델이 없으면 null(호출하는 쪽이 기본 도형으로 대신한다) */
+export function createRigged(models: Models, build: RigBuild, opts: { idle?: string } = {}): ElfView | null {
   const model = models.clone('elf');
   if (!model) return null;
+  const PAINT = build.paint;
   const root = new THREE.Group();
   root.add(model);
 
@@ -176,11 +250,12 @@ export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: stri
     mat.roughness = 0.85;
   });
 
-  // 비율: 머리 크게, 다리·발 짧게, 몸통 통통하게(동작은 뼈 크기를 건드리지 않는다)
-  findBone(model, 'Head')?.scale.setScalar(1.75);
-  for (const n of ['UpperLegL', 'UpperLegR', 'LowerLegL', 'LowerLegR']) findBone(model, n)?.scale.set(1.25, 0.52, 1.25);
-  for (const n of ['FootL', 'FootR']) findBone(model, n)?.scale.set(1.35, 0.62, 1.35); // 장화를 도톰하게
-  findBone(model, 'Torso')?.scale.set(1.28, 0.85, 1.28);
+  // 비율: 요정은 머리 크게, 다리·발 짧게, 몸통 통통하게(동작은 뼈 크기를 건드리지 않는다)
+  findBone(model, 'Head')?.scale.setScalar(build.head);
+  for (const n of ['UpperLegL', 'UpperLegR', 'LowerLegL', 'LowerLegR']) findBone(model, n)?.scale.set(build.legs[0], build.legs[1], build.legs[0]);
+  for (const n of ['FootL', 'FootR']) findBone(model, n)?.scale.set(build.feet[0], build.feet[1], build.feet[0]);
+  findBone(model, 'Torso')?.scale.set(...build.torso);
+  if (build.abdomen) findBone(model, 'Abdomen')?.scale.set(...build.abdomen);
 
   const mixer = new THREE.AnimationMixer(model);
   const clips = new Map(models.animations('elf').map((c) => [c.name.replace('CharacterArmature|', ''), c] as const));
@@ -196,7 +271,7 @@ export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: stri
 
   // 키를 맞추고 발바닥을 원점에
   let box = new THREE.Box3().setFromObject(model);
-  const k = BODY_HEIGHT / (box.max.y - box.min.y);
+  const k = build.height / (box.max.y - box.min.y);
   model.scale.setScalar(k * model.scale.x);
   model.updateMatrixWorld(true);
   box = new THREE.Box3().setFromObject(model);
@@ -222,24 +297,46 @@ export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: stri
     const hp = head.getWorldPosition(new THREE.Vector3());
     const hatK = ((Math.max(size.x, size.z) / 2) * 1.02) / 0.158;
     const qInv = head.getWorldQuaternion(new THREE.Quaternion()).invert();
-    const hat = elfHat(look);
-    hat.name = 'elfHat'; // 키를 잴 때(모자 제외) 찾는다
-    hat.scale.setScalar(hatK / ws);
-    head.add(hat);
-    hat.position.copy(head.worldToLocal(new THREE.Vector3(hp.x, brow.max.y + 0.005 + 0.035 * hatK, (headB.min.z + headB.max.z) / 2 - 0.01)));
-    hat.quaternion.copy(qInv).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.22, 0, 0)));
-    for (const sx of [-1, 1]) {
-      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.12, 10), new THREE.MeshStandardMaterial({ color: '#f1c9a5', roughness: 0.85 }));
-      ear.scale.setScalar(1 / ws);
-      head.add(ear);
-      ear.position.copy(head.worldToLocal(new THREE.Vector3(hp.x + sx * 0.15, hp.y + (headB.max.y - hp.y) * 0.35 - 0.05, hp.z)));
-      ear.quaternion.copy(qInv).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -sx * 1.2)));
+    if (build.hat) {
+      const hat = build.hat();
+      hat.name = 'elfHat'; // 키를 잴 때(모자 제외) 찾는다
+      hat.scale.setScalar(hatK / ws);
+      head.add(hat);
+      hat.position.copy(head.worldToLocal(new THREE.Vector3(hp.x, brow.max.y + 0.005 + 0.035 * hatK + (build.hatLift ?? 0) * size.y, (headB.min.z + headB.max.z) / 2 - 0.01)));
+      hat.quaternion.copy(qInv).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(build.hatTilt ?? 0, 0, 0)));
+    }
+    if (build.ears)
+      for (const sx of [-1, 1]) {
+        const ear = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.12, 10), new THREE.MeshStandardMaterial({ color: '#f1c9a5', roughness: 0.85 }));
+        ear.scale.setScalar(1 / ws);
+        head.add(ear);
+        ear.position.copy(head.worldToLocal(new THREE.Vector3(hp.x + sx * 0.15, hp.y + (headB.max.y - hp.y) * 0.35 - 0.05, hp.z)));
+        ear.quaternion.copy(qInv).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -sx * 1.2)));
+      }
+    if (build.extra) {
+      model.updateMatrixWorld(true);
+      build.extra({
+        model,
+        bone: (n) => findBone(model, n),
+        face: headB,
+        brow,
+        attach(bone, obj, worldPos, euler) {
+          bone.updateMatrixWorld(true);
+          const bs = bone.getWorldScale(new THREE.Vector3());
+          obj.scale.set(obj.scale.x / bs.x, obj.scale.y / bs.y, obj.scale.z / bs.z);
+          bone.add(obj);
+          obj.position.copy(bone.worldToLocal(worldPos.clone()));
+          obj.quaternion
+            .copy(bone.getWorldQuaternion(new THREE.Quaternion()).invert())
+            .multiply(new THREE.Quaternion().setFromEuler(euler ?? new THREE.Euler()));
+        },
+      });
     }
   }
 
   // 요정 장화: 발 뼈에 붙여 걸음을 따라간다. 갈색 가죽 + 위로 말린 앞코 + 흰 털 단 + 금 버클(발끝 윤곽이 눈 위에서 또렷하게)
   model.updateMatrixWorld(true);
-  for (const side of ['L', 'R'] as const) {
+  for (const side of build.boots ? (['L', 'R'] as const) : []) {
     const foot = findBone(model, `Foot${side}`);
     if (!foot) continue;
     const fp = foot.getWorldPosition(new THREE.Vector3());
@@ -255,7 +352,7 @@ export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: stri
 
   // 발밑 그림자(바닥 위 위치를 읽기 쉽게)
   const shadow = new THREE.Mesh(
-    new THREE.CircleGeometry(0.34, 24),
+    new THREE.CircleGeometry(build.shadowR, 24),
     new THREE.MeshBasicMaterial({ color: '#1b2433', transparent: true, opacity: 0.25, depthWrite: false }),
   );
   shadow.rotation.x = -Math.PI / 2;
@@ -308,6 +405,13 @@ export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: stri
   let up = 0;
   let low = 0;
   const actionOf = (g: typeof gait) => (g === 'run' ? run : g === 'walk' ? walk ?? run : idle);
+  // 연출: 이름 있는 동작과 고개 숙이기
+  let override: THREE.AnimationAction | null = null;
+  const headBone = findBone(model, 'Head');
+  const headClean = headBone ? headBone.quaternion.clone() : null;
+  let lookDown = 0;
+  const hRoot = new THREE.Quaternion(), hPar = new THREE.Quaternion(), hCur = new THREE.Quaternion(), hRot = new THREE.Quaternion();
+  const hAxis = new THREE.Vector3();
   const wl = findBone(model, 'WristL');
   const wr = findBone(model, 'WristR');
   // 손에 든 물건 방향: 몸통이 서 있을 때(만든 때) 방향에서 얼마나 기울고 돌았는지를 물건에도 준다
@@ -322,6 +426,27 @@ export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: stri
   const cRoot = new THREE.Quaternion(), cT = new THREE.Quaternion(), cM = new THREE.Matrix4();
   return {
     root,
+    act(name, o = {}) {
+      const next = name ? action(name) : null;
+      if (name && !next) return false;
+      if (next === override && next) return true;
+      const from = override ?? actionOf(gait);
+      const to = next ?? actionOf(gait);
+      if (next) {
+        next.setLoop(o.once ? THREE.LoopOnce : THREE.LoopRepeat, Infinity);
+        next.clampWhenFinished = true;
+        next.timeScale = o.speed ?? 1;
+      }
+      if (to && to !== from) {
+        to.reset().play();
+        if (from) from.crossFadeTo(to, o.fade ?? 0.25, false);
+      } else if (to && next) to.reset().play();
+      override = next;
+      return true;
+    },
+    look(down) {
+      lookDown = Math.max(0, Math.min(1, down));
+    },
     carryFrame(pos, quat) {
       if (!wl || !wr) return false;
       wl.getWorldPosition(cL);
@@ -361,7 +486,8 @@ export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: stri
       last = timeSec;
       // 걸음: 빈손·가벼운 짐은 달리기, 무거운 짐을 함께 들면 느린 걸음
       const want: typeof gait = !isMoving ? 'idle' : pose.carry === 'heavy' ? 'walk' : 'run';
-      if (want !== gait) {
+      if (override) gait = want; // 연출 동작 중에는 걷기를 바꾸지 않는다(끝나면 지금 걸음으로 돌아간다)
+      else if (want !== gait) {
         const from = actionOf(gait);
         const to = actionOf(want);
         if (from && to && from !== to) {
@@ -372,8 +498,10 @@ export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: stri
       }
       if (walk) walk.timeScale = 0.65; // 무거운 짐: 보폭은 그대로, 발을 천천히
       armBones.forEach((b, i) => b.quaternion.copy(clean[i]!));
+      if (headBone && headClean) headBone.quaternion.copy(headClean);
       mixer.update(dt);
       armBones.forEach((b, i) => clean[i]!.copy(b.quaternion));
+      if (headBone && headClean) headClean.copy(headBone.quaternion);
       // 들고 있으면 팔을 흔들지 않는다(손이 물건에 붙어 있게)
       const holdK = 1 - Math.exp(-dt * 12);
       holdW += ((pose.carry === 'none' ? 0 : 1) - holdW) * holdK;
@@ -406,6 +534,16 @@ export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: stri
       if (Math.abs(spread) > 1e-4) {
         bones.ul?.quaternion.multiply(tmp.setFromAxisAngle(yAxis, -spread));
         bones.ur?.quaternion.multiply(tmp.setFromAxisAngle(yAxis, spread));
+      }
+      // 고개 숙이기: 인물의 왼쪽(+x) 축으로 앞을 아래로 돌린다(뼈 축 방향과 무관하게 인물 기준으로 계산)
+      if (headBone && headBone.parent && lookDown > 0.001) {
+        root.updateMatrixWorld(true);
+        root.getWorldQuaternion(hRoot);
+        hAxis.set(1, 0, 0).applyQuaternion(hRoot);
+        hRot.setFromAxisAngle(hAxis, lookDown * 0.75);
+        headBone.getWorldQuaternion(hCur).premultiply(hRot);
+        headBone.parent.getWorldQuaternion(hPar);
+        headBone.quaternion.copy(hPar.invert().multiply(hCur));
       }
       // 집을 때 살짝 웅크린다, 무거운 짐을 들면 몸이 조금 낮아진다
       model.position.y = baseY - reach * 0.09 - (pose.carry === 'heavy' ? 0.03 : 0);

@@ -3,6 +3,7 @@
 // 클라이언트가 적어 보낸 시각(clientAt)은 판정에 쓰지 않는다.
 // three.js·DOM·실제 시계에 의존하지 않으므로 테스트는 가짜 시간을 그대로 넣는다.
 import { chapter, RUN_MS, type ChapterId, type MemoryId } from '../data/chapters';
+import type { PhotoSetup } from './prologue';
 
 export const SCHEMA_VERSION = 1;
 const SEEN_LIMIT = 256;
@@ -47,6 +48,8 @@ export interface RunState {
   /** 최근 처리한 이벤트 ID(재전송·중복 방지) */
   seen: string[];
   outcome: 'win' | null;
+  /** 프롤로그 단체사진 구도(5장에서 같은 컷을 다시 찍는다). 한 번 정하면 바꾸지 않는다 */
+  photo: PhotoSetup | null;
 }
 
 /** 참가자 기기가 보낸 미션 이벤트에 붙는 값(명세서 §8) */
@@ -62,6 +65,7 @@ export interface ClientMeta {
 export type RunCommand =
   | { type: 'start'; at: number }
   | { type: 'cutsceneDone'; at: number }
+  | { type: 'savePhoto'; at: number; photo: PhotoSetup }
   | { type: 'tick'; at: number }
   | { type: 'setProgress'; at: number; key: string; value: unknown }
   | { type: 'lightFail'; at: number }
@@ -103,6 +107,8 @@ export interface Checkpoint {
   timeAssistMs: number;
   retryCount: number;
   seed: number;
+  /** 프롤로그 단체사진 구도(없을 수 있다: 예전 저장·프롤로그 전) */
+  photo?: PhotoSetup;
 }
 
 // ── 시계 ────────────────────────────────────────────────
@@ -172,6 +178,7 @@ export function createRun(runId: string, roomId: string, seed: number): RunState
     resumeAt: null,
     seen: [],
     outcome: null,
+    photo: null,
   };
 }
 
@@ -187,6 +194,7 @@ export function toCheckpoint(s: RunState): Checkpoint {
     timeAssistMs: s.timeAssistMs,
     retryCount: s.retryCount,
     seed: s.seed,
+    ...(s.photo ? { photo: s.photo } : {}),
   };
 }
 
@@ -208,6 +216,7 @@ export function fromCheckpoint(cp: Checkpoint): RunState {
     timeAssistMs: cp.timeAssistMs,
     retryCount: cp.retryCount,
     snowglobe: cp.completedChapters.includes(5) ? { holder: null } : null,
+    photo: cp.photo ?? null,
   };
 }
 
@@ -285,6 +294,18 @@ export function reduce(state: RunState, cmd: RunCommand): Result {
       } else {
         s = maybeRun({ ...s, phase: 'play' }, cmd.at);
       }
+      break;
+    }
+
+    case 'savePhoto': {
+      // 프롤로그 단체사진 구도: 연출 중 한 번만. 이미 있으면 그대로(재시도·재접속에도 같은 컷)
+      if (s.phase !== 'cutscene') {
+        s = reject(s, cmd, 'noCutscene', fx);
+        break;
+      }
+      if (s.photo) break;
+      s = { ...s, photo: cmd.photo };
+      fx.push({ type: 'save', checkpoint: toCheckpoint(s) });
       break;
     }
 

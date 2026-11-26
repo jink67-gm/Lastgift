@@ -10,6 +10,8 @@ export interface Snowfall {
   setCount(n: number): void;
   /** 화면 중심(땅 위 x, z)과 화면 크기에 맞춰 눈송이를 움직인다 */
   update(dt: number, cx: number, cz: number, radius: number): void;
+  /** 눈보라(0~1): 눈송이가 커지고 바람에 옆으로 날린다(프롤로그) */
+  setStorm(k: number): void;
 }
 
 let flakeTex: THREE.CanvasTexture | null = null;
@@ -51,6 +53,7 @@ export function createSnowfall(pixelRatio: () => number): Snowfall {
   points.renderOrder = 20;
   let count = 0;
   let t = 0;
+  let storm = 0;
   return {
     points,
     setCount(n) {
@@ -58,15 +61,20 @@ export function createSnowfall(pixelRatio: () => number): Snowfall {
       geo.setDrawRange(0, count);
       points.visible = count > 0;
     },
+    setStorm(k) {
+      storm = Math.min(1, Math.max(0, k));
+    },
     update(dt, cx, cz, radius) {
       if (!count) return;
       t += dt;
-      mat.size = 5 * pixelRatio();
+      mat.size = (5 + 4 * storm) * pixelRatio();
+      const wind = 0.12 + 3.2 * storm;
+      const fall = 1 + 0.8 * storm;
       const span = radius * 2;
       for (let i = 0; i < count; i++) {
         const k = i * 3;
-        pos[k + 1] = pos[k + 1]! - speed[i]! * dt;
-        pos[k] = pos[k]! + Math.sin(t * 0.9 + seed[i]!) * 0.25 * dt + 0.12 * dt; // 살짝 흔들리며 바람 쪽(+x)으로
+        pos[k + 1] = pos[k + 1]! - speed[i]! * fall * dt;
+        pos[k] = pos[k]! + Math.sin(t * 0.9 + seed[i]!) * 0.25 * dt + wind * dt; // 살짝 흔들리며 바람 쪽(+x)으로
         // 화면 둘레 상자를 벗어나면 반대쪽으로 되감는다(카메라를 따라간다)
         if (pos[k + 1]! < 0) pos[k + 1] = TOP;
         let dx = pos[k]! - cx, dz = pos[k + 2]! - cz;

@@ -1,6 +1,6 @@
 // 0장 · 광장에 떨어진 선물 다섯 개: 그림 이름표를 보고 네 배달지 표식 아래로 나눈다(명세서 §4 0장, §5).
 //   ?chapter=0  한 기기에서 둘이(1P WASD+E·터치, 2P 방향키+Enter). 여러 기기 연결은 STEP 07 통합 때 붙인다.
-// 프롤로그(단체사진·썰매 불시착)는 STEP 04-3에서 이 장 앞에 붙인다.
+// 새 시도면 먼저 프롤로그(단체사진·썰매 불시착, game/prologue.ts)를 튼다. 시험 모드(?test)는 &prologue가 있을 때만 튼다.
 import { createHoldTween, giftScale, holdSpan, placeOnGround, placeOnHands } from '../scene/hold';
 import * as THREE from 'three';
 import { gripPos, needsSwap, type SewingInput } from '../core/sewing';
@@ -16,6 +16,9 @@ import { createMarkers, createSkidTrails, createTag } from '../scene/chapter0';
 import { createWinterLight, setShadows } from '../scene/winterLight';
 import { createStaminaBar, createSwapSign } from '../scene/chapter2';
 import { createElfAvatar } from '../scene/elfAvatar';
+import { createDoto, createKongi, createSanta } from '../scene/characters';
+import { photoLineup, beatAt } from '../core/prologue';
+import { createPrologue, type Prologue } from './prologue';
 import { createGift, createTargetRing } from '../scene/gifts';
 import type { Models } from '../scene/models';
 import { createOcclusionFader } from '../scene/occlusionFade';
@@ -140,14 +143,18 @@ export function startChapter0(models: Models): void {
   });
   const marks = createOffscreenMarks(document, PLAYERS.length);
 
-  // 새 시도(0장). 프롤로그 연출은 아직 없으므로 바로 넘긴다(STEP 04-3)
+  // 새 시도(0장): 프롤로그 연출 → 플레이. 이어 하기(체크포인트)·시간 초과 재시도면 프롤로그 없이 바로 플레이
   const run = new LocalRun(new CheckpointStore(browserStorage()), hud, 'dev-ch0', 'p0');
   run.attachVisibility(document);
   run.onEffect((e) => {
     if (e.type === 'retry') sort = createSorting(PLAYERS);
   });
   run.dispatch({ type: 'start', at: performance.now() });
-  if (run.state.phase === 'cutscene') run.dispatch({ type: 'cutsceneDone', at: performance.now() });
+  const wantPrologue = run.state.phase === 'cutscene' && (!testParams.has('test') || testParams.has('prologue'));
+  if (run.state.phase === 'cutscene' && !wantPrologue) {
+    run.dispatch({ type: 'savePhoto', at: performance.now(), photo: photoLineup(PLAYERS.map((_, i) => i)) });
+    run.dispatch({ type: 'cutsceneDone', at: performance.now() });
+  }
 
   // 모델
   const elves = PLAYERS.map((_, i) => {
@@ -194,6 +201,76 @@ export function startChapter0(models: Models): void {
       return [g.id, { v, tag, outline, span }] as const;
     }),
   );
+
+  // 산타(썰매 앞쪽을 받친다)·도토(썰매 날을 살핀다)·콩이(프롤로그 사진에서만). 광장의 기본 도형 산타는 숨긴다
+  const plainSanta = plaza.getObjectByName('santa');
+  if (plainSanta) plainSanta.visible = false;
+  const santa = createSanta(models);
+  setShadows(santa.root, true, false);
+  santa.root.userData.fadeable = true;
+  scene.add(santa.root);
+  const doto = createDoto(models);
+  doto.root.scale.multiplyScalar(ELF_SCALE);
+  setShadows(doto.root, true, false);
+  scene.add(doto.root);
+  const kongi = createKongi(models);
+  kongi.root.visible = false;
+  scene.add(kongi.root);
+  const sleighObj = plaza.getObjectByName('sleigh')!;
+  const sleighHeldTilt = 0.2;
+  const placeCrew = () => {
+    santa.root.position.set(CH0.santaHold.x, 0, CH0.santaHold.z);
+    santa.root.rotation.set(0, CH0.santaHold.facing, 0);
+    doto.root.position.set(CH0.dotoFix.x, 0, CH0.dotoFix.z);
+    doto.root.rotation.set(0, CH0.dotoFix.facing, 0);
+    doto.act?.('Interact');
+    sleighObj.rotation.order = 'YZX';
+    sleighObj.rotation.z = sleighHeldTilt;
+  };
+
+  // 프롤로그(새 시도일 때만)
+  let prologue: Prologue | null = null;
+  /** 플레이할 때만 보이는 것(대상 고리·체력 막대·교대 표시·이름표) */
+  const playOnly = (on: boolean) => {
+    for (const r of rings) r.visible = on && r.visible;
+    for (const b of bars) b.group.visible = on;
+    for (const w of swaps) w.visible = on && w.visible;
+    for (const g of gifts.values()) g.tag.visible = on;
+    crateTag.visible = on;
+  };
+  if (wantPrologue) {
+    playOnly(false);
+    const starts = sort.sewing.players.map((p) => ({ x: p.x, z: p.z, facing: p.facing }));
+    prologue = createPrologue({
+      scene,
+      elves,
+      slots: PLAYERS.map((_, i) => i),
+      elfScale: ELF_SCALE,
+      elfStarts: starts,
+      santa,
+      santaHold: CH0.santaHold,
+      doto,
+      dotoFix: CH0.dotoFix,
+      kongi,
+      sleigh: sleighObj,
+      snowPile: plaza.getObjectByName('snowPile') ?? null,
+      cargo: [
+        { v: crate, to: { x: CH0.crateStart.x, z: CH0.crateStart.z, facing: CH0.crateStart.yaw - Math.PI / 2 }, heavy: true },
+        ...SORT_GIFTS.map((g) => ({ v: gifts.get(g.id)!.v, to: { x: g.x, z: g.z, facing: 0 } })),
+      ],
+      sleighHeldTilt,
+      reduceMotion,
+      storm: (k) => {
+        light.setStorm(k * 0.9);
+        const base = snowCount(quality, settings.value.reducedSnow);
+        snow.setCount(Math.min(600, base * (1 + 1.6 * k)));
+        snow.setStorm(k);
+      },
+      snowAround: (dt, x, z, r) => snow.update(dt, x, z, r),
+      onPhoto: (photo) => run.dispatch({ type: 'savePhoto', at: performance.now(), photo }),
+    });
+    prologue.update(0, aspect);
+  } else placeCrew();
 
   /** 화면 확인용(시험 모드만): 제자리에서 걷는 동작만 보이는 요정 */
   const runInPlace = new Set<string>();
@@ -248,8 +325,35 @@ export function startChapter0(models: Models): void {
       acc -= SIM_DT;
       elapsed += SIM_DT;
     }
+    if (prologue && !prologue.done) {
+      prologue.update(frame, aspect);
+      if (prologue.done) startPlay();
+      else {
+        renderer.render(scene, prologue.camera);
+        prologue.afterRender(renderer.domElement);
+        return;
+      }
+    } else if (prologue) {
+      prologue.update(frame, aspect);
+      if (prologue.closed) {
+        prologue.dispose();
+        prologue = null;
+      }
+    }
     draw(frame);
   });
+
+  /** 프롤로그가 끝났다(또는 건너뛰었다): 산타·도토는 제자리, 팀 시계가 흐르고 광장 전체 구도부터 */
+  function startPlay(): void {
+    placeCrew();
+    playOnly(true);
+    if (run.state.phase === 'cutscene') run.dispatch({ type: 'cutsceneDone', at: performance.now() });
+    establish = reduceMotion ? 0 : ESTABLISH.sec;
+    viewH = reduceMotion ? baseViewH(aspect) : ESTABLISH.viewH;
+    camTarget.set(ESTABLISH.x, 0, ESTABLISH.z);
+    snapCamera = true;
+    applyView();
+  }
 
   // 화면에 보이는 위치: 판정(60 Hz 고정 틱) 위치를 부드럽게 따라간다 → 틱이 몰리거나 비는 프레임에 덜덜 떨리지 않는다
   const shown = new Map<string, { x: number; z: number; yaw: number }>();
@@ -341,6 +445,9 @@ export function startChapter0(models: Models): void {
       }
       holdTween.apply(it.id, g.v, idx >= 0, elapsed);
     }
+    // 산타는 썰매 앞쪽을 받치고, 도토는 썰매 날을 살핀다
+    santa.animate(elapsed, false, { carry: 'heavy', act: 0, tired: false });
+    doto.animate(elapsed, false);
     controls.update(iconOf(mine));
     markers.update(frame);
 
@@ -502,6 +609,20 @@ export function startChapter0(models: Models): void {
                 : null,
           };
         }),
+      /** 프롤로그 상태(시험): 시각·장면·끝남 */
+      prologue: () => (prologue ? { t: prologue.t, beat: beatAt(prologue.t), done: prologue.done } : null),
+      skipPrologue: () => prologue?.skip(),
+      /** 인물 위치·보임(시험·화면 확인) */
+      actors: () =>
+        Object.fromEntries(
+          ([['santa', santa.root], ['doto', doto.root], ['kongi', kongi.root]] as const).map(([n, o]) => {
+            const p = o.getWorldPosition(new THREE.Vector3());
+            const b = new THREE.Box3().setFromObject(o);
+            return [n, { visible: o.visible, x: p.x, y: p.y, z: p.z, top: b.max.y, bottom: b.min.y }];
+          }),
+        ),
+      /** 저장된 단체사진 구도(5장 재현용) */
+      photo: () => run.state.photo,
       /** 화면 확인용(시험 모드만): 제자리에서 걷는 동작(카메라가 움직이지 않아 같은 자리에서 여러 장 찍을 수 있다) */
       debugRunInPlace: (id: string, on: boolean) => (on ? runInPlace.add(id) : runInPlace.delete(id)),
       /** 화면 확인용(시험 모드만): 요정 체력을 정한다 */

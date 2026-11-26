@@ -38,3 +38,15 @@ test('2장도 모델 없이 열린다', async ({ page }) => {
   await page.waitForFunction(() => !!(window as unknown as { __lastgift?: { sewing?: unknown } }).__lastgift?.sewing);
   expect(errors).toEqual([]);
 });
+
+test('0장 프롤로그도 모델 없이(기본 도형 산타·도토·콩이) 끝까지 간다', async ({ page }) => {
+  test.setTimeout(90_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.route('**/models/**', (r) => r.abort());
+  await page.goto('/?chapter=0&test&prologue&noshadow&slow=0.25');
+  await page.waitForFunction(() => !!(window as unknown as { __lastgift?: { sorting?: unknown } }).__lastgift?.sorting);
+  // 4배 빠르게 끝까지
+  await page.waitForFunction(() => (window as unknown as { __lastgift: { run(): { phase: string } } }).__lastgift.run().phase === 'play', null, { timeout: 60_000 });
+  expect(errors).toEqual([]);
+});

@@ -2,6 +2,7 @@
 // 저장소가 없거나(사생활 보호 모드) 가득 차도 게임은 계속되고, 실패는 결과로 알려 UI가 표시한다.
 import type { QualitySetting } from '../core/quality';
 import { SCHEMA_VERSION, type Checkpoint } from '../core/run';
+import { isPhotoSetup } from '../core/prologue';
 
 /** localStorage와 같은 모양. 테스트에서는 메모리 구현을 넣는다 */
 export interface KeyValue {
@@ -31,7 +32,8 @@ function isCheckpoint(v: unknown): v is Checkpoint {
     ints.every((k) => Number.isInteger(c[k]) && (c[k] as number) >= 0) &&
     (c.chapterId as number) <= 6 &&
     Array.isArray(c.completedChapters) &&
-    Array.isArray(c.memories)
+    Array.isArray(c.memories) &&
+    (c.photo === undefined || isPhotoSetup(c.photo))
   );
 }
 

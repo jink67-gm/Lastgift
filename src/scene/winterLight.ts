@@ -8,14 +8,19 @@ export interface WinterLight {
   follow(x: number, z: number, viewW: number, viewH: number): void;
   /** 실시간 그림자 켜고 끄기(품질 설정). 재질을 다시 만들도록 장면을 넘긴다 */
   setShadows(on: boolean, scene: THREE.Object3D): void;
+  /** 눈보라 밤(프롤로그): 0 = 평소 밝은 겨울 밤, 1 = 어둡고 푸른 눈보라 */
+  setStorm(k: number): void;
 }
 
 const KEY_DIR = new THREE.Vector3(-5, 14, 7).normalize().multiplyScalar(30);
 
 export function createWinterLight(scene: THREE.Scene, renderer: THREE.WebGLRenderer, opts: { shadows: boolean; mapSize: number }): WinterLight {
-  scene.background = new THREE.Color('#223049');
+  const bgDay = new THREE.Color('#223049');
+  const bgStorm = new THREE.Color('#0a1020');
+  scene.background = bgDay.clone();
   // 그늘은 옅은 청회색: 바닥 반사색을 밝게 해 그늘이 요정 실루엣보다 먼저 눈에 띄지 않게
-  scene.add(new THREE.HemisphereLight('#c8d6f0', '#98a6c2', 1.55));
+  const hemi = new THREE.HemisphereLight('#c8d6f0', '#98a6c2', 1.55);
+  scene.add(hemi);
   const key = new THREE.DirectionalLight('#fff0db', 2.5);
   scene.add(key);
   scene.add(key.target);
@@ -39,6 +44,13 @@ export function createWinterLight(scene: THREE.Scene, renderer: THREE.WebGLRende
   configure(opts.shadows);
   let lastR = 0;
   return {
+    setStorm(k) {
+      const t = Math.min(1, Math.max(0, k));
+      (scene.background as THREE.Color).copy(bgDay).lerp(bgStorm, t);
+      hemi.intensity = 1.55 - 0.85 * t;
+      hemi.color.set('#c8d6f0').lerp(new THREE.Color('#7f93c4'), t);
+      key.intensity = 2.5 - 1.7 * t;
+    },
     setShadows(on, root) {
       if (on === shadowsOn) return;
       configure(on);

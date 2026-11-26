@@ -45,9 +45,16 @@ export const SORT_GIFTS: readonly SortGiftDef[] = [
 
 const signs: Collider[] = MARKERS.map((m) => ({ kind: 'circle', x: m.signX, z: m.signZ, r: 0.18 }));
 
+/** 썰매를 받치는 산타(광장 산타 자리 그대로, 썰매 앞쪽 모서리를 본다) */
+const SANTA_HOLD = { x: 6.4, z: -8.2, facing: -0.79 };
+/** 썰매 날(남쪽)을 살피는 도토 */
+const DOTO_FIX = { x: 3.6, z: -4.45, facing: Math.PI };
+
 export const CH0 = {
   bounds: PLAZA_BOUNDS,
-  walls: [...PLAZA_COLLIDERS, ...signs] as readonly Collider[],
+  walls: [...PLAZA_COLLIDERS, ...signs, { kind: 'circle', x: DOTO_FIX.x, z: DOTO_FIX.z, r: 0.4 }] as readonly Collider[],
+  santaHold: SANTA_HOLD,
+  dotoFix: DOTO_FIX,
   /** 재봉틀 상자(무거움, 두 요정이 양끝을 함께 든다).
    *  0장은 첫 함께 들기 연습이라 수선집 표식까지 11 m 남짓(곧게 가면 5초, 체력은 28초)만 둔다. */
   crateStart: { x: 0.6, z: -1.2, yaw: Math.PI / 2 },

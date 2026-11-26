@@ -77,6 +77,13 @@ export interface ElfView {
    * 두 손 높이 차이와 몸통 기울기를 그대로 따라가 걸을 때 물건이 손·몸과 함께 움직인다. 손 뼈가 없으면 false
    */
   carryFrame?(pos: THREE.Vector3, quat: THREE.Quaternion): boolean;
+  /**
+   * 연출용: 이름 있는 동작(Wave·Interact·Roll·HitRecieve 등)을 튼다. null이면 걷기·서 있기로 돌아간다.
+   * once: 한 번만 하고 마지막 자세에 멈춘다. 없는 동작이면 false
+   */
+  act?(clip: string | null, o?: { once?: boolean; speed?: number; fade?: number }): boolean;
+  /** 연출용: 고개를 숙인다(0 = 앞, 1 = 발밑을 본다) */
+  look?(down: number): void;
 }
 
 export function createElf(look: ElfLook): ElfView {

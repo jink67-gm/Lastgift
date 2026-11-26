@@ -9,6 +9,8 @@ export const KENNEY_SCALE = 2;
 
 export const MODEL_FILES = {
   elf: 'quaternius/hooded-adventurer.glb',
+  // 콩이(유기견): Quaternius Shiba Inu(CC0). 다시 칠하고 줄여 쓴다
+  dog: 'quaternius/shiba-inu.glb',
   cabinWall: 'kenney-holiday/cabin-wall.glb',
   cabinCorner: 'kenney-holiday/cabin-corner.glb',
   cabinDoorway: 'kenney-holiday/cabin-doorway.glb',
