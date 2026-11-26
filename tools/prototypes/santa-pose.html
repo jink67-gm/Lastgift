@@ -1,0 +1,27 @@
+<!-- 시제품(게임 코드 아님): 게임 산타(createSanta)의 연출 동작을 앞·3/4·옆·게임 시점으로 크게 본다.
+     npx vite --port 5199 → /tools/prototypes/santa-pose.html?clip=Wave&n=30 (n = 1/30초 프레임 수), &carry=heavy, &walk, &look=1 -->
+<!doctype html><html><body style="margin:0;background:#dfe7f4"><canvas id=c></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { Models } from '/src/scene/models.ts';
+import { createSanta } from '/src/scene/characters.ts';
+const q = new URLSearchParams(location.search);
+const W = 1600, H = 500;
+const r = new THREE.WebGLRenderer({ canvas: c, antialias: true }); r.setSize(W, H); r.setPixelRatio(1); r.setScissorTest(true);
+const s = new THREE.Scene(); s.background = new THREE.Color('#dfe7f4');
+s.add(new THREE.HemisphereLight('#fff', '#8a93a8', 2.2)); const d = new THREE.DirectionalLight('#fff4e0', 1.6); d.position.set(-3, 8, 7); s.add(d);
+const models = await Models.load(['santa'], '/');
+const santa = createSanta(models); s.add(santa.root);
+const clip = q.get('clip'); if (clip) santa.act?.(clip);
+santa.look?.(Number(q.get('look') || 0));
+const walk = q.has('walk'), carry = q.get('carry') || 'none', n = Number(q.get('n') || 40);
+let t = 0; for (let i = 0; i < n; i++) { t += 1 / 30; santa.animate(t, walk, { carry, act: 0, tired: false }); }
+const views = [[0, 0.1], [-Math.PI / 4, 0.15], [-Math.PI / 2, 0.1], [Math.PI / 4, Math.PI / 6]];
+views.forEach(([yaw, pitch], i) => {
+  const h = 3.4, w = h * 400 / 500;
+  const cam = new THREE.OrthographicCamera(-w / 2 * 1.6, w / 2 * 1.6, h / 2 * 1.6, -h / 2 * 1.6, 0.1, 80);
+  cam.position.set(Math.sin(yaw) * Math.cos(pitch) * 30, 2.6 + Math.sin(pitch) * 30, Math.cos(yaw) * Math.cos(pitch) * 30); cam.lookAt(0, 2.6, 0);
+  r.setViewport(i * 400, 0, 400, H); r.setScissor(i * 400, 0, 400, H); r.render(s, cam);
+});
+window.__ready = true;
+</script></body></html>

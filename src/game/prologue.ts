@@ -576,6 +576,12 @@ export function createPrologue(cast: PrologueCast): Prologue {
       blend: 0.9,
       get: () => ({ p: V(10.5, 3.2, -0.6), q: cast.santa.root.position.clone().add(V(0, 2.6, 0)), fov: 44 }),
     },
+    // 내려선 산타가 손을 흔든다: 오른쪽으로 비켜서서(가로등 lampA가 산타 앞을 가리지 않게) 조금 더 가까이
+    {
+      at: C.santaOut[1] - 0.3,
+      blend: 0.9,
+      get: () => ({ p: V(11.2, 3.0, -4.2), q: santaHop.clone().add(V(0, 2.5, 0)), fov: 44 }),
+    },
     // 도토: 눈더미에서 튀어나와 눈을 털고 썰매 날로
     {
       at: C.dotoUp[0] + 0.2,

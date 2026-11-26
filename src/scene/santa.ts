@@ -11,6 +11,10 @@ const ASSET_HEAD_TOP = 1.66;
 const X = new THREE.Vector3(1, 0, 0);
 const Z = new THREE.Vector3(0, 0, 1);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
+/** 손 흔들기 각도(인물 기준 축, 라디안): 위팔 옆으로 들기·앞으로, 아래팔 세우기, 흔들기 폭, 손목 따라 흔들기,
+ *  아래팔 비틀기(손바닥이 앞, 엄지가 몸 안쪽) */
+const WAVE = { raise: -1.6, forward: 0.1, bend: -1.4, swing: 0.36, wrist: 0.2, twist: 1.57 };
+const WAVE_RATE = 7.5;
 const _q = new THREE.Quaternion();
 const _p = new THREE.Quaternion();
 const _r = new THREE.Quaternion();
@@ -55,6 +59,7 @@ export function createSantaAsset(models: Models, height: number): ElfView | null
     ur: bone('UpperArm.R'),
     fl: bone('Forearm.L'),
     fr: bone('Forearm.R'),
+    hr: bone('Hand.R'),
     tl: bone('Thigh.L'),
     tr: bone('Thigh.R'),
     sl: bone('Shin.L'),
@@ -175,14 +180,20 @@ export function createSantaAsset(models: Models, height: number): ElfView | null
         if (B.hips) B.hips.position.y -= 0.03 * k;
       }
 
-      // 손 흔들기(오른손): 팔을 머리 위로 비스듬히 들고 아래팔을 좌우로 흔든다
+      // 손 흔들기(오른손, "안녕"): 위팔은 옆으로 어깨보다 조금 높이·조금 앞으로, 팔꿈치를 굽혀 아래팔을 세우고
+      // 팔꿈치를 축으로 좌우로 흔든다(손은 늘 얼굴 옆·앞에 있어 머리·모자에 가리지 않는다)
       if (waveK > 0.001) {
         const k = waveK;
-        turn(B.ur, Z, -2.45 * k);
-        turn(B.ur, X, -0.35 * k);
-        turn(B.fr, Z, (-0.25 + 0.45 * Math.sin(procT * 9)) * k);
-        turn(B.spine, Z, 0.05 * k);
-        turn(B.head, Z, 0.08 * k);
+        const sw = Math.sin(procT * WAVE_RATE) * Math.min(1, procT * 3);
+        turn(B.ur, Z, WAVE.raise * k);
+        turn(B.ur, Y_AXIS, WAVE.forward * k);
+        turn(B.fr, Z, (WAVE.bend + WAVE.swing * sw) * k);
+        turn(B.hr, Z, WAVE.wrist * sw * k);
+        // 아래팔을 제 길이 축(뼈의 +y)으로 비틀어 손바닥이 앞, 엄지가 몸 안쪽을 보게 한다
+        const tw = WAVE.twist * k;
+        if (B.fr && tw) B.fr.quaternion.multiply(_q.setFromAxisAngle(Y_AXIS, tw));
+        turn(B.spine, Z, 0.04 * k);
+        turn(B.head, Z, 0.06 * k);
       }
 
       // 고개 숙이기: 머리 먼저, 많이 숙이면 등도 조금
