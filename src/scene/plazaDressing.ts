@@ -51,7 +51,7 @@ function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => 
 
 /** 가운데가 진하고 가장자리가 투명한 그늘(물체가 바닥에 닿는 곳) */
 let contactTex: THREE.CanvasTexture | null = null;
-function contactShadow(w: number, d: number, opacity = 0.32): THREE.Mesh {
+export function contactShadow(w: number, d: number, opacity = 0.32): THREE.Mesh {
   contactTex ??= canvasTex(64, 64, (g) => {
     const r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
     r.addColorStop(0, 'rgba(255,255,255,1)');
@@ -195,7 +195,7 @@ function loadImage(url: string): Promise<HTMLImageElement | null> {
   });
 }
 
-function packedPath(base: string, detail: Detail, path: { width: number; points: { x: number; z: number }[] } = PLAZA_DRESSING.path): THREE.Mesh {
+export function packedPath(base: string, detail: Detail, path: { width: number; points: { x: number; z: number }[] } = PLAZA_DRESSING.path): THREE.Mesh {
   const pts = path.points.map((p) => new THREE.Vector3(p.x, 0, p.z));
   const mat = new THREE.MeshStandardMaterial({ color: '#ffffff', transparent: true, depthWrite: false, roughness: 0.9, map: packedPathTexture(null), side: THREE.DoubleSide });
   const m = new THREE.Mesh(ribbon(pts, path.width, 8.8, 0.006), mat);
@@ -281,7 +281,7 @@ const driftMat = new THREE.MeshStandardMaterial({ color: C.drift, roughness: 1 }
  * 낮고 길게 이어지는 불규칙한 눈둑. 선(points)을 따라 단면이 둥근 띠를 만들고, 폭·높이를 천천히 출렁이게 한다.
  * bumps: 이 지점들(울타리 기둥·모서리) 둘레는 도톰하게. 반복되는 타원 덩어리 대신 한 덩어리로 이어진다.
  */
-function berm(points: { x: number; z: number }[], width: number, height: number, seed = 1, bumps: { x: number; z: number }[] = []): THREE.Mesh {
+export function berm(points: { x: number; z: number }[], width: number, height: number, seed = 1, bumps: { x: number; z: number }[] = []): THREE.Mesh {
   const curve = new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(p.x, 0, p.z)), false, 'centripetal');
   const len = curve.getLength();
   const n = Math.max(6, Math.ceil(len / 0.35));
@@ -323,7 +323,7 @@ const bermMat = new THREE.MeshStandardMaterial({ color: C.drift, roughness: 1, s
 
 /** 요정 발자국 줄(실제로 오가는 곳에만). 좌우로 번갈아 찍힌 작은 타원, 끝으로 갈수록 옅다 */
 let printTex: THREE.CanvasTexture | null = null;
-function footprints(points: { x: number; z: number }[]): THREE.Mesh {
+export function footprints(points: { x: number; z: number }[]): THREE.Mesh {
   printTex ??= (() => {
     const t = canvasTex(32, 64, (g) => {
       g.fillStyle = 'rgba(120,138,170,0.75)';
@@ -381,7 +381,7 @@ function benchBase(p: Prop): THREE.Group {
 // ─── 가장자리 울타리·눈둑 ───────────────────────────────────────────────
 
 const roundedCache = new Map<string, THREE.BufferGeometry>();
-function roundedBox(w: number, h: number, d: number): THREE.BufferGeometry {
+export function roundedBox(w: number, h: number, d: number): THREE.BufferGeometry {
   const k = `${w}|${h}|${d}`;
   let g = roundedCache.get(k);
   if (!g) {
@@ -392,7 +392,14 @@ function roundedBox(w: number, h: number, d: number): THREE.BufferGeometry {
 }
 
 /** 낮은 울타리(Tiny Treats, 없으면 기본 도형) + 가로대 위 둥근 눈 + 바깥 눈둑. 바닥 단면을 가린다 */
-function edgeFence(models: Models, from: { x: number; z: number }, to: { x: number; z: number }, scale = FENCE_SCALE): THREE.Group {
+export function edgeFence(
+  models: Models,
+  from: { x: number; z: number },
+  to: { x: number; z: number },
+  scale = FENCE_SCALE,
+  /** 울타리 바깥 방향(눈둑이 도톰하게 쌓이는 쪽). 없으면 광장 가운데에서 먼 쪽 */
+  outward?: { x: number; z: number },
+): THREE.Group {
   const g = new THREE.Group();
   const dx = to.x - from.x, dz = to.z - from.z, len = Math.hypot(dx, dz);
   const yaw = -Math.atan2(dz, dx); // 울타리 조각의 +x를 진행 방향으로
@@ -436,7 +443,9 @@ function edgeFence(models: Models, from: { x: number; z: number }, to: { x: numb
   // 바깥(광장 밖) 눈둑: 울타리 아랫단을 덮고 그 너머 땅을 가린다
   const out = new THREE.Vector3(-dz / len, 0, dx / len);
   const center = new THREE.Vector3((from.x + to.x) / 2, 0, (from.z + to.z) / 2);
-  if (Math.abs(center.x + out.x) < Math.abs(center.x) || Math.abs(center.z + out.z) < Math.abs(center.z)) out.negate();
+  if (outward) {
+    if (out.x * outward.x + out.z * outward.z < 0) out.negate();
+  } else if (Math.abs(center.x + out.x) < Math.abs(center.x) || Math.abs(center.z + out.z) < Math.abs(center.z)) out.negate();
   // 한 덩어리로 낮고 길게 이어지는 눈둑: 바깥쪽은 도톰하게(땅을 가린다), 안쪽은 얇게. 기둥 밑은 더 도톰하게
   const along = (t: number, o: number) => ({ x: from.x + (dx / len) * t + out.x * o, z: from.z + (dz / len) * t + out.z * o });
   const steps = Math.max(2, Math.ceil(len / 3));
@@ -464,7 +473,7 @@ function roofSnow(): THREE.Group {
   return g;
 }
 
-function alleyHouse(models: Models, h: { x: number; z: number; rotY: number; scale: number }): THREE.Object3D {
+export function alleyHouse(models: Models, h: { x: number; z: number; rotY: number; scale: number }): THREE.Object3D {
   const g = new THREE.Group();
   const house = models.clone('ttHouse');
   if (house) {

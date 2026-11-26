@@ -1,0 +1,62 @@
+// 1장 04-4a: 돌 아치 → 우편함 골목 → 유나네 앞마당 찾기(실제 키). 지우의 그림 지도 펴기·접기.
+import { expect, test, type Page } from '@playwright/test';
+
+test.use({ viewport: { width: 640, height: 360 } });
+
+type P = { id: string; x: number; z: number; mapOpen: boolean };
+type S = { players: P[]; items: { id: string; carriedBy: string | null }[]; found: boolean };
+const g = (page: Page) => page.evaluate(() => (window as unknown as { __lastgift: { ch1(): S } }).__lastgift.ch1());
+const lane = (page: Page, x: number, z: number) =>
+  page.evaluate(([x, z]) => (window as unknown as { __lastgift: { lane(x: number, z: number): { s: number; t: number } } }).__lastgift.lane(x, z), [x, z] as const);
+const place = (page: Page, id: string, s: number, t: number) =>
+  page.evaluate(([id, s, t]) => (window as unknown as { __lastgift: { debugPlace(id: string, s: number, t: number, f: number): void } }).__lastgift.debugPlace(id, s, t, Math.PI * 1.25), [id, s, t] as const);
+async function hold(page: Page, keys: string[], ms: number) {
+  for (const k of keys) await page.keyboard.down(k);
+  await page.waitForTimeout(ms);
+  for (const k of keys) await page.keyboard.up(k);
+}
+
+test('1장: 선물을 들고 골목을 올라가고, 빈손 E로 지도를 펴며, 담 끝을 돌아 앞마당에 들어서면 찾았다', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/?chapter=1&test&noshadow&noestablish');
+  await page.waitForFunction(() => !!(window as unknown as { __lastgift?: { ch1?: unknown } }).__lastgift?.ch1, null, { timeout: 30_000 });
+  await page.waitForTimeout(500);
+  // 발치의 스케치북을 집는다
+  await page.keyboard.press('KeyE');
+  await page.waitForTimeout(200);
+  expect((await g(page)).items.find((i) => i.carriedBy === 'p0')?.id).toBe('sketchbook');
+  // 위(W) = 골목 앞쪽: 들고 걸어도 골목 안
+  const s0 = await g(page);
+  const a = await lane(page, s0.players[0]!.x, s0.players[0]!.z);
+  await hold(page, ['KeyW'], 1500);
+  const s1 = await g(page);
+  const b = await lane(page, s1.players[0]!.x, s1.players[0]!.z);
+  expect(b.s - a.s).toBeGreaterThan(2);
+  expect(Math.abs(b.t)).toBeLessThan(3.4);
+  // 2P(빈손): 선물에서 떨어진 곳에서 Enter → 지도를 편다. 편 동안 움직이지 않는다
+  await place(page, 'p1', 8, 1);
+  await page.waitForTimeout(600);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => (window as unknown as { __lastgift: { maps(): boolean[] } }).__lastgift.maps())).toEqual([false, true]);
+  await expect(page.locator('.jiu-map.r')).toHaveClass(/on/);
+  const m0 = (await g(page)).players[1]!;
+  await hold(page, ['ArrowUp'], 600);
+  const m1 = (await g(page)).players[1]!;
+  expect(Math.hypot(m1.x - m0.x, m1.z - m0.z)).toBeLessThan(0.05);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(400);
+  expect((await g(page)).players[1]!.mapOpen).toBe(false);
+  // 담 앞에서는 곧장 못 들어가고, 오른쪽 끝(D)을 돌아 위(W)로 들어서면 찾았다
+  await place(page, 'p0', 39, 0);
+  await page.waitForTimeout(500);
+  await hold(page, ['KeyW'], 1500);
+  expect((await g(page)).found).toBe(false);
+  await place(page, 'p0', 40.5, 8.5);
+  await page.waitForTimeout(500);
+  await hold(page, ['KeyW'], 1500);
+  expect((await g(page)).found).toBe(true);
+  expect(errors).toEqual([]);
+});
