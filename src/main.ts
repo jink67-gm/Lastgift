@@ -3,6 +3,7 @@
 //   ?chapter=0  0장 선물 분류(한 기기 2인)
 //   ?chapter=1  1장 우편함 골목 → 유나네 앞마당 찾기(한 기기 2인)
 //   ?chapter=2  2장 수선집: 뒤뜰 → 덧문 → 반입 통로 → 작업실 (로컬 2인: 1P WASD+E, 2P 방향키+Enter)
+//   ?chapter=3  3장 공방 옆문 → 울타리 샛길 → 민재네 마당: 공 던져 받기와 콩이(한 기기 2인)
 import { Models } from './scene/models';
 
 const chapter = new URLSearchParams(location.search).get('chapter');
@@ -21,6 +22,7 @@ void Models.load().then(async (models) => {
   if (chapter === '0') (await import('./game/chapter0')).startChapter0(models);
   else if (chapter === '1') (await import('./game/chapter1')).startChapter1(models);
   else if (chapter === '2') (await import('./game/chapter2')).startChapter2(models);
+  else if (chapter === '3') (await import('./game/chapter3')).startChapter3(models);
   else (await import('./game/plaza')).startPlaza(models);
   loading.remove();
 });

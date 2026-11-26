@@ -7,22 +7,9 @@
 import type { Bounds, Collider } from '../core/collision';
 import { ELF_H, TT_HOUSE_SCALE, TOWN } from './townScale';
 
-/** 골목 앞쪽(화면 위쪽, 북서) */
-const F = { x: -Math.SQRT1_2, z: -Math.SQRT1_2 };
-/** 골목 오른쪽(화면 오른쪽, 북동) */
-const R = { x: Math.SQRT1_2, z: -Math.SQRT1_2 };
+import { W, YAW, laneWall, toLane } from './lane';
 
-/** 골목 좌표(s, t) → 월드 */
-export function W(s: number, t: number): { x: number; z: number } {
-  return { x: s * F.x + t * R.x, z: s * F.z + t * R.z };
-}
-/** 골목 방향 각(바라보는 방향 = atan2(x, z)): 앞(화면 위)·오른쪽·뒤(사진기 쪽)·왼쪽 */
-export const YAW = {
-  forward: Math.atan2(F.x, F.z),
-  right: Math.atan2(R.x, R.z),
-  back: Math.atan2(-F.x, -F.z),
-  left: Math.atan2(-R.x, -R.z),
-};
+export { W, YAW, toLane };
 
 export type MailSymbol = 'fish' | 'bird' | 'star' | 'cat';
 export type PotKind = 'windmill' | 'tulip' | 'cactus';
@@ -132,18 +119,7 @@ export function inYunasYard(p: { x: number; z: number }): boolean {
   return s > YARD.front + 0.4 && s < YARD.back && t > YARD.left && t < YARD.right;
 }
 
-/** 월드 → 골목 좌표 */
-export function toLane(p: { x: number; z: number }): { s: number; t: number } {
-  return { s: p.x * F.x + p.z * F.z, t: p.x * R.x + p.z * R.z };
-}
-
-/** 골목 좌표의 선분을 두께 있는 벽(회전 사각형)으로 */
-function wall(a: { s: number; t: number }, b: { s: number; t: number }, thick: number): Collider {
-  const pa = W(a.s, a.t);
-  const pb = W(b.s, b.t);
-  const dx = pb.x - pa.x, dz = pb.z - pa.z;
-  return { kind: 'obb', x: (pa.x + pb.x) / 2, z: (pa.z + pb.z) / 2, yaw: Math.atan2(dx, dz), ha: Math.hypot(dx, dz) / 2, hb: thick / 2 };
-}
+const wall = laneWall;
 
 /** 집 몸통(회전 사각형) */
 function houseBox(h: Ch1House): Collider {
