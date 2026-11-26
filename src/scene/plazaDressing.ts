@@ -6,7 +6,7 @@
 // 텍스처나 모델을 못 불러와도 색과 기본 도형으로 길·골목이 보인다. 저사양(detail: 'low')은 눈결·노멀맵을 뺀다.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { PLAZA_DRESSING, PLAZA_PROPS, type Prop } from '../data/plaza';
+import { PLAZA_DRESSING, PLAZA_PROPS, WORKSHOP, type Prop } from '../data/plaza';
 import { FENCE_SCALE, KENNEY_HOUSE_SCALE, MAILBOX_SCALE, TOWN } from '../data/townScale';
 import type { Models } from './models';
 import { warmPool } from './winterLight';
@@ -195,10 +195,10 @@ function loadImage(url: string): Promise<HTMLImageElement | null> {
   });
 }
 
-function packedPath(base: string, detail: Detail): THREE.Mesh {
-  const pts = PLAZA_DRESSING.path.points.map((p) => new THREE.Vector3(p.x, 0, p.z));
+function packedPath(base: string, detail: Detail, path: { width: number; points: { x: number; z: number }[] } = PLAZA_DRESSING.path): THREE.Mesh {
+  const pts = path.points.map((p) => new THREE.Vector3(p.x, 0, p.z));
   const mat = new THREE.MeshStandardMaterial({ color: '#ffffff', transparent: true, depthWrite: false, roughness: 0.9, map: packedPathTexture(null), side: THREE.DoubleSide });
-  const m = new THREE.Mesh(ribbon(pts, PLAZA_DRESSING.path.width, 8.8, 0.006), mat);
+  const m = new THREE.Mesh(ribbon(pts, path.width, 8.8, 0.006), mat);
   m.userData.flat = true;
   m.renderOrder = 1;
   if (detail !== 'low') {
@@ -276,38 +276,91 @@ function sleighTrail(sleigh: Prop): THREE.Group {
 // ─── 쌓인 눈·그늘 ──────────────────────────────────────────────────────
 
 const driftMat = new THREE.MeshStandardMaterial({ color: C.drift, roughness: 1 });
-/** 낮고 둥글게 쌓인 눈 더미(길이 len, 폭 depth, 높이 h) */
-function drift(len: number, depth: number, h: number): THREE.Mesh {
-  const m = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 8, 0, Math.PI * 2, 0, Math.PI / 2), driftMat);
-  m.scale.set(len / 2, h, depth / 2);
-  m.userData.noCast = true; // 낮은 눈 더미는 그림자 지도에 그리지 않는다(저사양 부담)
+
+/**
+ * 낮고 길게 이어지는 불규칙한 눈둑. 선(points)을 따라 단면이 둥근 띠를 만들고, 폭·높이를 천천히 출렁이게 한다.
+ * bumps: 이 지점들(울타리 기둥·모서리) 둘레는 도톰하게. 반복되는 타원 덩어리 대신 한 덩어리로 이어진다.
+ */
+function berm(points: { x: number; z: number }[], width: number, height: number, seed = 1, bumps: { x: number; z: number }[] = []): THREE.Mesh {
+  const curve = new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(p.x, 0, p.z)), false, 'centripetal');
+  const len = curve.getLength();
+  const n = Math.max(6, Math.ceil(len / 0.35));
+  const across = 7;
+  const pos: number[] = [];
+  const idx: number[] = [];
+  const noise = (t: number, k: number) => Math.sin(t * 2.3 + seed * 1.7 + k) * 0.5 + Math.sin(t * 5.1 + seed * 3.1 + k * 2) * 0.3;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const p = curve.getPointAt(t);
+    const tan = curve.getTangentAt(t);
+    const nx = -tan.z, nz = tan.x;
+    const run = t * len;
+    // 끝은 땅으로 잦아들고, 기둥 가까이는 도톰하게
+    const end = Math.min(1, run / 0.8, (len - run) / 0.8);
+    let bump = 0;
+    for (const b of bumps) bump = Math.max(bump, Math.exp(-((p.x - b.x) ** 2 + (p.z - b.z) ** 2) / 0.35));
+    const h = height * Math.max(0, end) * (1 + 0.25 * noise(run, 0) + 0.6 * bump);
+    const w = width * (0.6 + 0.4 * Math.max(0, end)) * (1 + 0.2 * noise(run, 1) + 0.35 * bump);
+    for (let j = 0; j <= across; j++) {
+      const a = (j / across) * Math.PI; // 0..π: 한쪽 끝 → 꼭대기 → 반대쪽 끝
+      const off = Math.cos(a) * (w / 2);
+      pos.push(p.x + nx * off, Math.sin(a) * h + 0.002, p.z + nz * off);
+    }
+    if (i > 0) {
+      const r0 = (i - 1) * (across + 1), r1 = i * (across + 1);
+      for (let j = 0; j < across; j++) idx.push(r0 + j, r1 + j, r0 + j + 1, r0 + j + 1, r1 + j, r1 + j + 1);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  const m = new THREE.Mesh(g, bermMat);
+  m.userData.noCast = true;
+  return m;
+}
+const bermMat = new THREE.MeshStandardMaterial({ color: C.drift, roughness: 1, side: THREE.DoubleSide });
+
+/** 요정 발자국 줄(실제로 오가는 곳에만). 좌우로 번갈아 찍힌 작은 타원, 끝으로 갈수록 옅다 */
+let printTex: THREE.CanvasTexture | null = null;
+function footprints(points: { x: number; z: number }[]): THREE.Mesh {
+  printTex ??= (() => {
+    const t = canvasTex(32, 64, (g) => {
+      g.fillStyle = 'rgba(120,138,170,0.75)';
+      for (const [x, y] of [[10, 14], [22, 46]] as const) {
+        g.beginPath();
+        g.ellipse(x, y, 4.2, 7, 0, 0, Math.PI * 2);
+        g.fill();
+      }
+    });
+    t.wrapT = THREE.RepeatWrapping;
+    return t;
+  })();
+  const pts = points.map((p) => new THREE.Vector3(p.x, 0, p.z));
+  const m = new THREE.Mesh(ribbon(pts, 0.42, 0.62, 0.01), new THREE.MeshBasicMaterial({ map: printTex, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
+  m.userData.flat = true;
+  m.renderOrder = 2;
   return m;
 }
 
-/** 통나무집 벽 밑 눈(처마 아래 그늘 띠와 함께). 회전은 집과 같이 */
-function cabinBase(p: Prop): THREE.Group {
+/** 집 벽 밑 눈(처마 아래 그늘 띠와 함께). 처마 밑은 얇게, 모서리 기둥 밑은 도톰하게, 문 앞은 비운다. 회전은 집과 같이 */
+function cabinBase(p: Prop, scale: number): THREE.Group {
   const g = new THREE.Group();
-  const w = 2.4 * KENNEY_HOUSE_SCALE, d = ((p.cells ?? 2) + 0.4) * KENNEY_HOUSE_SCALE; // 회전 전 벽 바깥 둘레(사람 집)
-  // 처마 밑 그늘: 벽에서 조금 나온 띠
-  for (const [x, z, sw, sd] of [[0, d / 2 + 0.9, w + 1.6, 2.0], [0, -d / 2 - 0.9, w + 1.6, 2.0], [w / 2 + 0.9, 0, 2.0, d + 1.6], [-w / 2 - 0.9, 0, 2.0, d + 1.6]] as const) {
-    const c = contactShadow(sw, sd, 0.3);
+  const w = 2.4 * scale, d = ((p.cells ?? 2) + 0.4) * scale; // 회전 전 벽 바깥 둘레
+  const k = scale / KENNEY_HOUSE_SCALE; // 사람 집 1, 요정 공방 약 0.57
+  // 처마 밑 그늘: 벽에서 조금 나온 띠(앞쪽은 문 안쪽 그늘과 이어져 깊이를 준다)
+  const eave = 1.8 * k + 0.4;
+  for (const [x, z, sw, sd, o] of [[0, d / 2 + eave / 2, w + 0.6, eave, 0.34], [0, -d / 2 - eave / 2, w + 0.6, eave, 0.28], [w / 2 + eave / 2, 0, eave, d + 0.6, 0.28], [-w / 2 - eave / 2, 0, eave, d + 0.6, 0.28]] as const) {
+    const c = contactShadow(sw, sd, o);
     c.position.set(x, 0.008, z);
     g.add(c);
   }
-  // 벽 밑에 두툼하게 남은 눈(현관 앞 문 자리는 비운다)
-  const front = d / 2 + 0.3;
-  const parts: [number, number, number, number, number][] = [
-    [w * 0.26, front, w * 0.42, 1.4, 0.7], // 앞벽 오른쪽(창 밑). 문 앞(왼쪽)은 비워 현관 바닥이 평평하다
-    [0, -d / 2 - 0.3, w, 1.4, 0.8],
-    [w / 2 + 0.3, 0, 1.4, d, 0.75],
-    [-w / 2 - 0.3, 0, 1.4, d, 0.75],
-  ];
-  for (const [x, z, sx, sz, h] of parts) {
-    const m = drift(Math.max(sx, sz), Math.min(sx, sz), h);
-    if (sz > sx) m.rotation.y = Math.PI / 2;
-    m.position.set(x, 0, z);
-    g.add(m);
-  }
+  const fz = d / 2 + 0.25, bz = -d / 2 - 0.3, sx = w / 2 + 0.3;
+  const corners = [{ x: sx, z: fz }, { x: -sx, z: fz }, { x: sx, z: bz }, { x: -sx, z: bz }];
+  // 처마 밑(앞벽): 얇게, 창 아래 쪽만. 문(왼쪽 칸) 앞은 비운다
+  g.add(berm([{ x: w * 0.02, z: fz }, { x: w * 0.25, z: fz + 0.05 }, { x: sx, z: fz }], 0.9 * k + 0.4, 0.22 * k + 0.08, p.x, corners));
+  // 뒤·옆 벽 밑: 바람에 몰린 도톰한 눈
+  g.add(berm([{ x: -sx, z: fz - 0.6 }, { x: -sx - 0.1, z: 0 }, { x: -sx, z: bz }, { x: 0, z: bz - 0.1 }, { x: sx, z: bz }, { x: sx + 0.1, z: 0 }, { x: sx, z: fz - 0.6 }], 1.5 * k + 0.5, 0.55 * k + 0.15, p.z, corners));
   g.position.set(p.x, 0, p.z);
   g.rotation.y = p.rotY ?? 0;
   return g;
@@ -318,12 +371,10 @@ function benchBase(p: Prop): THREE.Group {
   const g = new THREE.Group();
   const c = contactShadow((p.w ?? 1.5) + 0.5, (p.d ?? 0.85) + 0.4, 0.38);
   g.add(c);
-  for (const s of [-1, 1]) {
-    const m = drift(1.3, 1.0, 0.3);
-    m.position.set((s * (p.w ?? 1.5)) / 2.3, 0, 0.1);
-    g.add(m);
-  }
+  const hw = (p.w ?? 1.5) / 2;
+  g.add(berm([{ x: -hw - 0.3, z: -0.35 }, { x: 0, z: -0.45 }, { x: hw + 0.3, z: -0.35 }], 0.9, 0.22, p.x, [{ x: -hw + 0.2, z: -0.3 }, { x: hw - 0.2, z: -0.3 }]));
   g.position.set(p.x, 0, p.z);
+  g.rotation.y = p.rotY ?? 0;
   return g;
 }
 
@@ -341,11 +392,11 @@ function roundedBox(w: number, h: number, d: number): THREE.BufferGeometry {
 }
 
 /** 낮은 울타리(Tiny Treats, 없으면 기본 도형) + 가로대 위 둥근 눈 + 바깥 눈둑. 바닥 단면을 가린다 */
-function edgeFence(models: Models, from: { x: number; z: number }, to: { x: number; z: number }): THREE.Group {
+function edgeFence(models: Models, from: { x: number; z: number }, to: { x: number; z: number }, scale = FENCE_SCALE): THREE.Group {
   const g = new THREE.Group();
   const dx = to.x - from.x, dz = to.z - from.z, len = Math.hypot(dx, dz);
   const yaw = -Math.atan2(dz, dx); // 울타리 조각의 +x를 진행 방향으로
-  const SCALE = FENCE_SCALE; // 사람 무릎~허리 높이(요정 키 × 1.6)
+  const SCALE = scale; // 사람 울타리: 무릎~허리 높이(요정 키 × 1.6). 길가 울타리는 요정 키 높이
   const piece = 2.5 * SCALE;
   const n = Math.floor(len / piece);
   const snowMat = new THREE.MeshStandardMaterial({ color: C.drift, roughness: 1 });
@@ -386,17 +437,15 @@ function edgeFence(models: Models, from: { x: number; z: number }, to: { x: numb
   const out = new THREE.Vector3(-dz / len, 0, dx / len);
   const center = new THREE.Vector3((from.x + to.x) / 2, 0, (from.z + to.z) / 2);
   if (Math.abs(center.x + out.x) < Math.abs(center.x) || Math.abs(center.z + out.z) < Math.abs(center.z)) out.negate();
-  for (let i = 0; i < Math.ceil(len / 3.2); i++) {
-    const t = (i + 0.5) * (len / Math.ceil(len / 3.2));
-    const m = drift(4.6, 2.0, 0.6 + ((i * 37) % 5) * 0.05);
-    m.position.set(from.x + (dx / len) * t + out.x * 1.1, 0, from.z + (dz / len) * t + out.z * 1.1);
-    m.rotation.y = yaw;
-    g.add(m);
-    const inner = drift(3.8, 0.9, 0.3);
-    inner.position.set(from.x + (dx / len) * t - out.x * 0.35, 0, from.z + (dz / len) * t - out.z * 0.35);
-    inner.rotation.y = yaw;
-    g.add(inner);
-  }
+  // 한 덩어리로 낮고 길게 이어지는 눈둑: 바깥쪽은 도톰하게(땅을 가린다), 안쪽은 얇게. 기둥 밑은 더 도톰하게
+  const along = (t: number, o: number) => ({ x: from.x + (dx / len) * t + out.x * o, z: from.z + (dz / len) * t + out.z * o });
+  const steps = Math.max(2, Math.ceil(len / 3));
+  const outer = Array.from({ length: steps + 1 }, (_, i) => along((i / steps) * len, 0.9 + 0.25 * Math.sin(i * 1.7)));
+  const inner = Array.from({ length: steps + 1 }, (_, i) => along((i / steps) * len, -0.15));
+  const posts = Array.from({ length: n + 1 }, (_, i) => along(i * piece, 0));
+  const k = SCALE / FENCE_SCALE;
+  g.add(berm(outer, 2.4 * k + 0.4, 0.5 * k + 0.1, from.x + from.z));
+  g.add(berm(inner, 0.7 * k + 0.2, 0.16 * k + 0.05, from.x - from.z, posts));
   return g;
 }
 
@@ -501,6 +550,7 @@ function porch(): THREE.Group {
   glow.position.set(0, 0.006, 1.6);
   g.add(glow);
   g.position.set(PLAZA_DRESSING.porch.x, 0, PLAZA_DRESSING.porch.z);
+  g.rotation.y = PLAZA_DRESSING.porch.rotY; // 앞(+z) = 집 앞면 방향
   return g;
 }
 
@@ -555,10 +605,19 @@ export function createPlazaDressing(models: Models, base: string, detail: Detail
   const root = new THREE.Group();
   root.name = 'plazaDressing';
   root.add(packedPath(base, detail));
+  root.add(packedPath(base, detail, PLAZA_DRESSING.porchPath));
+  for (const f of PLAZA_DRESSING.footprints) root.add(footprints(f));
   const sleigh = PLAZA_PROPS.find((p) => p.kind === 'sleigh');
   if (sleigh) root.add(sleighTrail(sleigh));
   for (const p of PLAZA_PROPS) {
-    if (p.kind === 'cabin') root.add(cabinBase(p));
+    if (p.kind === 'cabin') root.add(cabinBase(p, KENNEY_HOUSE_SCALE));
+    if (p.kind === 'workshop') root.add(cabinBase(p, WORKSHOP.scale));
+    if (p.kind === 'workbench' || p.kind === 'shed') {
+      // 작업대·창고 밑 그늘(깊이)
+      const c = contactShadow((p.w ?? 2) + 0.6, (p.d ?? 1) + 0.6, 0.42);
+      c.position.set(p.x, 0.009, p.z);
+      root.add(c);
+    }
     if (p.kind === 'bench') root.add(benchBase(p));
     if (p.kind === 'lamp') {
       const c = contactShadow(0.7, 0.7, 0.35);
@@ -566,14 +625,13 @@ export function createPlazaDressing(models: Models, base: string, detail: Detail
       root.add(c);
     }
     if (p.kind === 'clockTower') {
-      for (const s of [-1, 1]) {
-        const m = drift(2.8, 0.8, 0.4);
-        m.position.set(p.x, 0, p.z + s * 1.45);
-        root.add(m);
-      }
+      const h = (p.w ?? 5.6) / 2 + 0.3;
+      root.add(berm([{ x: p.x - h, z: p.z + h }, { x: p.x + h, z: p.z + h }], 1.4, 0.45, 3));
     }
   }
   for (const f of PLAZA_DRESSING.fences) root.add(edgeFence(models, f.from, f.to));
+  // 길 북쪽 윤곽: 요정 키 높이 울타리(Tiny Treats 울타리 배율 1)
+  for (const f of PLAZA_DRESSING.laneFences) root.add(edgeFence(models, f.from, f.to, 1.0));
   for (const h of PLAZA_DRESSING.alleyHouses) root.add(alleyHouse(models, h));
   root.add(fishMailbox(models));
   root.add(porch());

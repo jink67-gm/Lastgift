@@ -12,7 +12,8 @@ const KEY_DIR = new THREE.Vector3(-5, 14, 7).normalize().multiplyScalar(30);
 
 export function createWinterLight(scene: THREE.Scene, renderer: THREE.WebGLRenderer, opts: { shadows: boolean; mapSize: number }): WinterLight {
   scene.background = new THREE.Color('#223049');
-  scene.add(new THREE.HemisphereLight('#c4d4f0', '#7c8aa8', 1.55));
+  // 그늘은 옅은 청회색: 바닥 반사색을 밝게 해 그늘이 요정 실루엣보다 먼저 눈에 띄지 않게
+  scene.add(new THREE.HemisphereLight('#c8d6f0', '#98a6c2', 1.55));
   const key = new THREE.DirectionalLight('#fff0db', 2.5);
   scene.add(key);
   scene.add(key.target);
@@ -24,6 +25,8 @@ export function createWinterLight(scene: THREE.Scene, renderer: THREE.WebGLRende
     key.shadow.bias = -0.0006;
     key.shadow.normalBias = 0.03;
     key.shadow.radius = 3;
+    // 그림자 세기를 낮춘다(요정의 작은 실루엣보다 그림자가 먼저 보이지 않게)
+    (key.shadow as THREE.LightShadow & { intensity?: number }).intensity = 0.62;
     key.shadow.camera.near = 1;
     key.shadow.camera.far = 80;
   }

@@ -140,6 +140,8 @@ test('두 요정이 선물 다섯 개를 그림 표식 네 곳에 나눠 놓으�
 
   // 2P: 색연필 통 → 유나네, 수리 상자 → 할머니 댁(트리 있는 집)
   await bring(page, 'p1', 'pencils', [{ x: -2.5, z: 2.2 }, { x: -9, z: 2.2 }, { x: -12.6, z: -2.0 }], MARK.yuna);
+  // 공방 앞 작업대를 돌아 수리 상자 쪽으로
+  await walk(page, 'p1', [{ x: -6, z: -2.6 }, { x: -2.6, z: -3.9 }]);
   await bring(page, 'p1', 'repair', [{ x: -3, z: -4 }, { x: -4.5, z: 2.2 }, { x: -9, z: 6.8 }, { x: -12.7, z: 9.6 }], MARK.grandma);
   // 1P: 축구공 → 민재네(눈사람)
   await bring(page, 'p0', 'ball', [{ x: 8.9, z: 2.2 }, { x: 8.9, z: 9.6 }], MARK.minjae);
@@ -149,13 +151,13 @@ test('두 요정이 선물 다섯 개를 그림 표식 네 곳에 나눠 놓으�
 
   // 재봉틀: 혼자서는 안 들린다 → 둘이 양끝을 잡아 수선집(단추)으로
   const c = s.sewing.crate;
-  await walk(page, 'p0', [{ x: 6.5, z: 2.2 }, { x: 6.5, z: -5.4 }, { x: 0.85, z: -5.4 }, grip(c, 0)], 0.25);
+  await walk(page, 'p0', [{ x: 6, z: 4 }, { x: -0.6, z: 0.6 }, grip(c, 0)], 0.25);
   await press(page, 'p0');
   expect((await st(page)).sewing.crate.lifted).toBe(false);
-  await walk(page, 'p1', [{ x: -9, z: 6.8 }, { x: -4.5, z: 2.2 }, { x: -3, z: -4 }, { x: -0.5, z: -5.2 }, { x: 3.6, z: -5.2 }, grip(c, 1)], 0.25);
+  await walk(page, 'p1', [{ x: -9, z: 6.8 }, { x: -2, z: 3 }, { x: 2.6, z: 0.4 }, grip(c, 1)], 0.25);
   await press(page, 'p1');
   expect((await st(page)).sewing.crate.lifted).toBe(true);
-  for (const wp of [{ x: 2, z: -5 }, { x: 12.7, z: -5 }]) await carry(page, { ...wp, yaw: Math.PI / 2 });
+  for (const wp of [{ x: 6, z: -1.2 }, { x: 12.7, z: -1.2 }, { x: 12.7, z: -5 }]) await carry(page, { ...wp, yaw: Math.PI / 2 });
   await press(page, 'p0');
   s = await st(page);
   expect(s.crateSorted).toBe(true);
@@ -167,4 +169,21 @@ test('두 요정이 선물 다섯 개를 그림 표식 네 곳에 나눠 놓으�
   expect(run.completedChapters).toContain(0);
   expect(JSON.parse((await call<string>(page, 'savedCheckpoint'))!)).toMatchObject({ chapterId: 1 });
   expect(errors).toEqual([]);
+});
+
+test('공방 골목: 두 요정이 실제 키로 광장 → 작업대 앞 → 공방 문턱까지 걷고, 문 앞에서 집·문짝에 가려지지 않는다', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.goto('/?chapter=0&test&noshadow');
+  await page.waitForFunction(() => !!(window as unknown as { __lastgift?: { sorting?: unknown } }).__lastgift?.sorting, null, { timeout: 30_000 });
+  // 1P: 광장 → 작업대 앞(썰매 짐칸 옆을 지나) → 공방 문턱
+  await walk(page, 'p0', [{ x: 1.2, z: -2.6 }, { x: -2.4, z: -3.8 }, { x: -6.6, z: -3.8 }, { x: -8.7, z: -5.0 }]);
+  // 2P: 같은 길로 뒤따라 문 옆에 선다(두 요정이 엇갈릴 여유)
+  await walk(page, 'p1', [{ x: 2.6, z: -2.8 }, { x: -2.4, z: -3.2 }, { x: -7.6, z: -3.6 }, { x: -7.6, z: -4.4 }]); // 가운데 재봉틀 상자 오른쪽으로 돌아
+  const s = await st(page);
+  const p0 = s.sewing.players.find((p) => p.id === 'p0')!;
+  expect(Math.hypot(p0.x + 8.7, p0.z + 5.0)).toBeLessThan(0.3);
+  await page.waitForTimeout(600);
+  // 문 앞 두 요정을 가리는 큰 물체가 없다(공방·문짝은 흐려지지 않는다)
+  const faded = await call<string[]>(page, 'faded');
+  expect(faded.filter((n) => n === 'workshop' || n === 'sleigh')).toEqual([]);
 });

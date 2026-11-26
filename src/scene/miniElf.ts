@@ -14,9 +14,11 @@ const BODY_HEIGHT = 1.1;
 /** 부위별 색(메시 이름 → 재질 이름 → 색). null은 숨김 */
 const PAINT: Record<string, Record<string, string | null>> = {
   Medieval_Head: { Black: '#111111', Brown: '#3a2414', White: '#8a5a2b', Skin: '#f1c9a5', DarkBrown: null },
-  Medieval_Body: { Black: '#2f8a3e', DarkBrown: '#256b31', LightBrown: '#7a4a24', Skin: '#f1c9a5', Gold: '#f2c14e', Metal: '#f7f7f7' },
+  // 몸통 초록 · 허리띠 금색(몸통과 다리 사이 경계가 화면에서 읽히게)
+  Medieval_Body: { Black: '#2f8a3e', DarkBrown: '#256b31', LightBrown: '#e2b23c', Skin: '#f1c9a5', Gold: '#f2c14e', Metal: '#f7f7f7' },
   Medieval_Legs: { Black: '#c8323c' },
-  Medieval_Feet: { LightBrown: '#8a5a32', DarkBrown: '#5a3620' },
+  // 장화: 짙은 갈색(눈 위에서 발끝 윤곽이 또렷하게)
+  Medieval_Feet: { LightBrown: '#3a2416', DarkBrown: '#24160d' },
 };
 
 function hatTexture(base: string, pattern: HatPattern, accent: string): THREE.CanvasTexture {
@@ -139,8 +141,8 @@ export function createMiniElf(models: Models, look: ElfLook): ElfView | null {
   // 비율: 머리 크게, 다리·발 짧게, 몸통 통통하게(동작은 뼈 크기를 건드리지 않는다)
   findBone(model, 'Head')?.scale.setScalar(1.75);
   for (const n of ['UpperLegL', 'UpperLegR', 'LowerLegL', 'LowerLegR']) findBone(model, n)?.scale.set(1.25, 0.52, 1.25);
-  for (const n of ['FootL', 'FootR']) findBone(model, n)?.scale.set(1.1, 0.55, 1.1);
-  findBone(model, 'Torso')?.scale.set(1.18, 0.85, 1.18);
+  for (const n of ['FootL', 'FootR']) findBone(model, n)?.scale.set(1.35, 0.62, 1.35); // 장화를 도톰하게
+  findBone(model, 'Torso')?.scale.set(1.28, 0.85, 1.28);
 
   const mixer = new THREE.AnimationMixer(model);
   const clips = new Map(models.animations('elf').map((c) => [c.name.replace('CharacterArmature|', ''), c] as const));

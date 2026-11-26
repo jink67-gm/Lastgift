@@ -35,7 +35,12 @@ const CAMERA_PITCH = (testParams.has('test') && testParams.get('pitch') ? Number
 const ESTABLISH = { x: -2, z: -4, viewH: 22, sec: 3.2 }; // 썰매 뒤 골목과 두 집까지 들어오게 북쪽으로 조금
 const SIM_DT = 1 / 60;
 const PLAYERS = ['p0', 'p1'] as const;
-const CARRY_Y = 1.55;
+/**
+ * 요정 크기: 0장 화면에서 1.2배(모자 제외 키 약 1.32). 문(2.8)·벤치 좌판(1.0)·재봉틀 상자(0.6)와 견줘 정했다.
+ * 시험 모드에서만 ?elf=배율로 바꿔 비교할 수 있다. 판정(충돌 반지름·손잡이 거리)은 그대로다.
+ */
+const ELF_SCALE = testParams.has('test') && testParams.get('elf') ? Number(testParams.get('elf')) : 1.2;
+const CARRY_Y = 1.55 * ELF_SCALE;
 
 function iconOf(a: SortAction): ActionIcon {
   if (a.kind === 'pick') return 'pick';
@@ -115,6 +120,7 @@ export function startChapter0(models: Models): void {
   // 모델
   const elves = PLAYERS.map((_, i) => {
     const e = createElfAvatar(models, ELF_LOOKS[i]!);
+    e.root.scale.multiplyScalar(ELF_SCALE);
     setShadows(e.root, true, false);
     scene.add(e.root);
     return e;
@@ -208,13 +214,13 @@ export function startChapter0(models: Models): void {
       e.root.position.set(p.x, 0, p.z);
       e.root.rotation.y = p.facing;
       e.animate(elapsed, p.moving);
-      bars[i]!.group.position.set(p.x, 1.95, p.z);
+      bars[i]!.group.position.set(p.x, 1.95 * ELF_SCALE, p.z);
       bars[i]!.group.quaternion.copy(camera.quaternion);
       bars[i]!.set(p.stamina, needsSwap(sw, p), p.holding !== null || p.stamina < 100);
       swaps[i]!.visible = needsSwap(sw, p);
       if (p.holding !== null) {
         const g = gripPos(c, p.holding);
-        swaps[i]!.position.set(g.x, 2.3, g.z);
+        swaps[i]!.position.set(g.x, 2.3 * ELF_SCALE, g.z);
       }
       const a = run.canPlay ? planAction(sort, p.id) : ({ kind: 'none' } as const);
       if (i === 0) mine = a;
@@ -238,8 +244,10 @@ export function startChapter0(models: Models): void {
       want = { ...want, x: held.x, z: held.z };
     }
     // 광장 밖도 눈밭·울타리·골목·먼 마을이 채우므로 가장자리 가까이까지 따라간다
-    const tx = Math.max(PLAZA_BOUNDS.minX + 2, Math.min(PLAZA_BOUNDS.maxX - 2, want.x));
-    const tz = Math.max(PLAZA_BOUNDS.minZ, Math.min(PLAZA_BOUNDS.maxZ - 2, want.z));
+    // 터치 기기: 아래 모서리의 스틱·행동 버튼에 요정이 깔리지 않게 화면을 조금 아래로(요정이 화면에서 위쪽에) 둔다
+    const safe = touchDevice ? (0.1 * viewH) / Math.sin(CAMERA_PITCH) / Math.SQRT2 : 0;
+    const tx = Math.max(PLAZA_BOUNDS.minX + 2, Math.min(PLAZA_BOUNDS.maxX - 2, want.x + safe));
+    const tz = Math.max(PLAZA_BOUNDS.minZ, Math.min(PLAZA_BOUNDS.maxZ - 2, want.z + safe));
     const k = snapCamera ? 1 : 1 - Math.exp(-frame * 3);
     // 넓히기는 빨리(친구가 화면 밖으로 나가지 않게), 좁히기는 천천히
     const kz = snapCamera ? 1 : 1 - Math.exp(-frame * (want.viewH > viewH ? 4 : 1.2));
@@ -256,7 +264,7 @@ export function startChapter0(models: Models): void {
     light.follow(camTarget.x, camTarget.z, viewH * aspect, viewH / Math.sin(CAMERA_PITCH));
     // 사람 크기 집·울타리가 요정·짐을 가리면 그 물체만 잠시 흐리게
     const pts: THREE.Vector3[] = [];
-    for (const p of sw.players) if (p.connected) pts.push(new THREE.Vector3(p.x, 0.5, p.z), new THREE.Vector3(p.x, 1.05, p.z));
+    for (const p of sw.players) if (p.connected) pts.push(new THREE.Vector3(p.x, 0.5 * ELF_SCALE, p.z), new THREE.Vector3(p.x, 1.05 * ELF_SCALE, p.z));
     pts.push(new THREE.Vector3(c.x, 0.4, c.z));
     fader.update(pts, frame);
     renderer.render(scene, camera);
@@ -307,10 +315,10 @@ export function startChapter0(models: Models): void {
       /** 비율 확인용: 오른쪽 아래 집 현관 앞에 벤치·가로등을 같은 바닥 높이로 나란히 세운다(시험 모드만) */
       lineup: () => {
         const b = townBench(models);
-        b.position.set(PLAZA_DRESSING.porch.x + 4.2, 0, PLAZA_DRESSING.porch.z + 2.4);
+        b.position.set(PLAZA_DRESSING.porch.x + 2.4, 0, PLAZA_DRESSING.porch.z + 3.6);
         scene.add(b);
         const l = townLamp();
-        l.position.set(PLAZA_DRESSING.porch.x - 3.0, 0, PLAZA_DRESSING.porch.z + 2.0);
+        l.position.set(PLAZA_DRESSING.porch.x + 2.4, 0, PLAZA_DRESSING.porch.z - 3.2);
         scene.add(l);
       },
       faded: () => fader.faded(),

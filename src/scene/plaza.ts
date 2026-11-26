@@ -1,9 +1,13 @@
 // 광장 소품. Kenney 모델(CC0)이 있으면 그것으로, 없으면 기본 도형으로 그린다. 배치는 src/data/plaza.ts를 따른다.
 // 썰매·눈더미·산타·시계탑은 아직 직접 만든 기본 도형이다.
 import * as THREE from 'three';
-import { PLAZA_BOUNDS, PLAZA_PROPS, type Prop } from '../data/plaza';
+import { PLAZA_BOUNDS, PLAZA_PROPS, WORKBENCH, WORKSHOP, type Prop, type PropKind } from '../data/plaza';
+
+/** 요정을 가리면 잠시 흐려지는 큰 물체(집·공방·창고·나무·시계탑·썰매·산타·가로등) */
+const FADEABLE = new Set<PropKind>(['cabin', 'workshop', 'shed', 'pine', 'tree', 'clockTower', 'sleigh', 'santa', 'lamp']);
 import { BENCH_SCALE, KENNEY_HOUSE_SCALE, TOWN } from '../data/townScale';
 import { buildCabin, kenneyProp } from './kenney';
+import { createShed, createWorkbench, createWorkshopSign } from './workshop';
 import { Models } from './models';
 import { applySnowSurface, createPlazaDressing, type Detail } from './plazaDressing';
 import { warmPool } from './winterLight';
@@ -170,17 +174,31 @@ export function townLamp(): THREE.Group {
 function build(p: Prop, models: Models, lampLights: { n: number }): THREE.Object3D {
   switch (p.kind) {
     case 'sleigh': return scaled(sleigh(), 1.8); // 산타 썰매: 산타(사람 어른)가 앉을 크기
-    case 'snowPile': return scaled(snowPile(2.2), 1.3);
+    case 'snowPile': return scaled(snowPile(2.2), ((p.r ?? 2.2) / 2.2) * 1.25); // 썰매 앞이 처박힌 눈둑
     case 'santa': return scaled(santa(), 2.05); // 사람 어른: 요정 키의 약 4배
     case 'clockTower': return scaled(clockTower(), 2.5); // 집(약 12)보다 높은 랜드마크
-    case 'tree': return kenneyProp(models, 'treeDecorated', 4.4) ?? scaled(tree(), 3.3); // 마을 트리 약 10
+    case 'tree': return kenneyProp(models, 'treeDecorated', 3.4) ?? scaled(tree(), 2.6); // 마을 트리 약 7.8(공방 지붕보다 조금 높게)
     case 'pine': return kenneyProp(models, p.x + p.z > 0 ? 'treeSnowB' : 'treeSnowA', 5.4) ?? scaled(pine(), 3.4);
     case 'cabin': {
-      // 집 모양은 회전 전 기준(앞 = +z)으로 만들고, 배치 때 rotY로 돌린다
+      // 집 모양은 회전 전 기준(앞 = +z)으로 만들고, 배치 때 rotY로 돌린다. 통나무는 중간 밝기 갈색으로
       const cells = p.cells ?? 2;
-      return buildCabin(models, { depth: cells, wreath: true, scale: KENNEY_HOUSE_SCALE }) ?? house(2 * KENNEY_HOUSE_SCALE, cells * KENNEY_HOUSE_SCALE);
+      return buildCabin(models, { depth: cells, wreath: true, scale: KENNEY_HOUSE_SCALE, tint: '#d8c2ad' }) ?? house(2 * KENNEY_HOUSE_SCALE, cells * KENNEY_HOUSE_SCALE);
     }
     case 'bench': return townBench(models);
+    case 'workshop': {
+      // 요정 공방: 요정 크기 통나무집(문 = 요정 키의 약 2.1배), 창은 따뜻한 노랑, 통나무는 중간 밝기 갈색
+      const ws = buildCabin(models, { depth: 2, wreath: true, scale: WORKSHOP.scale, knob: WORKSHOP.knob, warm: '#ffd463', tint: '#dcc4ae' }) ?? house(2 * WORKSHOP.scale, 2 * WORKSHOP.scale);
+      const sign = createWorkshopSign();
+      sign.position.set(-WORKSHOP.scale / 2, WORKSHOP.scale * 0.93, 1.2 * WORKSHOP.scale + 0.25);
+      const g = new THREE.Group();
+      g.add(ws, sign);
+      return g;
+    }
+    case 'workbench': {
+      const g = createWorkbench(WORKBENCH.w, WORKBENCH.d, WORKBENCH.h);
+      return g;
+    }
+    case 'shed': return createShed(p.w ?? 3.4, p.d ?? 2.4);
     case 'lamp': {
       const g = townLamp();
       const pool = warmPool(1.6);
@@ -246,7 +264,7 @@ export function createPlaza(models: Models = Models.none(), detail: Detail = 'no
     if (p.rotY) o.rotation.y += p.rotY;
     o.name = p.id;
     // 사람 크기의 큰 물체: 요정을 가리면 잠시 흐리게(game/occlusionFade)
-    if (p.kind === 'cabin' || p.kind === 'pine' || p.kind === 'tree' || p.kind === 'clockTower') o.userData.fadeable = true;
+    if (FADEABLE.has(p.kind)) o.userData.fadeable = true;
     root.add(o);
   }
   return root;

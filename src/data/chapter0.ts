@@ -50,7 +50,7 @@ export const CH0 = {
   walls: [...PLAZA_COLLIDERS, ...signs] as readonly Collider[],
   /** 재봉틀 상자(무거움, 두 요정이 양끝을 함께 든다).
    *  0장은 첫 함께 들기 연습이라 수선집 표식까지 11 m 남짓(곧게 가면 5초, 체력은 28초)만 둔다. */
-  crateStart: { x: 2, z: -6.5, yaw: Math.PI / 2 },
+  crateStart: { x: 0.6, z: -1.2, yaw: Math.PI / 2 },
   tailorZone: { x: MARKERS[1]!.x, z: MARKERS[1]!.z, zone: MARKERS[1]!.r },
   spawns: [
     { x: 2, z: 4.5 },

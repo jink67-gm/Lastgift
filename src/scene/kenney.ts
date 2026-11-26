@@ -23,6 +23,12 @@ export interface CabinOptions {
   wreath?: boolean;
   /** 배율(기본 KENNEY_SCALE). 사람 집은 KENNEY_HOUSE_SCALE(문 열린 부분 = 요정 키 × 4.5) */
   scale?: number;
+  /** 문손잡이 높이(게임 단위). 기본 = 사람 손 높이(TOWN.doorKnob) */
+  knob?: number;
+  /** 창·문 안쪽 불빛 색(공방은 따뜻한 노랑) */
+  warm?: string;
+  /** 통나무 색을 중간 밝기 갈색으로 누르는 곱하기 색(재질을 이 집만 따로 만든다) */
+  tint?: string;
 }
 
 /** 2 × depth 칸 통나무집. 원점 = 바닥 가운데, 앞 = +z */
@@ -70,8 +76,9 @@ export function buildCabin(models: Models, opt: CabinOptions): THREE.Group | nul
   // 사람 문: 열린 부분(폭 0.5 × 높이 0.8단위)에 바깥으로 조금 열린 문짝 + 사람 손 높이의 손잡이(요정 키 × 2) + 낮은 문턱
   const s = opt.scale ?? KENNEY_SCALE;
   const hinge = new THREE.Group();
-  hinge.position.set(-0.75, 0, edge + 0.19);
-  hinge.rotation.y = -0.35; // 바깥(+z)으로 약 20° 열림 → 안쪽 살구빛이 틈으로 보인다
+  // 문짝은 안쪽으로 열린다: 문 앞에 선 요정을 가리지 않고, 열린 틈으로 안쪽 불빛이 보인다
+  hinge.position.set(-0.75, 0, edge - 0.17);
+  hinge.rotation.y = 1.0;
   const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, 0.035), DOOR);
   leaf.position.set(0.25, 0.4, 0);
   hinge.add(leaf);
@@ -81,22 +88,38 @@ export function buildCabin(models: Models, opt: CabinOptions): THREE.Group | nul
     hinge.add(plank);
   }
   const knob = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 8), KNOB);
-  knob.position.set(0.44, TOWN.doorKnob / s, 0.035);
+  knob.position.set(0.44, (opt.knob ?? TOWN.doorKnob) / s, 0.035);
   hinge.add(knob);
   g.add(hinge);
   const sill = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.03, 0.2), STONE);
   sill.position.set(-0.5, 0.015, edge + 0.28);
   g.add(sill);
-  const pane = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.36), WARM);
+  const warm = opt.warm ? new THREE.MeshBasicMaterial({ color: opt.warm }) : WARM;
+  const pane = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.36), warm);
   pane.position.set(0.5, 0.5, edge - 0.09);
   g.add(pane);
-  const door = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.78), WARM);
-  door.position.set(-0.5, 0.39, edge - 0.14);
+  const door = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.78), warm);
+  door.position.set(-0.5, 0.39, edge - 0.62); // 안쪽으로 열린 문짝 뒤
+  // 문 안쪽 바닥 그늘(문턱 너머가 깊어 보이게)
+  const inner = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.45), new THREE.MeshBasicMaterial({ color: '#3a2a22', transparent: true, opacity: 0.55, depthWrite: false }));
+  inner.rotation.x = -Math.PI / 2;
+  inner.position.set(-0.5, 0.004, edge - 0.3);
+  g.add(inner);
   g.add(door);
   const pr = Math.min(0.75, 2.4 / s); // 문 앞 빛 웅덩이: 땅에서 반지름 약 2.4
   const pool = warmPool(pr);
   pool.position.set(-0.4, 0.004, edge + 0.2 + pr * 0.8);
   g.add(pool);
+  if (opt.tint) {
+    const tint = new THREE.Color(opt.tint);
+    g.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || m.material === warm || m.material === WARM) return;
+      const own = (m.material as THREE.MeshStandardMaterial).clone();
+      if (own.map) own.color.copy(tint); // 텍스처를 쓰는 Kenney 조각만(덧붙인 문짝·문턱은 그대로)
+      m.material = own;
+    });
+  }
   g.scale.setScalar(s);
   return g;
 }

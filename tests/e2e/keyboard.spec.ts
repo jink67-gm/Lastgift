@@ -72,8 +72,8 @@ test('한글 입력 상태처럼 key가 "ㅈ"로 와도 code가 KeyW면 위로 �
 
 test('썰매 눈더미로 걸어 들어가도 뚫지 않고 옆으로 미끄러진다', async ({ page }) => {
   await open(page);
-  // 눈더미(중심 0,-2 / 반지름 2.6)의 비스듬한 앞에서 화면 위쪽(눈더미 쪽)으로 민다
-  await page.evaluate(() => window.__lastgift.setPlayer(2, 1));
+  // 썰매 앞 눈둑(중심 5.8,-6.2 / 반지름 1.2)의 비스듬한 앞에서 화면 위쪽(눈둑 쪽)으로 민다
+  await page.evaluate(() => window.__lastgift.setPlayer(7.6, -4.4));
   await page.keyboard.down('KeyW');
   let inside = false;
   for (let i = 0; i < 20; i++) {
@@ -83,7 +83,7 @@ test('썰매 눈더미로 걸어 들어가도 뚫지 않고 옆으로 미끄러�
   await page.keyboard.up('KeyW');
   expect(inside).toBe(false);
   const p = await player(page);
-  expect(Math.hypot(p.x - 0, p.z + 2)).toBeGreaterThanOrEqual(2.6 + 0.35 - 0.01);
+  expect(Math.hypot(p.x - 5.8, p.z + 6.2)).toBeGreaterThanOrEqual(1.2 + 0.35 - 0.01);
 });
 
 test('오래 걸어도 광장 밖으로 나가지 않는다', async ({ page }) => {
