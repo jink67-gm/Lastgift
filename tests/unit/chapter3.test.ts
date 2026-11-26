@@ -190,3 +190,18 @@ describe('3장 길', () => {
     expect(regionOf(st.players[1]!)).toBe('yard');
   });
 });
+
+describe('3장 입양 장면 시간표', () => {
+  it('정해진 순서(민재 → 인사 → 공 주고받기 → 식구 → 담요·물그릇 → 공을 문 안으로 → 장갑 → 안고 손 흔들기)로 이어지고 겹치지 않는다', async () => {
+    const { ADOPTION, adoptionBeat } = await import('../../src/core/adoption');
+    const order = [ADOPTION.door, ADOPTION.minjaeOut, ADOPTION.bow, ADOPTION.roll, ADOPTION.nudge, ADOPTION.beckon, ADOPTION.familyOut, ADOPTION.momIn, ADOPTION.momBack, ADOPTION.blanket, ADOPTION.bowlGive, ADOPTION.bowlPlace, ADOPTION.ballIn, ADOPTION.turnBack, ADOPTION.toElf, ADOPTION.rub, ADOPTION.scratch, ADOPTION.toMinjae, ADOPTION.wave];
+    for (let i = 1; i < order.length; i++) expect(order[i]![0]).toBeGreaterThanOrEqual(order[i - 1]![0]);
+    for (const s of order) expect(s[1]).toBeGreaterThan(s[0]);
+    // 장갑에 볼 비비기는 공을 문 안에 넣은 뒤, 요정이 긁어 준 뒤에야 민재에게 달려간다
+    expect(ADOPTION.rub[0]).toBeGreaterThanOrEqual(ADOPTION.ballIn[1]);
+    expect(ADOPTION.toMinjae[0]).toBeGreaterThanOrEqual(ADOPTION.scratch[1]);
+    const beats = [1, 4, 7, 10, 14, 20, 24, 28, 33].map(adoptionBeat);
+    expect(beats).toEqual(['settle', 'minjae', 'greet', 'ball', 'family', 'blanket', 'ballIn', 'glove', 'hug']);
+    expect(ADOPTION.end).toBeGreaterThan(ADOPTION.wave[0]);
+  });
+});

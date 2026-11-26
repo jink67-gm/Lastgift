@@ -164,6 +164,10 @@ export interface Ch3Scene {
   porch: THREE.Vector3;
   /** 공 자리 표시(완료하면 끈다) */
   spot: THREE.Object3D;
+  /** 현관문 열림(0 닫힘 ~ 1 활짝, 바깥으로) */
+  setDoor(open: number): void;
+  /** 현관 문간 가운데(길 좌표 s, t): 사람이 드나드는 곳 */
+  doorLane: { s: number; t: number };
   update(t: number): void;
 }
 
@@ -276,6 +280,26 @@ export function createChapter3Scene(models: Models, base: string, detail: Detail
   mat.position.copy(at(YARD_BACK - 0.7, doorT, 0.012));
   mat.userData.flat = true;
   root.add(mat);
+  // 여닫는 현관문(모델 문 위에 덧댄다): 열리면 뒤에 따뜻한 불빛 문간이 드러난다(05b 입양 장면)
+  const DOOR = { w: 2.2, h: TOWN.doorOpening };
+  const doorway = new THREE.Mesh(new THREE.PlaneGeometry(DOOR.w, DOOR.h), new THREE.MeshBasicMaterial({ color: '#ffcf7a' }));
+  doorway.position.copy(at(YARD_BACK - 0.04, doorT, DOOR.h / 2));
+  doorway.rotation.y = YAW.back;
+  root.add(doorway);
+  const doorHinge = new THREE.Group();
+  // 경첩: 문을 마주 본 사람의 왼쪽 끝(길 좌표 t가 작은 쪽)
+  doorHinge.position.copy(at(YARD_BACK - 0.08, doorT - DOOR.w / 2));
+  doorHinge.rotation.y = YAW.back;
+  const leafMesh = new THREE.Mesh(new THREE.BoxGeometry(DOOR.w, DOOR.h, 0.1), std('#3f6f9a', { roughness: 0.7 }));
+  leafMesh.position.set(DOOR.w / 2, DOOR.h / 2, 0);
+  doorHinge.add(leafMesh);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), std('#e0b021', { metalness: 0.5, roughness: 0.4 }));
+  knob.position.set(DOOR.w - 0.3, TOWN.doorKnob, 0.1);
+  doorHinge.add(knob);
+  const wreath = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.13, 8, 20), std('#2f7a3f'));
+  wreath.position.set(DOOR.w / 2, DOOR.h * 0.72, 0.12);
+  doorHinge.add(wreath);
+  root.add(doorHinge);
   const pool = warmPool(3.0);
   pool.position.copy(at(YARD_BACK - 1.6, doorT, 0.006));
   root.add(pool);
@@ -330,6 +354,10 @@ export function createChapter3Scene(models: Models, base: string, detail: Detail
     gateCenters,
     porch,
     spot,
+    doorLane: { s: YARD_BACK, t: doorT },
+    setDoor(open) {
+      doorHinge.rotation.y = YAW.back - Math.max(0, Math.min(1, open)) * 1.75;
+    },
     setGates(open) {
       leaves.forEach((l, i) => (l.rotation.y = -(open[i] ?? 0) * 1.6));
     },

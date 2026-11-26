@@ -1,0 +1,35 @@
+<!-- 시제품(게임 코드 아님): 임시 사람 모형(민재·엄마·아빠)을 요정·콩이와 나란히, 자세별로 본다.
+     npx vite --port 5199 → /tools/prototypes/people.html?view=front|game -->
+<!doctype html><html><body style="margin:0;background:#dfe7f4"><canvas id=c></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { Models } from '/src/scene/models.ts';
+import { createPerson } from '/src/scene/people.ts';
+import { createKongi } from '/src/scene/characters.ts';
+import { createElfAvatar } from '/src/scene/elfAvatar.ts';
+import { ELF_LOOKS } from '/src/data/elves.ts';
+const q = new URLSearchParams(location.search);
+const r = new THREE.WebGLRenderer({ canvas: c, antialias: true }); r.setSize(1600, 600); r.setPixelRatio(1);
+const s = new THREE.Scene(); s.background = new THREE.Color('#dfe7f4');
+s.add(new THREE.HemisphereLight('#fff', '#8a93a8', 2.2)); const d = new THREE.DirectionalLight('#fff4e0', 1.6); d.position.set(-3, 8, 7); s.add(d);
+const models = await Models.load(['elf', 'dog'], '/');
+const poses = [
+  ['minjae', { walk: 0, crouch: 0, look: 0, armL: 'down', armR: 'down' }],
+  ['minjae', { walk: 0.3, crouch: 0, look: 0, armL: 'down', armR: 'down' }],
+  ['minjae', { walk: 0, crouch: 1, look: 0.4, armL: 'down', armR: 'reach' }],
+  ['minjae', { walk: 0, crouch: 0, look: 0, armL: 'down', armR: 'beckon' }],
+  ['minjae', { walk: 0, crouch: 0.8, look: 0.2, armL: 'hug', armR: 'wave' }],
+  ['mom', { walk: 0, crouch: 0, look: 0, armL: 'hold', armR: 'hold' }],
+  ['mom', { walk: 0, crouch: 1, look: 0.5, armL: 'down', armR: 'pet' }],
+  ['dad', { walk: 0, crouch: 0, look: 0, armL: 'down', armR: 'down' }],
+];
+poses.forEach(([role, p], i) => { const v = createPerson(models, role); v.pose(p, 1.0); v.root.position.x = -14 + i * 3.6; s.add(v.root); });
+const e = createElfAvatar(models, ELF_LOOKS[0]); e.root.scale.multiplyScalar(1.2); e.root.position.x = 15; s.add(e.root); e.animate(1, false);
+const k = createKongi(models); k.root.position.x = 17.2; k.root.rotation.y = -Math.PI / 2; s.add(k.root); k.head(-1, 0); k.update(0.1);
+const view = q.get('view') || 'front';
+const W = 34, Hh = W * 600 / 1600;
+const cam = new THREE.OrthographicCamera(-W / 2, W / 2, Hh / 2, -Hh / 2, 0.1, 200);
+if (view === 'front') { cam.position.set(1.5, 2.4, 40); cam.lookAt(1.5, 2.4, 0); }
+else { cam.position.set(1.5 + 28, 2 + 20, 28); cam.lookAt(1.5, 2, 0); }
+r.render(s, cam); window.__ready = true;
+</script></body></html>

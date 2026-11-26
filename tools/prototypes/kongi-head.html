@@ -1,0 +1,15 @@
+<!-- 시제품(게임 코드 아님): 콩이 고개(head(down, side)) 값별 모습. /tools/prototypes/kongi-head.html -->
+<!doctype html><html><body style="margin:0;background:#dfe7f4"><canvas id=c></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { Models } from '/src/scene/models.ts';
+import { createKongi } from '/src/scene/characters.ts';
+const r = new THREE.WebGLRenderer({ canvas: c, antialias: true }); r.setSize(1600, 500); r.setPixelRatio(1);
+const s = new THREE.Scene(); s.background = new THREE.Color('#dfe7f4');
+s.add(new THREE.HemisphereLight('#fff', '#8a93a8', 2.2)); const d = new THREE.DirectionalLight('#fff4e0', 1.6); d.position.set(-3, 8, 7); s.add(d);
+const models = await Models.load(['dog'], '/');
+const vals = [[0, 0], [-1, 0], [0.8, 0], [-0.4, 0.9], [-0.4, -0.9], [0, 0.5]];
+vals.forEach(([dn, sd], i) => { const k = createKongi(models); k.root.position.x = -6.5 + i * 2.6; k.root.rotation.y = Math.PI / 2; s.add(k.root); k.play('Idle'); k.head(dn, sd); for (let j = 0; j < 20; j++) k.update(1 / 30); });
+const cam = new THREE.OrthographicCamera(-8, 8, 2.5, -2.5, 0.1, 100); cam.position.set(0, 1.5, 20); cam.lookAt(0, 0.8, 0);
+r.render(s, cam); window.__ready = true;
+</script></body></html>

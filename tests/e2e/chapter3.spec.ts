@@ -14,6 +14,8 @@ type Hook = {
   ch3Events(): { type: string; playerId?: string }[];
   run(): { phase: string; chapterId: number; memories: number[]; cutscene: string | null };
   ending(): number;
+  adoption(): { t: number; beat: string | null };
+  seekEnding(t: number): void;
   gateSigns(): boolean[];
   lane(x: number, z: number): { s: number; t: number };
   debugPlace(id: string, s: number, t: number, f: number): void;
@@ -98,4 +100,26 @@ test('3장 완료: 민재네 대문 안쪽 자리에 공을 내려놓으면 기�
   expect(await H(page, (h) => h.run())).toMatchObject({ phase: 'cutscene', chapterId: 4, memories: [1, 2, 3], cutscene: 'chapter3End' });
   await page.waitForFunction(() => (window as unknown as { __lastgift: Hook }).__lastgift.ch3().kongi.mode === 'circle', null, { timeout: 10_000 });
   expect((await H(page, (h) => h.ch3Events())).filter((e) => e.type === 'complete').length).toBe(1);
+});
+
+test('3장 끝 장면: 민재가 나와 콩이를 맞고, 장갑에 볼을 비빈 뒤 안긴다(끝까지 오류 없이)', async ({ page }) => {
+  test.setTimeout(60_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await open(page);
+  await dog(page, 30, 3, 'rest');
+  await page.keyboard.press('KeyE');
+  await place(page, 'p0', 35.85, 2.6);
+  await page.waitForTimeout(300);
+  await page.keyboard.press('KeyE');
+  await page.waitForFunction(() => (window as unknown as { __lastgift: Hook }).__lastgift.ending() > 0.5, null, { timeout: 10_000 });
+  const beats: string[] = [];
+  for (const t of [1, 4.5, 7, 10, 14, 20, 24, 28, 33]) {
+    await page.evaluate((t) => (window as unknown as { __lastgift: Hook }).__lastgift.seekEnding(t), t);
+    await page.waitForTimeout(150);
+    beats.push((await H(page, (h) => h.adoption())).beat!);
+  }
+  expect(beats).toEqual(['settle', 'minjae', 'greet', 'ball', 'family', 'blanket', 'ballIn', 'glove', 'hug']);
+  await expect(page.locator('body')).toHaveClass(/cutscene/);
+  expect(errors).toEqual([]);
 });
