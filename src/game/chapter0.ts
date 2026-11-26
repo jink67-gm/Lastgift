@@ -34,6 +34,7 @@ import { sewingIcon, type ActionIcon } from '../ui/actionIcons';
 import { createControls } from '../ui/controls';
 import { createHud } from '../ui/hud';
 import { toSewingInput } from './chapter2';
+import { storyFor, type StoryOptions } from './story';
 
 const CAMERA_YAW = Math.PI / 4;
 // 내려다보는 각(땅 기준). 광장 너머 골목·지붕이 보이게 35.3°에서 낮췄다(비교 촬영: docs/screens/04-2-plaza).
@@ -63,7 +64,8 @@ function iconOf(a: SortAction): ActionIcon {
   return 'none';
 }
 
-export function startChapter0(models: Models): void {
+export function startChapter0(models: Models, opts?: StoryOptions): void {
+  const sto = storyFor(opts, 'dev-ch0');
   const host = document.getElementById('game')!;
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // 품질 설정에서 다시 정한다(applyQuality)
@@ -144,7 +146,7 @@ export function startChapter0(models: Models): void {
   const marks = createOffscreenMarks(document, PLAYERS.length);
 
   // 새 시도(0장): 프롤로그 연출 → 플레이. 이어 하기(체크포인트)·시간 초과 재시도면 프롤로그 없이 바로 플레이
-  const run = new LocalRun(new CheckpointStore(browserStorage()), hud, 'dev-ch0', 'p0');
+  const run = new LocalRun(new CheckpointStore(browserStorage()), hud, sto.roomId, 'p0');
   run.attachVisibility(document);
   run.onEffect((e) => {
     if (e.type === 'retry') sort = createSorting(PLAYERS);
@@ -320,7 +322,11 @@ export function startChapter0(models: Models): void {
         if (e.type === 'sorted') markers.flash(e.dest, true);
         if (e.type === 'wrong') markers.flash(e.dest, false);
         // 다섯 물건이 모두 제자리 → 0장 완료(1장 최초 체크포인트 저장)
-        if (e.type === 'complete') run.dispatch({ type: 'completeChapter', at: now, chapterId: 0 });
+        if (e.type === 'complete') {
+          run.dispatch({ type: 'completeChapter', at: now, chapterId: 0 });
+          // 이야기 모드: 잠깐 뒤 1장으로
+          if (sto.story) window.setTimeout(() => sto.next(), 1800);
+        }
       }
       inputs = Object.fromEntries(Object.entries(inputs).map(([k, v]) => [k, { ...v, actionDown: false }]));
       acc -= SIM_DT;

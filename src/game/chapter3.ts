@@ -34,6 +34,7 @@ import { createHud } from '../ui/hud';
 import { createOffscreenMarks } from '../ui/offscreen';
 import { createSettingsUi } from '../ui/settings';
 import { toSewingInput } from './chapter2';
+import { storyFor, type StoryOptions } from './story';
 
 const testParams = new URLSearchParams(location.search);
 const CAMERA_PITCH = (testParams.has('test') && testParams.get('pitch') ? Number(testParams.get('pitch')) : 30) * (Math.PI / 180);
@@ -112,7 +113,8 @@ function handGlyph(g: CanvasRenderingContext2D, x = 0, y = 0, k = 1): void {
   g.restore();
 }
 
-export function startChapter3(models: Models): void {
+export function startChapter3(models: Models, opts?: StoryOptions): void {
+  const sto = storyFor(opts, 'dev-ch3');
   const host = document.getElementById('game')!;
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -230,7 +232,7 @@ export function startChapter3(models: Models): void {
   });
   const marks = createOffscreenMarks(document, PLAYERS.length);
 
-  const run = new LocalRun(new CheckpointStore(browserStorage()), hud, 'dev-ch3', 'p0', chapter3Checkpoint('dev-ch3'));
+  const run = new LocalRun(new CheckpointStore(browserStorage()), hud, sto.roomId, 'p0', sto.story ? undefined : chapter3Checkpoint(sto.roomId));
   run.attachVisibility(document);
   run.onEffect((e) => {
     if (e.type === 'retry') state = createChapter3(PLAYERS, run.state.seed);
@@ -521,6 +523,7 @@ export function startChapter3(models: Models): void {
    */
   function updateEnding(frame: number): boolean {
     ending += frame;
+    if (ending > ADOPTION.end + 0.6) sto.next(); // 이야기 모드: 입양 장면 뒤 4장으로
     const t = ending;
     const A = ADOPTION;
     for (const h of hands) h.visible = false;

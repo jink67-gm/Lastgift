@@ -83,3 +83,24 @@ describe('개인 설정', () => {
     expect(loadSettings(kv)).toMatchObject({ quality: 'auto', showFps: false });
   });
 });
+
+describe('체크포인트 정수 저장', () => {
+  it('소수 시각으로 장을 마쳐도 저장한 체크포인트를 다시 불러올 수 있다(보정 시간·남은 시간은 정수 ms)', async () => {
+    const { createRun, reduce, toCheckpoint } = await import('../../src/core/run');
+    const { CheckpointStore } = await import('../../src/save/store');
+    const mem = new Map<string, string>();
+    const kv = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) };
+    let s = createRun('r', 'story', 1);
+    s = reduce(s, { type: 'start', at: 0.3 }).state;
+    if (s.phase === 'cutscene') s = reduce(s, { type: 'cutsceneDone', at: 0.7 }).state;
+    // 남은 시간이 바닥값보다 적은 채로(보정이 생기게) 소수 시각에 마친다
+    s = reduce(s, { type: 'tick', at: 1_650_000.37 }).state;
+    s = reduce(s, { type: 'completeChapter', at: 1_650_000.37, chapterId: 0 }).state;
+    const cp = toCheckpoint(s);
+    expect(Number.isInteger(cp.timeAssistMs)).toBe(true);
+    expect(Number.isInteger(cp.savedRemainingMs)).toBe(true);
+    const store = new CheckpointStore(kv);
+    store.save(cp);
+    expect(store.load('story')).toMatchObject({ chapterId: 1 });
+  });
+});

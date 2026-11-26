@@ -33,6 +33,7 @@ import { createOffscreenMarks } from '../ui/offscreen';
 import { createSettingsUi } from '../ui/settings';
 import { createStorybook, drawWhale, type Storybook } from '../ui/storybook';
 import { toSewingInput } from './chapter2';
+import { storyFor, type StoryOptions } from './story';
 
 const testParams = new URLSearchParams(location.search);
 const CAMERA_PITCH = (testParams.has('test') && testParams.get('pitch') ? Number(testParams.get('pitch')) : 30) * (Math.PI / 180);
@@ -68,7 +69,8 @@ function iconOf(a: Ch1Action): ActionIcon {
   return 'none';
 }
 
-export function startChapter1(models: Models): void {
+export function startChapter1(models: Models, opts?: StoryOptions): void {
+  const sto = storyFor(opts, 'dev-ch1');
   const host = document.getElementById('game')!;
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -236,13 +238,16 @@ export function startChapter1(models: Models): void {
   const maps = createMapView(document, PLAYERS.length);
 
   // 처음 들어온 1장이면 지우 카드 그림책 먼저(시계는 그림책이 끝난 뒤 흐른다). 시험 모드는 &story일 때만
-  const hadSave = new CheckpointStore(browserStorage()).load('dev-ch1') !== null;
-  const run = new LocalRun(new CheckpointStore(browserStorage()), hud, 'dev-ch1', 'p0', chapter1Checkpoint('dev-ch1'));
+  const hadSave = new CheckpointStore(browserStorage()).load(sto.roomId) !== null;
+  const run = new LocalRun(new CheckpointStore(browserStorage()), hud, sto.roomId, 'p0', sto.story ? undefined : chapter1Checkpoint(sto.roomId));
   run.attachVisibility(document);
   run.onEffect((e) => {
     if (e.type === 'retry') state = createChapter1(PLAYERS, run.state.seed);
   });
-  let story: Storybook | null = !hadSave && (!params.has('test') || params.has('story')) ? createStorybook(document) : null;
+  // 이야기 모드는 이 시도에서 1장에 처음 들어올 때만(시험은 &intro일 때만)
+  const wantStory = sto.story ? !sto.introSeen(run.state.runId, 1) && (!params.has('test') || params.has('intro')) : !hadSave && (!params.has('test') || params.has('story'));
+  let story: Storybook | null = wantStory ? createStorybook(document) : null;
+  if (story) sto.markIntro(run.state.runId, 1);
   const begin = () => {
     run.dispatch({ type: 'start', at: performance.now() });
     if (run.state.phase === 'cutscene') run.dispatch({ type: 'cutsceneDone', at: performance.now() });
@@ -513,6 +518,7 @@ export function startChapter1(models: Models): void {
    */
   function updateEnding(frame: number): boolean {
     ending += frame;
+    if (ending > 11) sto.next(); // 이야기 모드: 끝 장면 뒤 2장으로
     const t = ending;
     const sg = (a: number, b: number) => Math.min(1, Math.max(0, (t - a) / (b - a)));
     const ez = (x: number) => x * x * (3 - 2 * x);

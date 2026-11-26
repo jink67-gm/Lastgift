@@ -18,6 +18,7 @@ import { createHud } from '../ui/hud';
 import { createLobby } from '../ui/lobby';
 import { createChapter2Screen } from './chapter2Screen';
 import type { Models } from '../scene/models';
+import { storyFor, type StoryOptions } from './story';
 
 const SIM_DT = 1 / 60;
 const LOCAL_PLAYERS = ['p0', 'p1'] as const;
@@ -42,10 +43,11 @@ export function toSewingInput(i: Intent): SewingInput {
   return { move: i.move, actionDown: i.action.down, actionHeld: i.action.held };
 }
 
-export function startChapter2(models: Models): void {
+export function startChapter2(models: Models, opts?: StoryOptions): void {
   const q = new URLSearchParams(location.search);
   const emu = q.has('emu');
-  if (q.has('local')) return startLocal(models);
+  // 이야기 모드(한 기기)·?chapter=2&local
+  if (opts?.story || q.has('local')) return startLocal(models, opts);
   if (q.has('host')) {
     void import('./chapter2Net').then((m) => m.startHost(emu, models));
     return;
@@ -70,7 +72,8 @@ export function startChapter2(models: Models): void {
 }
 
 /** 한 기기에서 둘이(로컬 2인) */
-function startLocal(models: Models): void {
+function startLocal(models: Models, opts?: StoryOptions): void {
+  const sto = storyFor(opts, 'dev-ch2');
   const host = document.getElementById('game')!;
   const screen = createChapter2Screen(host, models);
   let sewing: SewingState = createSewing(LOCAL_PLAYERS);
@@ -84,7 +87,7 @@ function startLocal(models: Models): void {
   const hud = createHud(document);
 
   // 방이 따로라 0장 기록과 섞이지 않는다
-  const run = new LocalRun(new CheckpointStore(browserStorage()), hud, 'dev-ch2', 'p0', chapter2Checkpoint('dev-ch2'));
+  const run = new LocalRun(new CheckpointStore(browserStorage()), hud, sto.roomId, 'p0', sto.story ? undefined : chapter2Checkpoint(sto.roomId));
   run.attachVisibility(document);
   // 0초 → 재시도: 이 장의 임시 진행(상자 위치·문·공간)을 처음으로
   run.onEffect((e) => {
@@ -112,7 +115,10 @@ function startLocal(models: Models): void {
       for (const e of r.events) {
         events.push(e);
         // 작업대에 바르게 내려놓으면 2장 완료(기억 2). 문·공간 이동은 체크포인트를 건드리지 않는다.
-        if (e.type === 'delivered') run.dispatch({ type: 'completeChapter', at: now, chapterId: 2 });
+        if (e.type === 'delivered') {
+          run.dispatch({ type: 'completeChapter', at: now, chapterId: 2 });
+          if (sto.story) window.setTimeout(() => sto.next(), 2500); // 이야기 모드: 3장으로
+        }
       }
       // 행동은 첫 틱에서만 쓴다(같은 입력을 두 번 쓰지 않는다)
       inputs = Object.fromEntries(Object.entries(inputs).map(([k, v]) => [k, { ...v, actionDown: false }]));

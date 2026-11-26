@@ -35,6 +35,7 @@ import { createHud } from '../ui/hud';
 import { createOffscreenMarks } from '../ui/offscreen';
 import { createSettingsUi } from '../ui/settings';
 import { toSewingInput } from './chapter2';
+import { storyFor, type StoryOptions } from './story';
 
 const testParams = new URLSearchParams(location.search);
 const CAMERA_PITCH = (testParams.has('test') && testParams.get('pitch') ? Number(testParams.get('pitch')) : 30) * (Math.PI / 180);
@@ -83,7 +84,8 @@ function iconOf(a: Ch4Action): ActionIcon {
   }
 }
 
-export function startChapter4(models: Models): void {
+export function startChapter4(models: Models, opts?: StoryOptions): void {
+  const sto = storyFor(opts, 'dev-ch4');
   const host = document.getElementById('game')!;
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -168,8 +170,8 @@ export function startChapter4(models: Models): void {
   const marks = createOffscreenMarks(document, PLAYERS.length);
 
   // 1인 연습 저장은 본편과 따로
-  const roomId = solo ? 'practice-ch4' : 'dev-ch4';
-  const run = new LocalRun(new CheckpointStore(browserStorage()), hud, roomId, 'p0', chapter4Checkpoint(roomId));
+  const roomId = solo ? 'practice-ch4' : sto.roomId;
+  const run = new LocalRun(new CheckpointStore(browserStorage()), hud, roomId, 'p0', sto.story ? undefined : chapter4Checkpoint(roomId));
   run.attachVisibility(document);
   const fresh = () => (solo ? createPractice('p0') : createChapter4(PLAYERS));
   run.onEffect((e) => {
@@ -184,7 +186,8 @@ export function startChapter4(models: Models): void {
     run.dispatch({ type: 'start', at: performance.now() });
     if (run.state.phase === 'cutscene') run.dispatch({ type: 'cutsceneDone', at: performance.now() });
   };
-  const wantIntro = !solo && !hadSave && (!params.has('test') || params.has('intro'));
+  const wantIntro = !solo && (sto.story ? !sto.introSeen(run.state.runId, 4) : !hadSave) && (!params.has('test') || params.has('intro'));
+  if (wantIntro) sto.markIntro(run.state.runId, 4);
   if (!wantIntro) begin();
   let lastProgress = '';
 
@@ -718,6 +721,7 @@ export function startChapter4(models: Models): void {
    */
   function updateEnding(frame: number): void {
     ending += frame;
+    if (ending > TREE_END.end + 0.6) sto.next(); // 이야기 모드: 사진 뒤 5장으로
     const t = ending;
     const E = TREE_END;
     document.body.classList.add('cutscene');

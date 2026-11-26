@@ -37,6 +37,7 @@ import { createPrologueUi, type PrologueUi } from '../ui/prologueUi';
 import { createMemoryView, type MemoryView } from '../ui/memories';
 import { createSettingsUi } from '../ui/settings';
 import { toSewingInput } from './chapter2';
+import { storyFor, type StoryOptions } from './story';
 
 const testParams = new URLSearchParams(location.search);
 const CAMERA_PITCH = (testParams.has('test') && testParams.get('pitch') ? Number(testParams.get('pitch')) : 30) * (Math.PI / 180);
@@ -64,7 +65,8 @@ function iconOf(a: FinaleAction): ActionIcon {
   return a.kind === 'peek' ? 'peek' : a.kind === 'openBag' ? 'bag' : a.kind === 'take' ? 'pick' : a.kind === 'deliver' ? 'give' : a.kind === 'notYet' ? 'blocked' : 'none';
 }
 
-export function startFinale(models: Models, startChapter: 5 | 6): void {
+export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOptions): void {
+  const sto = storyFor(opts, startChapter === 5 ? 'dev-ch5' : 'dev-ch6');
   const host = document.getElementById('game')!;
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -136,10 +138,10 @@ export function startFinale(models: Models, startChapter: 5 | 6): void {
   });
   const marks = createOffscreenMarks(document, PLAYERS.length);
 
-  const roomId = startChapter === 5 ? 'dev-ch5' : 'dev-ch6';
+  const roomId = sto.roomId;
   const store = new CheckpointStore(browserStorage());
   const hadSave = store.load(roomId) !== null;
-  const run = new LocalRun(store, hud, roomId, 'p0', finaleCheckpoint(roomId, startChapter));
+  const run = new LocalRun(store, hud, roomId, 'p0', sto.story ? undefined : finaleCheckpoint(roomId, startChapter));
   run.attachVisibility(document);
   const begin = () => {
     run.dispatch({ type: 'start', at: performance.now() });
@@ -226,7 +228,8 @@ export function startFinale(models: Models, startChapter: 5 | 6): void {
   /** 가방 연출 끝에 요정들이 선 자리(6장 시작 자리) */
   const approachEnd: { x: number; z: number }[] = [];
 
-  const wantPhoto = startChapter === 5 && !hadSave && (!params.has('test') || params.has('intro'));
+  const wantPhoto = startChapter === 5 && (sto.story ? !sto.introSeen(run.state.runId, 5) : !hadSave) && (!params.has('test') || params.has('intro'));
+  if (wantPhoto) sto.markIntro(run.state.runId, 5);
   if (wantPhoto) {
     cut = 'photo';
     ui = createPrologueUi(document);
@@ -676,6 +679,12 @@ export function startFinale(models: Models, startChapter: 5 | 6): void {
     };
     btn('ending-replay', '다시 보기 ↺', () => (cutT = CH6_END.look[0]));
     btn('ending-skip', '건너뛰기 ▶▶', () => (cutT = Math.max(cutT, CH6_END.end)));
+    // 이야기 모드: 새 시도(저장 칸을 비우고 0장 프롤로그부터)
+    if (sto.story)
+      btn('ending-restart', '처음부터 ↺', () => {
+        store.clear(roomId);
+        location.reload();
+      });
     document.body.appendChild(endUi);
     window.addEventListener('keydown', (e) => {
       if (cut === 'deliver' && e.key === 'Escape') cutT = Math.max(cutT, CH6_END.end);
@@ -689,6 +698,7 @@ export function startFinale(models: Models, startChapter: 5 | 6): void {
     controls.update('none');
     (endUi?.querySelector('#ending-replay') as HTMLElement | null)?.style.setProperty('display', t >= E.end ? 'block' : 'none');
     (endUi?.querySelector('#ending-skip') as HTMLElement | null)?.style.setProperty('display', t < E.end ? 'block' : 'none');
+    (endUi?.querySelector('#ending-restart') as HTMLElement | null)?.style.setProperty('display', t >= E.end ? 'block' : 'none');
     // 요정들: 그 자리에서 산타를 본다. 장갑 요정(첫 요정)은 끝에 제 장갑을 내려다본다
     const gi = Math.max(0, PLAYERS.indexOf(giver as (typeof PLAYERS)[number]));
     const thumbI = 0;

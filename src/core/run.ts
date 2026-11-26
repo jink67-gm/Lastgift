@@ -188,10 +188,11 @@ export function toCheckpoint(s: RunState): Checkpoint {
     runId: s.runId,
     roomId: s.roomId,
     chapterId: s.chapterId,
-    savedRemainingMs: s.savedRemainingMs,
+    // 시각(performance.now)이 소수라 저장할 때 정수 ms로(불러오기 검사가 정수를 요구한다)
+    savedRemainingMs: Math.max(0, Math.round(s.savedRemainingMs)),
     completedChapters: [...s.completedChapters],
     memories: [...s.memories],
-    timeAssistMs: s.timeAssistMs,
+    timeAssistMs: Math.max(0, Math.round(s.timeAssistMs)),
     retryCount: s.retryCount,
     seed: s.seed,
     ...(s.photo ? { photo: s.photo } : {}),
