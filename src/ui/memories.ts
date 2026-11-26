@@ -271,6 +271,172 @@ const DRAW: Record<string, Draw> = {
   },
 };
 
+/** 2장 끝: 아주머니가 새 재봉틀로 빨간 코트 소매를 줄인다 → 아이가 입고 팔을 쭉, 손이 쏙 → 남은 빨간 실을 끊으며 웃는다(16:9) */
+function redCoat(g: CanvasRenderingContext2D, w: number, h: number, k: number, t: number): void {
+  room(g, w, h);
+  // 창(눈 오는 밤)과 옷걸이의 옷들
+  g.fillStyle = '#24335e';
+  g.fillRect(w * 0.06, h * 0.12, w * 0.22, h * 0.36);
+  g.fillStyle = 'rgba(255,255,255,0.85)';
+  for (let i = 0; i < 18; i++) {
+    const x = w * 0.07 + ((i * 53) % (w * 0.2));
+    const y = h * 0.13 + ((i * 37 + t * 40) % (h * 0.34));
+    g.beginPath();
+    g.arc(x, y, 3, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.strokeStyle = '#7a4a2a';
+  g.lineWidth = 10;
+  g.strokeRect(w * 0.06, h * 0.12, w * 0.22, h * 0.36);
+  g.fillStyle = '#5a3a24';
+  g.fillRect(w * 0.82, h * 0.18, w * 0.12, h * 0.02);
+  for (const [i, c] of ['#3f7a52', '#2f6fd0', '#e0b021'].entries()) {
+    g.fillStyle = c;
+    g.beginPath();
+    g.roundRect(w * (0.83 + i * 0.035), h * 0.2, w * 0.03, h * 0.2, 6);
+    g.fill();
+  }
+  // 작업대 + 새 재봉틀(반짝)
+  g.fillStyle = '#a07a52';
+  g.fillRect(w * 0.42, h * 0.66, w * 0.4, h * 0.05);
+  g.fillStyle = '#2a2d35';
+  g.fillRect(w * 0.55, h * 0.6, w * 0.2, h * 0.06);
+  g.fillRect(w * 0.7, h * 0.44, w * 0.05, h * 0.18);
+  g.fillRect(w * 0.56, h * 0.43, w * 0.19, h * 0.04);
+  const sew = k < 0.38;
+  const needle = sew ? Math.abs(Math.sin(t * 22)) * h * 0.03 : 0;
+  g.fillStyle = '#c9c9c9';
+  g.fillRect(w * 0.58, h * 0.47, w * 0.006, h * 0.1 + needle);
+  g.fillStyle = 'rgba(255,255,255,0.8)';
+  g.beginPath();
+  g.arc(w * 0.73, h * 0.46, 5 + 3 * Math.sin(t * 6), 0, Math.PI * 2);
+  g.fill();
+  // 빨간 실 한 가닥(끝에 끊는다)
+  const cut = ease((k - 0.8) / 0.08);
+  g.strokeStyle = '#d23a3a';
+  g.lineWidth = 3;
+  g.beginPath();
+  g.moveTo(w * 0.585, h * 0.57);
+  g.quadraticCurveTo(w * 0.62, h * 0.63, w * (0.66 - 0.03 * cut), h * (0.6 + 0.05 * cut));
+  g.stroke();
+  // 아주머니(재봉틀 뒤, 앞치마) — 끝에 가위로 실을 끊으며 웃는다
+  person(g, w * 0.66, h * 0.6, w / 880, { coat: '#6a8cc4', hair: '#5a3a24', armsUp: sew ? 0.55 + 0.05 * Math.sin(t * 9) : k > 0.78 ? 0.6 : 0.15 });
+  if (k > 0.76) {
+    g.strokeStyle = '#9aa3ad';
+    g.lineWidth = 4;
+    const sx = w * 0.62, sy = h * 0.6, o = 0.25 * Math.abs(Math.sin(t * 10)) * (1 - cut);
+    g.beginPath();
+    g.moveTo(sx, sy);
+    g.lineTo(sx + w * 0.04 * Math.cos(o), sy - w * 0.04 * Math.sin(o));
+    g.moveTo(sx, sy);
+    g.lineTo(sx + w * 0.04 * Math.cos(-o), sy - w * 0.04 * Math.sin(-o));
+    g.stroke();
+  }
+  // 아이(빨간 코트): 처음엔 코트가 재봉틀 위 → 입고 두 팔을 쭉, 줄인 소매 밖으로 손이 쏙
+  if (k < 0.38) {
+    g.fillStyle = '#d23a3a';
+    g.beginPath();
+    g.roundRect(w * 0.5, h * 0.56, w * 0.1, h * 0.05, 8);
+    g.fill();
+  } else {
+    const reach = ease((k - 0.42) / 0.16);
+    const x = w * 0.28;
+    person(g, x, h * 0.66, w / 1000, { coat: '#d23a3a', hair: '#3a2418', armsUp: reach });
+    // 손이 쏙(소매 밖으로)
+    const pop = ease((k - 0.5) / 0.1);
+    if (pop > 0) {
+      g.fillStyle = '#f1c9a5';
+      const s = w / 1000;
+      for (const sx of [-1, 1]) {
+        g.beginPath();
+        g.arc(x + sx * (30 + 26) * s, h * 0.66 - 20 * s, 10 * s * (0.4 + 0.6 * pop), 0, Math.PI * 2);
+        g.fill();
+      }
+      if (pop < 1) {
+        g.fillStyle = `rgba(255,236,150,${(1 - pop).toFixed(2)})`;
+        for (const sx of [-1, 1]) {
+          g.beginPath();
+          g.arc(x + sx * 56 * s, h * 0.66 - 20 * s, 26 * s, 0, Math.PI * 2);
+          g.fill();
+        }
+      }
+    }
+  }
+}
+
+export interface ClipView {
+  /** dt만큼 흘린다. 끝났으면 true */
+  update(dt: number): boolean;
+  readonly t: number;
+  mode(): 'video' | 'drawn';
+  skip(): void;
+  dispose(): void;
+}
+
+/** 화면 전체 짧은 장면(2장 끝): 영상 파일이 있으면 영상, 없으면 손그림. 건너뛰기(버튼·Esc) */
+export function createClipView(doc: Document, o: { file: string; base: string; duration: number }): ClipView {
+  const root = doc.createElement('div');
+  root.id = 'clip';
+  root.style.cssText = 'position:fixed;inset:0;z-index:40;background:#070b16;display:grid;place-items:center;opacity:0;transition:opacity 0.6s';
+  const box = doc.createElement('div');
+  box.style.cssText = 'position:relative;width:min(100vw,177.8vh);aspect-ratio:16/9';
+  const cv = doc.createElement('canvas');
+  cv.width = 1280;
+  cv.height = 720;
+  cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
+  const video = doc.createElement('video');
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = 'auto';
+  video.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none';
+  let ok = false;
+  video.addEventListener('loadeddata', () => (ok = true));
+  video.src = `${o.base}video/${o.file}`;
+  box.append(cv, video);
+  root.appendChild(box);
+  const skipBtn = doc.createElement('button');
+  skipBtn.id = 'clip-skip';
+  skipBtn.type = 'button';
+  skipBtn.textContent = '건너뛰기 ▶▶';
+  skipBtn.style.cssText = 'position:fixed;right:calc(env(safe-area-inset-right) + 16px);bottom:calc(env(safe-area-inset-bottom) + 16px);z-index:41;min-height:48px;padding:0 18px;border-radius:24px;border:3px solid #fff;background:rgba(27,36,51,0.72);color:#fff;font:700 16px system-ui,sans-serif;cursor:pointer';
+  doc.body.append(root, skipBtn);
+  doc.body.classList.add('cutscene');
+  requestAnimationFrame(() => (root.style.opacity = '1'));
+  let t = 0;
+  let done = false;
+  const g = cv.getContext('2d')!;
+  const finish = () => (done = true);
+  skipBtn.addEventListener('click', finish);
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') finish();
+  };
+  doc.addEventListener('keydown', onKey);
+  return {
+    get t() {
+      return t;
+    },
+    update(dt) {
+      t += dt;
+      const dur = ok && Number.isFinite(video.duration) && video.duration > 0 ? video.duration : o.duration;
+      if (ok) {
+        video.style.display = 'block';
+        if (video.paused && !done) void video.play().catch(() => {});
+      } else redCoat(g, 1280, 720, Math.min(1, t / o.duration), t);
+      if (t >= dur + 0.6) done = true;
+      return done;
+    },
+    mode: () => (ok ? 'video' : 'drawn'),
+    skip: finish,
+    dispose() {
+      doc.removeEventListener('keydown', onKey);
+      video.pause();
+      root.remove();
+      skipBtn.remove();
+      doc.body.classList.remove('cutscene');
+    },
+  };
+}
+
 export interface MemoryView {
   /** 기억 장면 시각 t(끝 장면 시각). 기억 구간 밖이면 감춘다 */
   update(t: number, open: number): void;

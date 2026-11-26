@@ -19,6 +19,7 @@ import { createLobby } from '../ui/lobby';
 import { createChapter2Screen } from './chapter2Screen';
 import type { Models } from '../scene/models';
 import { storyFor, type StoryOptions } from './story';
+import { createClipView, type ClipView } from '../ui/memories';
 
 const SIM_DT = 1 / 60;
 const LOCAL_PLAYERS = ['p0', 'p1'] as const;
@@ -99,6 +100,9 @@ function startLocal(models: Models, opts?: StoryOptions): void {
   let last = performance.now();
   let acc = 0;
   let elapsed = 0;
+  let deliveredAt = -1;
+  let clip: ClipView | null = null;
+  let clipDone = false;
   requestAnimationFrame(function loop(now) {
     requestAnimationFrame(loop);
     const frame = Math.min((now - last) / 1000, 0.25);
@@ -117,13 +121,21 @@ function startLocal(models: Models, opts?: StoryOptions): void {
         // 작업대에 바르게 내려놓으면 2장 완료(기억 2). 문·공간 이동은 체크포인트를 건드리지 않는다.
         if (e.type === 'delivered') {
           run.dispatch({ type: 'completeChapter', at: now, chapterId: 2 });
-          if (sto.story) window.setTimeout(() => sto.next(), 2500); // 이야기 모드: 3장으로
+          deliveredAt = elapsed;
         }
       }
       // 행동은 첫 틱에서만 쓴다(같은 입력을 두 번 쓰지 않는다)
       inputs = Object.fromEntries(Object.entries(inputs).map(([k, v]) => [k, { ...v, actionDown: false }]));
       acc -= SIM_DT;
       elapsed += SIM_DT;
+    }
+    // 끝: 재봉틀을 내려놓고 잠깐 뒤 → 빨간 코트 장면(영상 또는 손그림) → 이야기 모드면 3장으로
+    if (deliveredAt >= 0 && !clip && !clipDone && elapsed - deliveredAt > 1.8) clip = createClipView(document, { file: 'ch2-red-coat.mp4', base: import.meta.env.BASE_URL, duration: 7 });
+    if (clip && clip.update(frame)) {
+      clip.dispose();
+      clip = null;
+      clipDone = true;
+      sto.next();
     }
     const mine = screen.draw(sewing, { frame, elapsed, previewFor: LOCAL_PLAYERS, canPlay: run.canPlay });
     controls.update(sewingIcon(mine.kind));
@@ -134,6 +146,8 @@ function startLocal(models: Models, opts?: StoryOptions): void {
     (window as unknown as Record<string, unknown>).__lastgift = {
       sewing: () => JSON.parse(JSON.stringify(sewing)) as SewingState,
       sewingEvents: () => events.map((e) => ({ ...e })),
+      clip: () => (clip ? { t: clip.t, mode: clip.mode() } : clipDone ? 'done' : null),
+      skipClip: () => clip?.skip(),
       run: () => ({ ...run.state }),
       runEffects: () => run.log.map((e) => e.type),
       savedCheckpoint: () => localStorage.getItem('lastgift.cp.v1.dev-ch2'),

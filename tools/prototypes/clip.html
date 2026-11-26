@@ -1,0 +1,11 @@
+<!-- 시제품(게임 코드 아님): 2장 끝 빨간 코트 장면(손그림 대체)을 시각 t에서 본다. /tools/prototypes/clip.html?t=3 -->
+<!doctype html><html><body style="margin:0;background:#000"><script type="module">
+import { createClipView } from '/src/ui/memories.ts';
+const t = Number(new URLSearchParams(location.search).get('t') || 2);
+const c = createClipView(document, { file: 'none.mp4', base: '/', duration: 7 });
+await new Promise((r) => setTimeout(r, 300));
+for (let i = 0; i < Math.round(t * 30); i++) c.update(1 / 30);
+document.getElementById('clip').style.transition = 'none';
+document.getElementById('clip').style.opacity = '1';
+window.__ready = true;
+</script></body></html>

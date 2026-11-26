@@ -213,5 +213,12 @@ test('앞 요정이 먼저 문을 넘고, 뒤 요정이 문턱에서 멈췄다�
   expect(saved).toMatchObject({ chapterId: 3, memories: [1, 2] });
   await page.waitForTimeout(300);
   await shot(page, 'ch2_4_bench');
+  // 9) 끝 장면: 빨간 코트(영상이 없으면 손그림) → 건너뛰기
+  await page.waitForFunction(() => (window.__lastgift as unknown as { clip(): unknown }).clip() !== null, null, { timeout: 10_000 });
+  expect(await page.evaluate(() => (window.__lastgift as unknown as { clip(): { mode: string } }).clip())).toMatchObject({ mode: 'drawn' });
+  await expect(page.locator('#clip')).toBeVisible();
+  await page.locator('#clip-skip').click();
+  await page.waitForFunction(() => (window.__lastgift as unknown as { clip(): unknown }).clip() === 'done', null, { timeout: 5_000 });
+  await expect(page.locator('#clip')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
