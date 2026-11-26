@@ -11,6 +11,7 @@ import { mergeIntents } from '../input/merge';
 import { createElfAvatar } from '../scene/elfAvatar';
 import type { Models } from '../scene/models';
 import { createGift, createTargetRing } from '../scene/gifts';
+import { holdPlace, holdShape } from '../scene/hold';
 import { createPlaza } from '../scene/plaza';
 import { browserStorage, CheckpointStore } from '../save/store';
 import { LocalRun } from '../session/localRun';
@@ -72,10 +73,10 @@ export function startPlaza(models: Models): void {
     PLAZA_GIFTS.map((g) => {
       const v = createGift(g.kind);
       if (g.light) v.scale.setScalar(1.6);
-      return [g.id, v] as const;
+      return [g.id, { v, shape: holdShape(g.kind, new THREE.Box3().setFromObject(v).getSize(new THREE.Vector3())) }] as const;
     }),
   );
-  for (const v of giftViews.values()) scene.add(v);
+  for (const { v } of giftViews.values()) scene.add(v);
   const ring = createTargetRing();
   scene.add(ring);
 
@@ -115,16 +116,23 @@ export function startPlaza(models: Models): void {
     camera.lookAt(camTarget);
   }
 
+  const hl = new THREE.Vector3();
+  const hr = new THREE.Vector3();
   function syncViews(timeSec: number): void {
     elf.root.position.set(player.x, 0, player.z);
     elf.root.rotation.y = player.facing;
-    elf.animate(timeSec, player.moving, { carry: items.some((i) => i.carriedBy !== null) ? 'light' : 'none', act: 0, tired: false });
+    const held = items.find((i) => i.carriedBy === ME);
+    elf.animate(timeSec, player.moving, { carry: held ? 'light' : 'none', act: 0, tired: false, span: held ? giftViews.get(held.id)!.shape.across : undefined });
+    elf.root.updateMatrixWorld(true);
     for (const it of items) {
-      const v = giftViews.get(it.id)!;
+      const { v, shape } = giftViews.get(it.id)!;
       if (it.carriedBy === ME) {
-        // 가슴 앞에 두 손으로 안고 간다
-        v.position.set(player.x + Math.sin(player.facing) * 0.36, 0.62 + (player.moving ? Math.abs(Math.sin(timeSec * 14)) * 0.03 : 0), player.z + Math.cos(player.facing) * 0.36);
-        v.rotation.y = player.facing;
+        // 가슴 아래에 두 손으로 품고 간다(얼굴을 가리지 않게, 손이 옆면을 잡게)
+        const fx = Math.sin(player.facing), fz = Math.cos(player.facing);
+        const hands = elf.hands?.(hl, hr) ? { y: (hl.y + hr.y) / 2, fwd: ((hl.x + hr.x) / 2 - player.x) * fx + ((hl.z + hr.z) / 2 - player.z) * fz } : null;
+        const { ahead, bottom } = holdPlace(shape, hands, 1);
+        v.position.set(player.x + fx * ahead, bottom, player.z + fz * ahead);
+        v.rotation.y = player.facing + (shape.turn ? Math.PI / 2 : 0);
       } else {
         v.position.set(it.x, 0, it.z);
       }

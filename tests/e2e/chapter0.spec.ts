@@ -188,3 +188,48 @@ test('공방 골목: 두 요정이 실제 키로 광장 → 작업대 앞 → �
   const faded = await call<string[]>(page, 'faded');
   expect(faded.filter((n) => n === 'workshop' || n === 'sleigh')).toEqual([]);
 });
+
+test('가벼운 선물을 들면 가슴 아래에 품는다: 물건 윗면이 턱 근처를 넘지 않고, 손목이 물건 높이 안에 있고, 몸 앞에 있다', async ({ page }) => {
+  test.setTimeout(120_000);
+  type Hold = { id: string; hands: { y: number; fwd: number } | null; chin: number; gift: { id: string; bottom: number; top: number; ahead: number } | null };
+  await page.goto('/?chapter=0&test&noshadow');
+  await page.waitForFunction(() => !!(window as unknown as { __lastgift?: { sorting?: unknown } }).__lastgift?.sorting, null, { timeout: 30_000 });
+  const place = (a: [number, number, number], b: [number, number, number]) =>
+    page.evaluate(([a, b]) => {
+      const g = (window as unknown as { __lastgift: { debugPlace(id: string, x: number, z: number, f: number): void } }).__lastgift;
+      g.debugPlace('p0', a[0], a[1], a[2]);
+      g.debugPlace('p1', b[0], b[1], b[2]);
+    }, [a, b] as const);
+  const check = async (ids: string[]) => {
+    const info = await call<Hold[]>(page, 'holdInfo');
+    expect(info.map((h) => h.gift?.id)).toEqual(ids);
+    for (const h of info) {
+      const g = h.gift!;
+      expect(g.top, `${g.id} 윗면`).toBeLessThan(h.chin + 0.15); // 얼굴(턱 위)을 가리지 않는다
+      expect(h.hands!.y, `${g.id} 손 높이`).toBeGreaterThan(g.bottom);
+      expect(h.hands!.y, `${g.id} 손 높이`).toBeLessThan(g.top);
+      expect(g.ahead, `${g.id} 몸 앞`).toBeGreaterThan(0.15);
+    }
+  };
+  // 스케치북·공
+  await place([4.9, 1.5, Math.PI / 2], [8.5, -1.9, Math.PI]);
+  await page.waitForTimeout(800);
+  await page.keyboard.press('KeyE');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(900);
+  await check(['sketchbook', 'ball']);
+  // 걷는 중에도
+  await place([2, 2, Math.PI / 4], [3.3, 2, Math.PI / 4]);
+  await page.waitForTimeout(900);
+  await check(['sketchbook', 'ball']);
+  // 내려놓고 색연필 통·수리 상자
+  await page.keyboard.press('KeyE');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(500);
+  await place([-2.5, 4.4, 0], [-1.5, -5.9, Math.PI]);
+  await page.waitForTimeout(800);
+  await page.keyboard.press('KeyE');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(900);
+  await check(['pencils', 'repair']);
+});

@@ -1,6 +1,8 @@
 // 0장 · 광장에 떨어진 선물 다섯 개: 그림 이름표를 보고 네 배달지 표식 아래로 나눈다(명세서 §4 0장, §5).
 //   ?chapter=0  한 기기에서 둘이(1P WASD+E·터치, 2P 방향키+Enter). 여러 기기 연결은 STEP 07 통합 때 붙인다.
 // 프롤로그(단체사진·썰매 불시착)는 STEP 04-3에서 이 장 앞에 붙인다.
+import type { GiftKind } from '../data/gifts';
+import { holdPlace, holdShape } from '../scene/hold';
 import * as THREE from 'three';
 import { gripPos, needsSwap, type SewingInput } from '../core/sewing';
 import { createSorting, planAction, step, type SortAction, type SortEvent, type SortState } from '../core/sorting';
@@ -46,8 +48,8 @@ const PLAYERS = ['p0', 'p1'] as const;
  */
 const ELF_SCALE = testParams.has('test') && testParams.get('elf') ? Number(testParams.get('elf')) : 1.2;
 /** 가벼운 선물은 가슴 앞에 두 손으로 든다(머리 위로 들면 긴 모자 위에 떠 보였다) */
-const CARRY_Y = 0.62 * ELF_SCALE;
-const CARRY_AHEAD = 0.36 * ELF_SCALE;
+/** 선물 크기(배). 공은 실제 비율, 나머지는 요정이 품에 안았을 때 얼굴을 가리지 않는 크기 */
+const GIFT_SCALE: Partial<Record<GiftKind, number>> = { ball: 1.35, pencils: 1.3, repair: 1.35 };
 
 function iconOf(a: SortAction): ActionIcon {
   if (a.kind === 'pick') return 'pick';
@@ -179,14 +181,16 @@ export function startChapter0(models: Models): void {
   const gifts = new Map(
     SORT_GIFTS.map((g) => {
       const v = createGift(g.kind);
-      // 사람 아이의 물건(축구공 지름 ≈ 요정 키 × 0.5)은 실제 크기에 맞추고, 나머지는 요정이 들기 좋은 크기
-      v.scale.setScalar(g.kind === 'ball' ? 1.35 : 1.6);
+      // 사람 아이의 물건(축구공 지름 ≈ 요정 키 × 0.5)은 실제 크기에 맞추고, 나머지는 요정이 품에 안을 수 있는 크기
+      v.scale.setScalar(GIFT_SCALE[g.kind] ?? 1.6);
       setShadows(v, true);
       scene.add(v);
+      const size = new THREE.Box3().setFromObject(v).getSize(new THREE.Vector3());
       const outline = createOutline(v, 0.035);
       const tag = createTag(g.dest);
       scene.add(tag);
-      return [g.id, { v, tag, outline }] as const;
+      // 품에 안을 때 쓰는 크기(가로·세로·높이, 원점은 바닥 가운데). 윤곽을 붙이기 전에 잰다
+      return [g.id, { v, tag, outline, size, kind: g.kind }] as const;
     }),
   );
 
@@ -275,12 +279,13 @@ export function startChapter0(models: Models): void {
       const ps = follow(p.id, p.x, p.z, p.facing, kf);
       e.root.position.set(ps.x, 0, ps.z);
       e.root.rotation.y = ps.yaw;
-      const carrying = sort.items.some((it) => it.carriedBy === p.id);
+      const held = sort.items.find((it) => it.carriedBy === p.id);
       const since = elapsed - (actAt.get(p.id) ?? -9);
       e.animate(elapsed, p.moving, {
-        carry: p.holding !== null ? (c.lifted ? 'heavy' : 'grip') : carrying ? 'light' : 'none',
+        carry: p.holding !== null ? (c.lifted ? 'heavy' : 'grip') : held ? 'light' : 'none',
         act: since >= 0 && since < 0.35 ? since / 0.35 : 0,
         tired: needsSwap(sw, p),
+        span: held ? holdShape(gifts.get(held.id)!.kind, gifts.get(held.id)!.size).across / ELF_SCALE : undefined,
       });
       e.root.updateMatrixWorld(true);
       if (p.holding !== null && c.lifted && e.hands?.(hl, hr)) {
@@ -313,7 +318,8 @@ export function startChapter0(models: Models): void {
     crateTag.visible = !sort.crateSorted;
     crateTag.position.set(cs.x, lift + 1.05, cs.z);
 
-    // 가벼운 선물: 든 요정의 두 손바닥 위에 얹는다(손이 물건을 뚫지 않고, 따로 흔들리지 않는다)
+    // 가벼운 선물: 가슴 아래에 품는다. 두 손이 물건 옆면 아래쪽을 잡고(팔을 물건 폭만큼 벌린다),
+    // 물건 윗면은 턱 높이를 넘지 않게 낮춘다(얼굴이 물건에 파묻히지 않게). 몸과 겹치지 않게 배 앞에 둔다
     for (const it of sort.items) {
       const g = gifts.get(it.id)!;
       const idx = it.carriedBy ? sw.players.findIndex((q) => q.id === it.carriedBy) : -1;
@@ -322,12 +328,11 @@ export function startChapter0(models: Models): void {
         const e = elves[idx]!;
         const ps = shown.get(sw.players[idx]!.id)!;
         const fx = Math.sin(ps.yaw), fz = Math.cos(ps.yaw);
-        if (e.hands?.(hl, hr)) {
-          g.v.position.set((hl.x + hr.x) / 2 + fx * 0.05, (hl.y + hr.y) / 2 + 0.015, (hl.z + hr.z) / 2 + fz * 0.05);
-        } else {
-          g.v.position.set(ps.x + fx * CARRY_AHEAD, CARRY_Y, ps.z + fz * CARRY_AHEAD);
-        }
-        g.v.rotation.y = ps.yaw;
+        const hs = holdShape(g.kind, g.size);
+        const hands = e.hands?.(hl, hr) ? { y: (hl.y + hr.y) / 2, fwd: ((hl.x + hr.x) / 2 - ps.x) * fx + ((hl.z + hr.z) / 2 - ps.z) * fz } : null;
+        const { ahead, bottom } = holdPlace(hs, hands, ELF_SCALE);
+        g.v.position.set(ps.x + fx * ahead, bottom, ps.z + fz * ahead);
+        g.v.rotation.y = ps.yaw + (hs.turn ? Math.PI / 2 : 0);
         // 이름표: 요정 머리 위
         g.tag.position.set(ps.x, 1.9 * ELF_SCALE, ps.z);
       } else {
@@ -449,6 +454,28 @@ export function startChapter0(models: Models): void {
         scene.add(l);
       },
       faded: () => fader.faded(),
+      /** 들기 자세 확인용: 요정마다 손목 높이·턱(머리 뼈) 높이·든 선물의 위아래·앞 거리(요정 기준) */
+      holdInfo: () =>
+        elves.map((e, i) => {
+          const id = sort.sewing.players[i]!.id;
+          const ps = shown.get(id)!;
+          const l = new THREE.Vector3(), r = new THREE.Vector3();
+          const ok = e.hands?.(l, r) ?? false;
+          let chin: number | null = null;
+          e.root.traverse((o) => {
+            if (o.name === 'Head' && chin === null) chin = o.getWorldPosition(new THREE.Vector3()).y;
+          });
+          const it = sort.items.find((q) => q.carriedBy === id);
+          const gv = it ? gifts.get(it.id)! : null;
+          const fx = Math.sin(ps.yaw), fz = Math.cos(ps.yaw);
+          const fwd = (x: number, z: number) => (x - ps.x) * fx + (z - ps.z) * fz;
+          return {
+            id,
+            hands: ok ? { y: (l.y + r.y) / 2, fwd: fwd((l.x + r.x) / 2, (l.z + r.z) / 2), apart: l.distanceTo(r) } : null,
+            chin,
+            gift: gv && it ? { id: it.id, bottom: gv.v.position.y, top: gv.v.position.y + gv.size.y, ahead: fwd(gv.v.position.x, gv.v.position.z) } : null,
+          };
+        }),
       /** 화면 확인용(시험 모드만): 요정 체력을 정한다 */
       debugStamina: (id: string, v: number) => {
         sort = { ...sort, sewing: { ...sort.sewing, players: sort.sewing.players.map((p) => (p.id === id ? { ...p, stamina: v } : p)) } };

@@ -281,13 +281,19 @@ export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: stri
   const raise = (b: THREE.Object3D | null | undefined, a: number) => {
     if (b && a !== 0) b.quaternion.multiply(tmp.setFromAxisAngle(zAxis, a));
   };
-  // 자세별 팔 목표(위팔 앞으로 든 각, 아래팔 굽힘): 가슴 앞에 안기 / 손잡이 높이로 앞 / 빈손
-  const ARMS: Record<ElfPose['carry'], [number, number]> = { none: [0, 0], light: [0.95, 0.85], grip: [0.45, 0.25], heavy: [0.7, 0.35] };
+  // 자세별 팔 목표(위팔 앞으로 든 각, 아래팔 굽힘, 옆으로 벌림): 가슴 앞에 안기 / 손잡이 높이로 앞 / 빈손
+  // 가벼운 선물은 손을 가슴 아래(손목 높이 ≈ 키의 0.62)에 두고 물건 폭만큼 팔을 벌려 옆면을 감싼다
+  // (머리 위나 얼굴 앞으로 들면 물건이 얼굴을 가린다)
+  const ARMS: Record<ElfPose['carry'], [number, number, number]> = { none: [0, 0, 0], light: [0.5, 0.6, 0], grip: [0.45, 0.25, 0], heavy: [0.7, 0.35, 0] };
+  /** 벌림 각 → 두 손목 사이(요정 크기 1 기준): 벌리지 않으면 0.34 m, 1 rad마다 0.23 m 넓어진다(위 자세에서 잰 값) */
+  const spreadFor = (span: number) => Math.min(1.2, Math.max(0, (span + 0.04 - 0.34) / 0.23));
+  const yAxis = new THREE.Vector3(0, 1, 0);
   const walk = action('Walk');
   let last = -1;
   let gait: 'idle' | 'run' | 'walk' = 'idle';
   let up = 0;
   let low = 0;
+  let spread = 0;
   const actionOf = (g: typeof gait) => (g === 'run' ? run : g === 'walk' ? walk ?? run : idle);
   const wl = findBone(model, 'WristL');
   const wr = findBone(model, 'WristR');
@@ -322,10 +328,12 @@ export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: stri
       holdW += ((pose.carry === 'none' ? 0 : 1) - holdW) * holdK;
       if (holdW > 0.001) armBones.forEach((b, i) => b.quaternion.slerp(rest[i]!, holdW));
       // 팔: 목표 자세로 부드럽게(뼈는 매 프레임 동작 값으로 돌아오므로 그 위에 더한다)
-      const [tu, tl] = ARMS[pose.carry];
+      const [tu, tl, ts0] = ARMS[pose.carry];
+      const ts = pose.carry === 'light' && pose.span ? spreadFor(pose.span) : ts0;
       const k = 1 - Math.exp(-dt * 10);
       up += (tu - up) * k;
       low += (tl - low) * k;
+      spread += (ts - spread) * k;
       const reach = Math.sin(Math.PI * pose.act); // 집기·놓기: 아래 앞으로 손을 뻗는다
       const shake = pose.tired ? Math.sin(timeSec * 34) * 0.18 : 0; // 지쳐서 손을 턴다
       const u = up * (1 - reach) + 0.9 * reach;
@@ -333,6 +341,11 @@ export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: stri
       raise(bones.ur, u - shake);
       raise(bones.ll, -low);
       raise(bones.lr, low);
+      // 큰 물건을 안을 때 팔을 옆으로 벌린다(든 뒤의 위팔 Y축)
+      if (spread) {
+        bones.ul?.quaternion.multiply(tmp.setFromAxisAngle(yAxis, -spread));
+        bones.ur?.quaternion.multiply(tmp.setFromAxisAngle(yAxis, spread));
+      }
       // 집을 때 살짝 웅크린다, 무거운 짐을 들면 몸이 조금 낮아진다
       model.position.y = baseY - reach * 0.09 - (pose.carry === 'heavy' ? 0.03 : 0);
     },

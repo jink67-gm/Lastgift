@@ -52,7 +52,7 @@ function star(g: CanvasRenderingContext2D, cx: number, cy: number, r: number): v
 
 /**
  * 요정 자세(화면 전용, 판정과 무관):
- * - carry: 'light' 가벼운 선물을 머리 위로 / 'grip' 무거운 짐 손잡이를 잡고 섬 / 'heavy' 함께 들고 감(느린 걸음)
+ * - carry: 'light' 가벼운 선물을 가슴 앞에 안고(span: 안은 물건의 가로 폭, 요정 몸 기준 m) / 'grip' 무거운 짐 손잡이를 잡고 섬 / 'heavy' 함께 들고 감(느린 걸음)
  * - act: 집기·놓기·잡기 동작 진행(0~1, 0이면 없음) — 살짝 웅크렸다 손을 뻗는다
  * - tired: 체력 25% 이하로 들고 있음 — 팔이 떨린다(손을 턴다)
  */
@@ -60,6 +60,8 @@ export interface ElfPose {
   carry: 'none' | 'light' | 'grip' | 'heavy';
   act: number;
   tired: boolean;
+  /** 안은 물건의 가로 폭(요정 크기 1 기준 m). 이만큼 팔을 벌려 두 손이 물건 옆면에 닿게 한다 */
+  span?: number;
 }
 
 export const NO_POSE: ElfPose = { carry: 'none', act: 0, tired: false };
