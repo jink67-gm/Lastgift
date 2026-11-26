@@ -347,7 +347,7 @@ function buriedOrnament(r: number, color: string): THREE.Group {
 }
 
 /** 할머니의 삼각대 사진기(타이머 등이 깜박인다) */
-function tripodCamera(): THREE.Group {
+export function tripodCamera(): THREE.Group {
   const g = new THREE.Group();
   const lampMat = new THREE.MeshStandardMaterial({ color: '#552222', emissive: '#ff3a2a', emissiveIntensity: 0 });
   const timerLamp = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), lampMat);

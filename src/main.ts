@@ -4,6 +4,7 @@
 //   ?chapter=1  1장 우편함 골목 → 유나네 앞마당 찾기(한 기기 2인)
 //   ?chapter=2  2장 수선집: 뒤뜰 → 덧문 → 반입 통로 → 작업실 (로컬 2인: 1P WASD+E, 2P 방향키+Enter)
 //   ?chapter=3  3장 공방 옆문 → 울타리 샛길 → 민재네 마당: 공 던져 받기와 콩이(한 기기 2인)
+//   ?chapter=5  5장 광장: 단체사진·빈 양말·가방 열기 → 스노글로브 → 6장 건네기(?chapter=6은 6장부터)
 //   ?chapter=4  4장 담장길 → 할머니네 정원: 전선·발전기·스위치 둘(한 기기 2인). &solo = 1인 연습(저장 따로)
 import { Models } from './scene/models';
 
@@ -25,6 +26,7 @@ void Models.load().then(async (models) => {
   else if (chapter === '2') (await import('./game/chapter2')).startChapter2(models);
   else if (chapter === '3') (await import('./game/chapter3')).startChapter3(models);
   else if (chapter === '4') (await import('./game/chapter4')).startChapter4(models);
+  else if (chapter === '5' || chapter === '6') (await import('./game/finale')).startFinale(models, chapter === '5' ? 5 : 6);
   else (await import('./game/plaza')).startPlaza(models);
   loading.remove();
 });

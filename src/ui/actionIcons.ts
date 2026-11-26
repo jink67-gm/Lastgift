@@ -1,7 +1,7 @@
 // 행동 그림(직접 제작 SVG). 글 대신 그림으로 "지금 누르면 무슨 일이 일어나는지" 보여 준다.
 import type { Action } from '../core/carry';
 
-export type ActionIcon = 'pick' | 'drop' | 'tooHeavy' | 'blocked' | 'swap' | 'latch' | 'door' | 'map' | 'mapClose' | 'signal' | 'throw' | 'plug' | 'crank' | 'switch' | 'none';
+export type ActionIcon = 'pick' | 'drop' | 'tooHeavy' | 'blocked' | 'swap' | 'latch' | 'door' | 'map' | 'mapClose' | 'signal' | 'throw' | 'plug' | 'crank' | 'switch' | 'peek' | 'bag' | 'give' | 'none';
 
 const HAND =
   '<path d="M20 44c-5-5-9-11-9-15 0-2 2-3 4-2l5 5V13a3 3 0 0 1 6 0v12V9a3 3 0 0 1 6 0v16V11a3 3 0 0 1 6 0v14-9a3 3 0 0 1 6 0v18c0 7-4 12-10 13h-6c-4 0-6-1-8-3z" fill="#fff" stroke="#1b2433" stroke-width="2.5" stroke-linejoin="round"/>';
@@ -35,6 +35,12 @@ const SVG: Record<ActionIcon, string> = {
   crank: `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 10a22 22 0 1 1-20 13" fill="none" stroke="#ffd84a" stroke-width="5" stroke-linecap="round"/><path d="M6 16l6 8 8-6" fill="none" stroke="#ffd84a" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="32" cy="32" r="6" fill="#fff" stroke="#1b2433" stroke-width="2.5"/><path d="M32 32l12-10" stroke="#fff" stroke-width="5" stroke-linecap="round"/><circle cx="45" cy="21" r="5" fill="#d23a3a" stroke="#1b2433" stroke-width="2"/></svg>`,
   // 스위치 누르기: 둥근 빨간 버튼 + 누르는 손가락
   switch: `<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="12" y="30" width="40" height="26" rx="6" fill="#f2efe6" stroke="#1b2433" stroke-width="2.5"/><circle cx="32" cy="43" r="8" fill="#d23a3a" stroke="#1b2433" stroke-width="2.5"/><path d="M32 6v18m-6-6 6 6 6-6" fill="none" stroke="#ffd84a" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  // 들여다보기: 눈
+  peek: `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M6 32c8-12 17-18 26-18s18 6 26 18c-8 12-17 18-26 18S14 44 6 32z" fill="#fff" stroke="#1b2433" stroke-width="2.5"/><circle cx="32" cy="32" r="9" fill="#2f6fd0" stroke="#1b2433" stroke-width="2.5"/><circle cx="32" cy="32" r="4" fill="#1b2433"/></svg>`,
+  // 가방 열기: 가방 + 위로 새는 빛
+  bag: `<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="12" y="30" width="40" height="24" rx="5" fill="#8a5a3a" stroke="#1b2433" stroke-width="2.5"/><path d="M14 30l6-8h24l6 8" fill="#7a4a2e" stroke="#1b2433" stroke-width="2.5" stroke-linejoin="round"/><path d="M32 6v12M22 10l4 8M42 10l-4 8" stroke="#ffd84a" stroke-width="4" stroke-linecap="round"/></svg>`,
+  // 건네기: 두 손 위 둥근 유리
+  give: `<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="24" r="14" fill="#dff0ff" stroke="#1b2433" stroke-width="2.5"/><rect x="22" y="36" width="20" height="6" rx="2" fill="#7a4a2e" stroke="#1b2433" stroke-width="2"/><path d="M8 50c8 0 14-6 24-6s16 6 24 6" fill="none" stroke="#ffd84a" stroke-width="5" stroke-linecap="round"/></svg>`,
   // 빈 손: 할 일이 없다
   none: `<svg viewBox="0 0 64 64" aria-hidden="true" opacity="0.55">${HAND}</svg>`,
 };
