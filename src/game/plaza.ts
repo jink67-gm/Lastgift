@@ -38,7 +38,8 @@ export function startPlaza(models: Models): void {
   const moon = new THREE.DirectionalLight('#ffffff', 1.3);
   moon.position.set(-8, 16, 6);
   scene.add(moon);
-  scene.add(createPlaza(models));
+  // ?quality=low: 눈결 없이(저사양·자동 시험)
+  scene.add(createPlaza(models, new URLSearchParams(location.search).get('quality') === 'low' ? 'low' : 'normal'));
 
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   const CAM_OFFSET = new THREE.Vector3(

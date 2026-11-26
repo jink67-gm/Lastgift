@@ -36,7 +36,7 @@ async function open(page: Page) {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
-  await page.goto('/?test');
+  await page.goto('/?test&quality=low'); // 입력 시험: 그래픽 부담을 줄여 손가락 사이 시간이 벌어지지 않게
   await page.waitForFunction(() => !!window.__lastgift);
   const fingers = new Fingers(await page.context().newCDPSession(page));
   return { errors, fingers };
