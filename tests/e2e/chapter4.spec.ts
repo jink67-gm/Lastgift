@@ -19,6 +19,10 @@ type Hook = {
   ch4Events(): { type: string }[];
   run(): { phase: string; chapterId: number; memories: number[]; progress: Record<string, unknown>; roomId: string };
   ending(): number;
+  endBeat(): string | null;
+  seekEnding(t: number): void;
+  intro(): { envelope: number | null; t: number; photos: boolean };
+  skipIntro(): void;
   timer(): number | null;
   debugPlace(id: string, s: number, t: number, f?: number): void;
   debugStage(stage: 'placed' | 'wired' | 'charged'): void;
@@ -133,4 +137,50 @@ test('4장 1인 연습: 정원에서 바로, 제한 시간 12초 이상, 혼자 
   expect(keys.some((k) => k.includes('dev-ch4'))).toBe(false);
   s = await H(page, (h) => h.ch4());
   expect(s.complete).toBe(true);
+});
+
+test('4장 시작: 봉투를 펼치면(E) 사진 두 장 → 한 번 더 누르면 내리고 할머니 장면 → 놀이. 그동안 시계는 멈춰 있다', async ({ page }) => {
+  test.setTimeout(90_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await open(page, '&intro');
+  await expect(page.locator('#envelope')).toBeVisible();
+  expect((await H(page, (h) => h.intro())).envelope).toBe(0);
+  expect((await H(page, (h) => h.run())).phase).toBe('lobby');
+  await page.keyboard.press('KeyE');
+  await page.waitForFunction(() => (window as unknown as { __lastgift: Hook }).__lastgift.intro().envelope === 2, null, { timeout: 10_000 });
+  expect((await H(page, (h) => h.intro())).photos).toBe(true);
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => (window as unknown as { __lastgift: Hook }).__lastgift.intro().t > 1, null, { timeout: 15_000 });
+  await expect(page.locator('#envelope')).toHaveCount(0);
+  expect((await H(page, (h) => h.run())).phase).toBe('lobby');
+  // 건너뛰기 → 바로 놀이
+  await page.locator('#env-skip').click();
+  await page.waitForFunction(() => (window as unknown as { __lastgift: Hook }).__lastgift.run().phase === 'play', null, { timeout: 5_000 });
+  await expect(page.locator('#env-skip')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('4장 끝: 아이들·할머니가 트리 앞에서 브이 → 찰칵 → 올해 사진에 작년 사진이 포개진다(오류 없이)', async ({ page }) => {
+  test.setTimeout(60_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await open(page);
+  await H(page, (h) => h.debugStage('charged'));
+  await place(page, 'p0', 24.0, -8.2);
+  await place(page, 'p1', 24.0, 8.2);
+  await page.waitForTimeout(300);
+  await page.keyboard.press('KeyE');
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => (window as unknown as { __lastgift: Hook }).__lastgift.ending() > 0.3, null, { timeout: 10_000 });
+  const beats: string[] = [];
+  for (const t of [2, 4.6, 7, 8.8, 11, 13.5, 16]) {
+    await page.evaluate((t) => (window as unknown as { __lastgift: Hook }).__lastgift.seekEnding(t), t);
+    await page.waitForTimeout(200);
+    beats.push((await H(page, (h) => h.endBeat()))!);
+  }
+  expect(beats).toEqual(['lights', 'kids', 'grandma', 'timer', 'pose', 'photo', 'overlay']);
+  await expect(page.locator('#photo-stack')).toHaveCount(1);
+  expect(errors).toEqual([]);
 });

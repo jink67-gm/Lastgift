@@ -10,13 +10,17 @@ import { createChapter4, createPractice, planAction, progressOf, step, timerLeft
 import { AutoQuality, effectiveQuality, snowCount, type Quality } from '../core/quality';
 import type { SewingInput } from '../core/sewing';
 import { chapter, type ChapterId, type MemoryId } from '../data/chapters';
-import { CH4_BOUNDS, GARDEN, PADS, TERMINALS, TREE, W, WIRES, toLane, type WireColor } from '../data/chapter4';
+import { CH4_BOUNDS, GARDEN, GARDEN_WALL, PADS, SWITCHES, TERMINALS, TREE, TRIPOD, W, WIRES, toLane, type WireColor } from '../data/chapter4';
 import { ELF_LOOKS } from '../data/elves';
 import { attachKeyboard, KeyState, KEYMAP_P1, KEYMAP_P2 } from '../input/keyboard';
 import { mergeIntents } from '../input/merge';
 import { browserStorage, CheckpointStore, loadSettings, saveSettings } from '../save/store';
 import { boardMesh, createChapter4Scene, generatorMesh, plugMesh, WIRE_HEX } from '../scene/chapter4';
 import { createElfAvatar } from '../scene/elfAvatar';
+import { createPerson, STAND, type PersonPose, type PersonView } from '../scene/people';
+import { PHOTO_LINE, TREE_END, TREE_INTRO, treeEndBeat } from '../core/treePhoto';
+import { seg } from '../core/prologue';
+import { createEnvelope, createPhotoStack, type Envelope } from '../ui/envelope';
 import { createTargetRing } from '../scene/gifts';
 import { createHoldTween, placeOnGround, placeOnHands } from '../scene/hold';
 import type { Models } from '../scene/models';
@@ -170,8 +174,14 @@ export function startChapter4(models: Models): void {
       lastProgress = '';
     }
   });
-  run.dispatch({ type: 'start', at: performance.now() });
-  if (run.state.phase === 'cutscene') run.dispatch({ type: 'cutsceneDone', at: performance.now() });
+  // 처음 들어온 4장이면 봉투·사진 두 장·할머니 장면 먼저(시계는 그 뒤에 흐른다). 1인 연습은 바로. 시험 모드는 &intro일 때만
+  const hadSave = new CheckpointStore(browserStorage()).load(roomId) !== null;
+  const begin = () => {
+    run.dispatch({ type: 'start', at: performance.now() });
+    if (run.state.phase === 'cutscene') run.dispatch({ type: 'cutsceneDone', at: performance.now() });
+  };
+  const wantIntro = !solo && !hadSave && (!params.has('test') || params.has('intro'));
+  if (!wantIntro) begin();
   let lastProgress = '';
 
   // 요정
@@ -265,6 +275,245 @@ export function startChapter4(models: Models): void {
   let ending = -1;
   const endCam = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 200);
   let endFrom: THREE.Vector3 | null = null;
+
+  // ── 사람(임시 모형: 인물 에셋을 받으면 createPerson 안만 바꾼다) ──
+  const grandma = createPerson(models, 'grandma');
+  const kids = (['kidA', 'kidB', 'kidC'] as const).map((r) => createPerson(models, r));
+  for (const v of [grandma, ...kids]) {
+    v.root.visible = false;
+    setShadows(v.root, true, false);
+    scene.add(v.root);
+  }
+  const lane = (s0: number, t0: number) => ({ s: s0, t: t0 });
+  const yawTo = (a: { s: number; t: number }, b: { s: number; t: number }) => {
+    const pa = W(a.s, a.t), pb = W(b.s, b.t);
+    return Math.atan2(pb.x - pa.x, pb.z - pa.z);
+  };
+  const putPerson = (v: PersonView, p: { s: number; t: number }, yaw: number, pose: PersonPose, t: number) => {
+    const w = W(p.s, p.t);
+    v.root.position.set(w.x, 0, w.z);
+    v.root.rotation.set(0, yaw, 0);
+    v.pose(pose, t);
+  };
+  const mixL = (a: { s: number; t: number }, b: { s: number; t: number }, k: number) => lane(a.s + (b.s - a.s) * k, a.t + (b.t - a.t) * k);
+  const ezf = (x: number) => {
+    const k = Math.min(1, Math.max(0, x));
+    return k * k * (3 - 2 * k);
+  };
+  const TRIPOD_L = lane(TRIPOD.s, TRIPOD.t);
+  /** 사진 속 자리: 아이들(비워 주기 전·후), 할머니 */
+  const kidSpot = (i: number, after: number) => lane(PHOTO_LINE.s, PHOTO_LINE.before[i]! + (PHOTO_LINE.after[i]! - PHOTO_LINE.before[i]!) * after);
+  const grandmaSpot = lane(PHOTO_LINE.s, PHOTO_LINE.grandma);
+  /** 사진 찍는 자리: 모두 사진기 쪽을 보고 양손 브이 */
+  const posePhotoPeople = (t: number) => {
+    const v: PersonPose = { ...STAND, armL: 'vsign', armR: 'vsign' };
+    kids.forEach((k, i) => putPerson(k, kidSpot(i, 1), yawTo(kidSpot(i, 1), TRIPOD_L), v, t));
+    putPerson(grandma, grandmaSpot, yawTo(grandmaSpot, TRIPOD_L), v, t);
+  };
+
+  // ── 할머니 사진기 구도(봉투 속 두 사진, 마지막 사진이 같은 구도) ──
+  const photoCam = new THREE.PerspectiveCamera(66, 4 / 3, 0.1, 200);
+  {
+    const tw = W(TREE.s, TREE.t);
+    const dir = new THREE.Vector3(tw.x - space.tripod.x, 0, tw.z - space.tripod.z).normalize();
+    photoCam.position.copy(space.tripod).addScaledVector(dir, 0.45).add(new THREE.Vector3(0, 0.05, 0));
+    photoCam.lookAt(tw.x, 4.5, tw.z);
+  }
+  const PHOTO_W = 800, PHOTO_H = 600;
+  const blankPhoto = () => {
+    const c = document.createElement('canvas');
+    c.width = PHOTO_W;
+    c.height = PHOTO_H;
+    return c;
+  };
+  const photos = { lastYear: blankPhoto(), thisYear: blankPhoto() };
+  let photosReady = false;
+  /** 장면을 할머니 사진기 구도로 찍어 into에 그린다. 놀이 물건·요정은 빼고(마지막 사진은 지금 그대로) */
+  function capture(kind: 'lastYear' | 'thisYear' | 'final', into: HTMLCanvasElement, litAfter: number): void {
+    const hide: THREE.Object3D[] = kind === 'final' ? elves.map((e) => e.root) : [...elves.map((e) => e.root), gen.group, board, ...Object.values(plugs), ...Object.values(cables), genCable, ...pickRings, socketRing];
+    const was = hide.map((o) => o.visible);
+    const peopleWas = [grandma, ...kids].map((v) => v.root.visible);
+    hide.forEach((o) => (o.visible = false));
+    if (kind === 'lastYear') {
+      space.tree.setLit(1);
+      posePhotoPeople(0.5);
+      [grandma, ...kids].forEach((v) => (v.root.visible = true));
+    } else if (kind === 'thisYear') {
+      space.tree.setLit(0);
+      [grandma, ...kids].forEach((v) => (v.root.visible = false));
+    }
+    const size = renderer.getSize(new THREE.Vector2());
+    const pr = renderer.getPixelRatio();
+    renderer.setPixelRatio(1);
+    renderer.setSize(PHOTO_W, PHOTO_H, false);
+    photoCam.aspect = PHOTO_W / PHOTO_H;
+    photoCam.updateProjectionMatrix();
+    renderer.render(scene, photoCam);
+    const g = into.getContext('2d')!;
+    g.drawImage(renderer.domElement, 0, 0, PHOTO_W, PHOTO_H);
+    if (kind === 'lastYear') {
+      // 작년 사진: 조금 따뜻하게 바랜 색
+      g.fillStyle = 'rgba(255, 196, 120, 0.13)';
+      g.fillRect(0, 0, PHOTO_W, PHOTO_H);
+    }
+    if (kind === 'thisYear') {
+      // 할머니가 노란 색연필로 전구마다 그린 작은 불빛
+      const v = new THREE.Vector3();
+      space.tree.bulbs().forEach((b, i) => {
+        v.copy(b).project(photoCam);
+        if (v.z > 1) return;
+        const x = ((v.x + 1) / 2) * PHOTO_W, y = ((1 - v.y) / 2) * PHOTO_H;
+        const r = 4.5 + ((i * 37) % 5) * 0.4;
+        g.fillStyle = 'rgba(255, 214, 64, 0.9)';
+        g.beginPath();
+        g.arc(x, y, r, 0, Math.PI * 2);
+        g.fill();
+        g.strokeStyle = 'rgba(255, 200, 40, 0.8)';
+        g.lineWidth = 1.6;
+        g.lineCap = 'round';
+        for (let k = 0; k < 4; k++) {
+          const a = k * (Math.PI / 2) + (i % 3) * 0.3;
+          g.beginPath();
+          g.moveTo(x + Math.cos(a) * (r + 2), y + Math.sin(a) * (r + 2));
+          g.lineTo(x + Math.cos(a) * (r + 6), y + Math.sin(a) * (r + 6));
+          g.stroke();
+        }
+      });
+    }
+    renderer.setPixelRatio(pr);
+    renderer.setSize(size.x, size.y, false);
+    hide.forEach((o, i) => (o.visible = was[i]!));
+    [grandma, ...kids].forEach((v, i) => (v.root.visible = peopleWas[i]!));
+    space.tree.setLit(litAfter);
+  }
+  const makePhotos = () => {
+    if (photosReady) return;
+    photosReady = true;
+    capture('lastYear', photos.lastYear, 0);
+    capture('thisYear', photos.thisYear, 0);
+  };
+
+  // ── 시작 장면: 봉투 → 사진을 내리면 같은 구도의 마당 → 할머니가 스위치를 눌러 보고 아이들을 데리러 나간다 ──
+  let envelope: Envelope | null = wantIntro ? createEnvelope(document, photos) : null;
+  /** 봉투 뒤 3D 장면 시각(-1: 아직 봉투) */
+  let introT = wantIntro ? -1 : -2;
+  let introSkip: HTMLButtonElement | null = null;
+  const introCam = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 200);
+  const endIntro = () => {
+    envelope?.dispose();
+    envelope = null;
+    introSkip?.remove();
+    introSkip = null;
+    introT = -2;
+    grandma.root.visible = false;
+    for (const e of elves) e.root.visible = true;
+    space.tree.setString('red', 0);
+    space.tree.setString('blue', 0);
+    space.tree.setString('yellow', 0);
+    document.body.classList.remove('cutscene');
+    begin();
+    establish = reduceMotion ? 0 : start.sec;
+    snapCamera = true;
+  };
+  function updateIntro(frame: number): void {
+    for (const e of elves) e.root.visible = false;
+    if (envelope) {
+      if (envelope.stage >= 1) makePhotos();
+      const done = envelope.update(frame);
+      // 봉투 뒤: 할머니 사진기 구도의 마당(사진을 내리면 그대로 이어진다), 할머니는 사진기 옆
+      grandma.root.visible = true;
+      putPerson(grandma, lane(TRIPOD.s - 0.3, TRIPOD.t + 1.1), yawTo(lane(TRIPOD.s - 0.3, TRIPOD.t + 1.1), TRIPOD_L), { ...STAND, armL: 'reach', armR: 'reach' }, elapsed);
+      renderIntro(photoCam, 4 / 3);
+      if (done && envelope.skipped) {
+        endIntro();
+        return;
+      }
+      if (done) {
+        envelope.dispose();
+        envelope = null;
+        introT = 0;
+        introSkip = document.createElement('button');
+        introSkip.id = 'env-skip';
+        introSkip.type = 'button';
+        introSkip.textContent = '건너뛰기 ▶▶';
+        introSkip.addEventListener('click', endIntro);
+        document.body.appendChild(introSkip);
+      }
+      return;
+    }
+    introT += frame;
+    const t = introT;
+    const I = TREE_INTRO;
+    const G0 = lane(TRIPOD.s - 0.3, TRIPOD.t + 1.1);
+    const SW = lane(SWITCHES.A.s - 1.1, SWITCHES.A.t + 0.4);
+    const treeL = lane(TREE.s, TREE.t);
+    let pos = G0, yaw = yawTo(G0, TRIPOD_L);
+    let pose: PersonPose = { ...STAND, armL: 'reach', armR: 'reach' };
+    if (t >= I.setCamera[1] && t < I.toSwitch[1]) {
+      const k = ezf(seg(t, I.toSwitch));
+      pos = mixL(G0, SW, k);
+      yaw = yawTo(G0, SW);
+      pose = { ...STAND, walk: elapsed * 1.5 };
+    } else if (t >= I.toSwitch[1] && t < I.leave[0]) {
+      pos = SW;
+      yaw = t < I.shake[0] ? yawTo(SW, lane(SWITCHES.A.s, SWITCHES.A.t)) : yawTo(SW, treeL);
+      pose = { ...STAND, armR: t < I.flicker[1] ? 'reach' : 'down', look: t >= I.shake[0] ? -0.6 : 0 };
+      if (t >= I.shake[0]) pose.turn = Math.sin((t - I.shake[0]) * 7) * 0.45 * (1 - seg(t, I.shake));
+    } else if (t >= I.leave[0]) {
+      // 대문 밖으로(사진기가 담장길 쪽으로 바뀐다)
+      const k = seg(t, I.leave);
+      pos = mixL(lane(GARDEN_WALL.s + 1.2, 0.2), lane(GARDEN_WALL.s - 4.5, 0.6), k);
+      yaw = yawTo(lane(GARDEN_WALL.s + 1, 0), lane(0, 0));
+      pose = { ...STAND, walk: elapsed * 1.5 };
+    }
+    grandma.root.visible = true;
+    putPerson(grandma, pos, yaw, pose, elapsed);
+    // 스위치를 눌러도 전구가 아주 잠깐 깜박이다 만다
+    const fl = t >= I.flicker[0] && t < I.flicker[1] ? (Math.sin((t - I.flicker[0]) * 40) > 0.3 ? 0.35 : 0) : 0;
+    space.tree.setString('red', fl);
+    space.tree.setString('blue', fl);
+    space.tree.setString('yellow', fl);
+    space.setSwitch('A', t >= I.press[0] + 0.2 && t < I.flicker[1], false);
+    // 사진기: 사진 구도 → 스위치 앞의 할머니 → 담장길에서 대문을 나서는 할머니
+    if (t < I.press[0] - 0.2) renderIntro(photoCam, 4 / 3); // 걷는 동안은 사진 구도 그대로(사진 속 마당을 가로지른다)
+    else {
+      const sw = W(SW.s, SW.t);
+      const tw = W(TREE.s, TREE.t);
+      if (t < I.leave[0]) {
+        // 스위치 앞 할머니가 가운데, 뒤로 불 꺼진 트리
+        const eye = W(SW.s - 5.0, SW.t + 1.6);
+        introCam.position.set(eye.x, 2.5, eye.z);
+        introCam.lookAt(sw.x * 0.7 + tw.x * 0.3, 2.8, sw.z * 0.7 + tw.z * 0.3);
+      } else {
+        const eye = W(GARDEN_WALL.s - 8.5, 1.6);
+        const gate = W(GARDEN_WALL.s, 0);
+        introCam.position.set(eye.x, 2.4, eye.z);
+        introCam.lookAt(gate.x, 2.0, gate.z);
+      }
+      renderIntro(introCam, aspect);
+    }
+    space.setGate(t >= I.leave[0] - 0.4 ? Math.min(1, (t - I.leave[0] + 0.4) * 1.5) : 0);
+    // 끝: 어두워졌다가 놀이로
+    const fo = seg(t, I.fadeOut);
+    renderer.domElement.style.filter = fo > 0 ? `brightness(${1 - 0.8 * fo})` : '';
+    if (t >= I.end) {
+      renderer.domElement.style.filter = '';
+      endIntro();
+    }
+  }
+  function renderIntro(cam: THREE.PerspectiveCamera, camAspect: number): void {
+    // 사진 구도는 화면 비율과 상관없이 같은 높이로(가로가 넓으면 양옆이 더 보인다)
+    cam.aspect = cam === photoCam ? aspect : camAspect;
+    cam.updateProjectionMatrix();
+    snow.update(1 / 60, cam.position.x, cam.position.z, 24);
+    renderer.render(scene, cam);
+    cam.aspect = 4 / 3;
+  }
+
+  // ── 끝: 마지막 사진 ──
+  const finalPhoto = blankPhoto();
+  let stack: ReturnType<typeof createPhotoStack> | null = null;
+  let endElves: { s: number; t: number }[] | null = null;
   applyQuality();
 
   requestAnimationFrame(function loop(now) {
@@ -273,6 +522,13 @@ export function startChapter4(models: Models): void {
     last = now;
     if (auto.feed(raw)) applyQuality();
     const frame = Math.min(raw, 0.25);
+    if (introT !== -2) {
+      run.frame(now);
+      elapsed += frame;
+      controls.update('none');
+      updateIntro(frame);
+      return;
+    }
     acc += frame;
     run.frame(now);
     const live = run.canPlay;
@@ -451,22 +707,87 @@ export function startChapter4(models: Models): void {
     renderer.render(scene, camera);
   }
 
-  /** 끝(05c): 아래 가지부터 꼭대기 별까지 불이 켜진다. 할머니 사진기 자리에서 트리를 본다(05d에서 아이들·할머니·사진) */
+  /**
+   * 끝(core/treePhoto.ts TREE_END): 아래 가지부터 꼭대기 별까지 불 → 요정들은 트리 뒤로 숨는다 → 아이들이 대문으로 들어와
+   * 트리 앞으로 → 할머니가 사진기 타이머를 누르고 돌아서는 순간 아이들이 가운데를 비워 준다 → 할머니가 그 자리에서 양손 브이 →
+   * 찰칵 → 올해 사진이 화면을 채우고 작년 사진이 같은 구도로 포개진다.
+   */
   function updateEnding(frame: number): void {
     ending += frame;
     const t = ending;
-    const ez = (x: number) => x * x * (3 - 2 * x);
+    const E = TREE_END;
     document.body.classList.add('cutscene');
     for (const r of pickRings) r.visible = false;
-    space.tree.setLit(Math.min(1, Math.max(0, (t - 0.8) / 3.6)));
-    const k = ez(Math.min(1, t / 2.0));
-    // 할머니 사진기 바로 뒤·조금 위(사진기 몸통 안으로 들어가지 않게)
+    socketRing.visible = false;
+    if (!photosReady) makePhotos(); // 시작 장면을 건너뛰었으면 지금 작년 사진을 만든다
+    space.tree.setLit(ezf(seg(t, E.lights)));
+    // 요정들: 트리 뒤로 숨는다
+    if (!endElves) endElves = state.players.map((p) => toLane(shown.get(p.id) ?? p));
+    elves.forEach((e, i) => {
+      const from = endElves![i]!;
+      const hide = lane(TREE.s + 3.4, TREE.t + (i === 0 ? -0.9 : 0.9));
+      const k = ezf(seg(t, E.elvesHide));
+      const p = mixL(from, hide, k);
+      const w = W(p.s, p.t);
+      e.root.position.set(w.x, 0, w.z);
+      e.root.rotation.y = k < 1 ? yawTo(from, hide) : yawTo(hide, TRIPOD_L);
+      e.animate(elapsed, k > 0 && k < 1, { carry: 'none', act: 0, tired: false });
+      e.act?.(null);
+    });
+    // 아이들: 대문으로 들어와 트리 앞 한 줄 → 가운데를 비워 준다 → 브이
+    kids.forEach((v, i) => {
+      v.root.visible = t >= E.kidsIn[0] - 0.1;
+      const door = lane(GARDEN_WALL.s - 0.6, -0.6 + i * 0.6);
+      const kIn = ezf(seg(t, [E.kidsIn[0] + i * 0.35, E.kidsIn[1] - (2 - i) * 0.2]));
+      const spot = kidSpot(i, ezf(seg(t, E.makeRoom)));
+      const p = kIn < 1 ? mixL(door, kidSpot(i, 0), kIn) : spot;
+      const moving = (kIn > 0 && kIn < 1) || (t >= E.makeRoom[0] && t < E.makeRoom[1]);
+      const pose: PersonPose = { ...STAND, walk: moving ? elapsed * 2.2 : 0, look: -0.1 };
+      if (t >= E.vsign[0]) pose.armL = pose.armR = 'vsign';
+      else if (!moving && t > E.kidsIn[1]) pose.armR = Math.floor(t * 1.3 + i) % 3 === 0 ? 'wave' : 'down';
+      putPerson(v, p, kIn < 1 ? yawTo(door, kidSpot(i, 0)) : yawTo(p, TRIPOD_L), pose, elapsed);
+    });
+    // 할머니: 뒤따라 들어와 사진기 앞 → 타이머 → 가운데 자리 → 브이
+    grandma.root.visible = t >= E.grandmaIn[0] - 0.1;
+    const G0 = lane(TRIPOD.s - 0.3, TRIPOD.t + 1.1);
+    const door = lane(GARDEN_WALL.s - 0.6, 0);
+    let gp = G0, gy = yawTo(G0, TRIPOD_L);
+    let gpose: PersonPose = { ...STAND };
+    if (t < E.grandmaIn[1]) {
+      const k = ezf(seg(t, E.grandmaIn));
+      gp = mixL(door, G0, k);
+      gy = yawTo(door, G0);
+      gpose = { ...STAND, walk: elapsed * 1.4 };
+    } else if (t < E.toSpot[0]) {
+      gpose = { ...STAND, armR: 'reach', look: 0.3 };
+    } else if (t < E.toSpot[1]) {
+      const k = ezf(seg(t, E.toSpot));
+      gp = mixL(G0, grandmaSpot, k);
+      gy = k < 0.85 ? yawTo(G0, grandmaSpot) : yawTo(grandmaSpot, TRIPOD_L);
+      gpose = { ...STAND, walk: elapsed * 1.8 };
+    } else {
+      gp = grandmaSpot;
+      gy = yawTo(grandmaSpot, TRIPOD_L);
+      gpose = { ...STAND, armL: t >= E.vsign[0] ? 'vsign' : 'down', armR: t >= E.vsign[0] ? 'vsign' : 'down' };
+    }
+    putPerson(grandma, gp, gy, gpose, elapsed);
+    // 타이머 등: 누른 뒤 찰칵까지 깜박(점점 빨리)
+    const tl = t >= E.timer[1] && t < E.shutter ? Math.sin((t - E.timer[1]) * (6 + (t - E.timer[1]) * 4)) > 0 : false;
+    space.setTimerLamp(tl);
+    // 찰칵: 지금 장면을 할머니 사진기 구도로 찍어 화면을 채운다 → 작년 사진이 같은 구도로 포개진다
+    if (t >= E.shutter && !stack) {
+      capture('final', finalPhoto, 1);
+      stack = createPhotoStack(document, finalPhoto, photos.lastYear, E.overlay[0] - E.shutter, E.overlay[1] - E.overlay[0]);
+    }
+    if (stack) stack.update(t - E.shutter);
+    // 사진기: 지금 화면 → 할머니 사진기 바로 뒤·위(사진과 같은 쪽에서 본다)
+    const k = ezf(t / 2.0);
     const tree = W(TREE.s, TREE.t);
     const back = new THREE.Vector3(space.tripod.x - tree.x, 0, space.tripod.z - tree.z).normalize();
-    const eye = space.tripod.clone().addScaledVector(back, 3.2).add(new THREE.Vector3(0, 1.3, 0));
+    const eye = space.tripod.clone().addScaledVector(back, 3.2).add(new THREE.Vector3(0, 2.6, 0));
     const from = endFrom ?? (endFrom = camera.position.clone());
     endCam.position.set(from.x + (eye.x - from.x) * k, from.y + (eye.y - from.y) * k, from.z + (eye.z - from.z) * k);
-    endCam.lookAt(tree.x, 3.8 + 1.4 * ez(Math.min(1, Math.max(0, (t - 2) / 3))), tree.z);
+    endCam.lookAt(tree.x, 3.2 + 1.0 * ezf((t - 2) / 3), tree.z);
     endCam.aspect = aspect;
     endCam.updateProjectionMatrix();
     snow.update(frame, tree.x, tree.z, 24);
@@ -485,6 +806,13 @@ export function startChapter4(models: Models): void {
       ch4Events: () => events.map((e) => ({ ...e })),
       run: () => ({ ...run.state }),
       ending: () => ending,
+      endBeat: () => (ending >= 0 ? treeEndBeat(ending) : null),
+      seekEnding: (t: number) => {
+        if (ending >= 0) ending = t;
+      },
+      intro: () => ({ envelope: envelope ? envelope.stage : null, t: introT, photos: photosReady }),
+      introNext: () => envelope?.next(),
+      skipIntro: () => (envelope ? envelope.skip() : endIntro()),
       timer: () => (bar.style.display === 'none' ? null : timerLeft(state)),
       lane: (x: number, z: number) => toLane({ x, z }),
       world: (s: number, t: number) => W(s, t),

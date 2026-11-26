@@ -26,6 +26,7 @@ import type { Models } from './models';
 import { townLamp } from './plaza';
 import { alleyHouse, berm, contactShadow, footprints, packedPath, roundedBox, type Detail } from './plazaDressing';
 import { warmPool } from './winterLight';
+import { drawHouseStamp } from '../ui/envelope';
 
 const std = (color: string, extra: THREE.MeshStandardMaterialParameters = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, ...extra });
 const snowMat = std('#f4f7fc', { roughness: 1 });
@@ -91,6 +92,8 @@ export interface Tree {
   setString(c: WireColor, k: number): void;
   /** 불 켜기 진행(0~1): 아래 가지부터 꼭대기 별까지 */
   setLit(k: number): void;
+  /** 전구 자리(월드): 올해 사진 위에 할머니가 노란 색연필로 불빛을 그린 곳 */
+  bulbs(): THREE.Vector3[];
 }
 
 /** 큰 트리: 층층 원뿔 + 눈 + 큰 장식 + 전구 줄 셋(나선) + 꼭대기 별 */
@@ -180,6 +183,10 @@ function bigTree(): Tree {
       if (lit === k) return;
       lit = k;
       apply();
+    },
+    bulbs() {
+      g.updateMatrixWorld(true);
+      return bulbs.map((b) => b.mesh.getWorldPosition(new THREE.Vector3()));
     },
   };
   function radiusAt(y: number): number {
@@ -339,9 +346,14 @@ function buriedOrnament(r: number, color: string): THREE.Group {
   return g;
 }
 
-/** 할머니의 삼각대 사진기 */
+/** 할머니의 삼각대 사진기(타이머 등이 깜박인다) */
 function tripodCamera(): THREE.Group {
   const g = new THREE.Group();
+  const lampMat = new THREE.MeshStandardMaterial({ color: '#552222', emissive: '#ff3a2a', emissiveIntensity: 0 });
+  const timerLamp = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), lampMat);
+  timerLamp.position.set(-0.18, 2.62, 0.18);
+  timerLamp.name = 'timerLamp';
+  g.add(timerLamp);
   const legM = std('#3b3f4a');
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * Math.PI * 2;
@@ -377,6 +389,8 @@ export interface Ch4Scene {
   socket: Record<WireColor, THREE.Vector3>;
   /** 할머니 사진기(월드, 05d 사진 장면) */
   tripod: THREE.Vector3;
+  /** 삼각대 사진기 타이머 등 */
+  setTimerLamp(on: boolean): void;
   update(t: number): void;
 }
 
@@ -489,6 +503,20 @@ export function createChapter4Scene(models: Models, base: string, detail: Detail
   lid.position.set(0, 0.6, -0.3);
   lid.rotation.x = -1.2;
   box.add(lid);
+  // 상자 앞면: 봉투와 같은 집 그림 도장
+  const stampCv = document.createElement('canvas');
+  stampCv.width = stampCv.height = 96;
+  const sg = stampCv.getContext('2d');
+  if (sg) {
+    sg.fillStyle = '#2f9a4a';
+    sg.fillRect(0, 0, 96, 96);
+    drawHouseStamp(sg, 48, 48, 1.15, '#f6ead8');
+  }
+  const stampTex = new THREE.CanvasTexture(stampCv);
+  stampTex.colorSpace = THREE.SRGBColorSpace;
+  const stamp = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.42), new THREE.MeshBasicMaterial({ map: stampTex }));
+  stamp.position.set(0, 0.26, 0.305);
+  box.add(stamp);
   box.position.set(CH4_START.box.x, 0, CH4_START.box.z);
   box.rotation.y = YAW.back + 0.3;
   root.add(box);
@@ -515,6 +543,10 @@ export function createChapter4Scene(models: Models, base: string, detail: Detail
     boardOut,
     socket,
     tripod: at(TRIPOD.s, TRIPOD.t, 2.45),
+    setTimerLamp(on) {
+      const m = tri.getObjectByName('timerLamp') as THREE.Mesh;
+      (m.material as THREE.MeshStandardMaterial).emissiveIntensity = on ? 2.4 : 0;
+    },
     setGate(open) {
       leaves.forEach((h, i) => (h.rotation.y = YAW.back + (i === 0 ? open * 1.5 : Math.PI - open * 1.5)));
     },

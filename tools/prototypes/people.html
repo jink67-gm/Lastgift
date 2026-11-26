@@ -22,12 +22,16 @@ const poses = [
   ['mom', { walk: 0, crouch: 0, look: 0, armL: 'hold', armR: 'hold' }],
   ['mom', { walk: 0, crouch: 1, look: 0.5, armL: 'down', armR: 'pet' }],
   ['dad', { walk: 0, crouch: 0, look: 0, armL: 'down', armR: 'down' }],
+  ['grandma', { walk: 0, crouch: 0, look: 0, armL: 'vsign', armR: 'vsign' }],
+  ['kidA', { walk: 0, crouch: 0, look: 0, armL: 'vsign', armR: 'vsign' }],
+  ['kidB', { walk: 0, crouch: 0, look: 0, armL: 'down', armR: 'vsign' }],
+  ['kidC', { walk: 0.3, crouch: 0, look: 0, armL: 'down', armR: 'down' }],
 ];
-poses.forEach(([role, p], i) => { const v = createPerson(models, role); v.pose(p, 1.0); v.root.position.x = -14 + i * 3.6; s.add(v.root); });
-const e = createElfAvatar(models, ELF_LOOKS[0]); e.root.scale.multiplyScalar(1.2); e.root.position.x = 15; s.add(e.root); e.animate(1, false);
-const k = createKongi(models); k.root.position.x = 17.2; k.root.rotation.y = -Math.PI / 2; s.add(k.root); k.head(-1, 0); k.update(0.1);
+poses.forEach(([role, p], i) => { const v = createPerson(models, role); v.pose(p, 1.0); v.root.position.x = -15 + i * 2.6; s.add(v.root); });
+const e = createElfAvatar(models, ELF_LOOKS[0]); e.root.scale.multiplyScalar(1.2); e.root.position.x = 16; s.add(e.root); e.animate(1, false);
+const k = createKongi(models); k.root.position.x = 17.6; k.root.rotation.y = -Math.PI / 2; s.add(k.root); k.head(-1, 0); k.update(0.1);
 const view = q.get('view') || 'front';
-const W = 34, Hh = W * 600 / 1600;
+const W = 38, Hh = W * 600 / 1600;
 const cam = new THREE.OrthographicCamera(-W / 2, W / 2, Hh / 2, -Hh / 2, 0.1, 200);
 if (view === 'front') { cam.position.set(1.5, 2.4, 40); cam.lookAt(1.5, 2.4, 0); }
 else { cam.position.set(1.5 + 28, 2 + 20, 28); cam.lookAt(1.5, 2, 0); }

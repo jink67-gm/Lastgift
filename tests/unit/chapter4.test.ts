@@ -189,3 +189,26 @@ describe('4장 길', () => {
     expect(planAction(st, 'p0')).toEqual({ kind: 'place', itemId: 'generator' });
   });
 });
+
+describe('4장 앞뒤 장면 시간표', () => {
+  it('시작: 사진기 놓기 → 스위치까지 → 누름 → 깜박이다 만다 → 고개 젓기 → 대문 밖으로, 겹치지 않는다', async () => {
+    const { TREE_INTRO: I } = await import('../../src/core/treePhoto');
+    const order = [I.setCamera, I.toSwitch, I.press, I.flicker, I.shake, I.leave];
+    for (let i = 1; i < order.length; i++) expect(order[i]![0]).toBeGreaterThanOrEqual(order[i - 1]![1] - 1e-9);
+    expect(I.end).toBeGreaterThanOrEqual(I.leave[1]);
+  });
+  it('끝: 불 → 아이들 → 할머니 → 타이머 → 자리 비워 주기 → 브이 → 찰칵 → 올해 사진 → 작년 사진 포개짐', async () => {
+    const { TREE_END: E, treeEndBeat, PHOTO_LINE } = await import('../../src/core/treePhoto');
+    expect(E.kidsIn[0]).toBeGreaterThanOrEqual(E.lights[1] - 0.5);
+    expect(E.timer[0]).toBeGreaterThanOrEqual(E.grandmaIn[1]);
+    expect(E.makeRoom[0]).toBeGreaterThanOrEqual(E.timer[1]); // 할머니가 돌아서는 순간 비워 준다
+    expect(E.shutter).toBeGreaterThan(E.vsign[0]);
+    expect(E.overlay[0]).toBeGreaterThan(E.shutter);
+    expect([2, 4.6, 7, 8.8, 11, 13.5, 16].map(treeEndBeat)).toEqual(['lights', 'kids', 'grandma', 'timer', 'pose', 'photo', 'overlay']);
+    // 비워 준 뒤 가운데(할머니 자리)는 양옆 아이와 1 m 넘게 떨어진다
+    const left = Math.max(...PHOTO_LINE.after.filter((t) => t < PHOTO_LINE.grandma));
+    const right = Math.min(...PHOTO_LINE.after.filter((t) => t > PHOTO_LINE.grandma));
+    expect(PHOTO_LINE.grandma - left).toBeGreaterThan(1);
+    expect(right - PHOTO_LINE.grandma).toBeGreaterThan(1);
+  });
+});

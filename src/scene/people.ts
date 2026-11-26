@@ -5,20 +5,26 @@
 import * as THREE from 'three';
 import type { Models } from './models';
 
-export type PersonRole = 'minjae' | 'mom' | 'dad';
+export type PersonRole = 'minjae' | 'mom' | 'dad' | 'grandma' | 'kidA' | 'kidB' | 'kidC';
 
 /** 키(게임 단위): 민재(3~4학년, 약 1.35 m), 엄마(약 1.62 m), 아빠(약 1.75 m) */
-export const PERSON_HEIGHT: Record<PersonRole, number> = { minjae: 3.3, mom: 3.95, dad: 4.27 };
+/** 할머니(약 1.52 m), 동네 아이들(약 1.2~1.4 m) */
+export const PERSON_HEIGHT: Record<PersonRole, number> = { minjae: 3.3, mom: 3.95, dad: 4.27, grandma: 3.7, kidA: 3.0, kidB: 3.35, kidC: 3.15 };
 
 const LOOKS: Record<PersonRole, { coat: string; pants: string; hair: string; hat?: string; scarf?: string }> = {
   // 민재: 파란 패딩 + 노란 털모자(축구공과 어울리게)
   minjae: { coat: '#2f6fd0', pants: '#3b3f4a', hair: '#2a1d14', hat: '#f0b429', scarf: '#d23a3a' },
   mom: { coat: '#c95a7a', pants: '#4a4f5c', hair: '#3a2418', scarf: '#f2efe6' },
   dad: { coat: '#3f7a52', pants: '#2f333c', hair: '#1e1a18', hat: '#6a4a3a' },
+  // 할머니: 보라 코트 + 흰머리 + 빨간 목도리
+  grandma: { coat: '#7a4ad0', pants: '#4a4f5c', hair: '#e6e6e6', scarf: '#d23a3a' },
+  kidA: { coat: '#f0b429', pants: '#3b3f4a', hair: '#2a1d14', hat: '#d23a3a' },
+  kidB: { coat: '#2f9a4a', pants: '#2f333c', hair: '#3a2418', scarf: '#f0b429' },
+  kidC: { coat: '#e07a9a', pants: '#4a4f5c', hair: '#1e1a18', hat: '#2f6fd0' },
 };
 
 /** 팔 하나의 자세 */
-export type ArmPose = 'down' | 'wave' | 'beckon' | 'reach' | 'hold' | 'hug' | 'pet';
+export type ArmPose = 'down' | 'wave' | 'beckon' | 'reach' | 'hold' | 'hug' | 'pet' | 'vsign';
 
 export interface PersonPose {
   /** 걷기(위상이 흐르는 동안 다리·팔을 흔든다). 0 = 서 있다 */
@@ -27,6 +33,8 @@ export interface PersonPose {
   crouch: number;
   /** 고개 숙이기(0~1, 음수면 든다) */
   look: number;
+  /** 고개 돌리기(라디안, + = 인물의 왼쪽). 없으면 0 */
+  turn?: number;
   armL: ArmPose;
   armR: ArmPose;
 }
@@ -48,7 +56,7 @@ export function createPerson(_models: Models, role: PersonRole): PersonView {
   const H = PERSON_HEIGHT[role];
   const L = LOOKS[role];
   const k = H / 4; // 비율 단위
-  const child = role === 'minjae';
+  const child = role === 'minjae' || role.startsWith('kid');
   const root = new THREE.Group();
   const coat = mat(L.coat);
   const pants = mat(L.pants);
@@ -141,7 +149,17 @@ export function createPerson(_models: Models, role: PersonRole): PersonView {
     const tip = new THREE.Object3D();
     tip.position.y = -armLen * 0.52;
     el.add(tip);
-    return { sh, el, tip };
+    // 브이 손가락 둘(브이 자세일 때만)
+    const vee = new THREE.Group();
+    for (const a of [-0.32, 0.32]) {
+      const f = new THREE.Mesh(new THREE.CapsuleGeometry(0.035 * k, 0.16 * k, 3, 6), mitt.material);
+      f.position.set(Math.sin(a) * 0.1 * k, -armLen * 0.48 - 0.16 * k, 0);
+      f.rotation.z = a;
+      vee.add(f);
+    }
+    vee.visible = false;
+    el.add(vee);
+    return { sh, el, tip, vee };
   });
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.55 * k, 20), new THREE.MeshBasicMaterial({ color: '#1b2433', transparent: true, opacity: 0.22, depthWrite: false }));
   shadow.rotation.x = -Math.PI / 2;
@@ -165,6 +183,9 @@ export function createPerson(_models: Models, role: PersonRole): PersonView {
         return [-0.7, side * 0.1, -1.2];
       case 'hug':
         return [-1.0, -side * 0.5, -1.4];
+      case 'vsign':
+        // 손가락 브이: 팔꿈치를 굽혀 손을 얼굴 옆 앞으로
+        return [-0.55, side * 0.55, -2.0];
       case 'pet':
         return [-1.0 + 0.12 * Math.sin(t * 7), side * 0.1, -0.35];
       default:
@@ -187,13 +208,14 @@ export function createPerson(_models: Models, role: PersonRole): PersonView {
       });
       hips.position.y = legLen * (1 - 0.52 * c) + Math.abs(Math.cos(ph)) * 0.05 * k * w;
       torso.rotation.x = 0.35 * c;
-      neck.rotation.x = 0.45 * p.look - 0.2 * c;
+      neck.rotation.set(0.45 * p.look - 0.2 * c, p.turn ?? 0, 0);
       arms.forEach((g, i) => {
         const sx = i === 0 ? -1 : 1;
         const a = sx < 0 ? p.armR : p.armL; // 인물의 오른팔은 -x(앞에서 보면 화면 왼쪽)
         let [rx, rz, el] = ARM(a, t, sx);
         if (a === 'down' && w) rx += Math.sin(ph + (i === 0 ? Math.PI : 0)) * 0.45;
         g.sh.rotation.set(rx, 0, rz);
+        g.vee.visible = a === 'vsign';
         // 손 흔들기: 팔꿈치를 축으로 좌우
         g.el.rotation.set(el, 0, a === 'wave' ? Math.sin(t * 8) * 0.45 : 0);
         if (a === 'wave') g.el.rotation.x = 0;
