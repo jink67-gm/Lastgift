@@ -4,6 +4,7 @@
 //   쪽문은 두 손으로 빗장을 들어야 열려 공을 든 요정은 지나가지 못한다. 콩이는 리본을 따라 울타리 밑으로 쫓아온다.
 //   대문 안쪽 자리에 공을 내려놓으면 3장 완료(기억 3). 민재·식구의 입양 장면은 05b(사람은 사용자 에셋).
 import * as THREE from 'three';
+import { addHaze, createBackdrop } from '../scene/backdrop';
 import { baseViewH, deadZone, frameFor, type Pt } from '../core/framing';
 import { createChapter3, planAction, step, CAMERA_YAW, type Ch3Action, type Ch3Event, type Ch3State } from '../core/chapter3';
 import { AutoQuality, effectiveQuality, snowCount, type Quality } from '../core/quality';
@@ -124,6 +125,9 @@ export function startChapter3(models: Models): void {
   const space = createChapter3Scene(models, import.meta.env.BASE_URL, low ? 'low' : 'normal');
   setShadows(space.root, true);
   scene.add(space.root);
+  // 배경: 밤하늘·달·먼 언덕·숲·이웃집(놀이 공간과 사진기 쪽은 비운다)
+  scene.add(createBackdrop(models, { center: W(20, 0), forest: [16, 95], trees: 460, keepOut: (p) => { const l = toLane(p); return l.s > -40 && l.s < 56 && Math.abs(l.t) < 12; } }));
+  addHaze(scene);
 
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 300);
   const camOffset = new THREE.Vector3(Math.sin(CAMERA_YAW) * Math.cos(CAMERA_PITCH), Math.sin(CAMERA_PITCH), Math.cos(CAMERA_YAW) * Math.cos(CAMERA_PITCH)).multiplyScalar(60);

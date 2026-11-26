@@ -5,6 +5,7 @@
 //   트리 양쪽 스위치를 시간 안에 하나씩. 완료하면 아래 가지부터 꼭대기 별까지 불이 켜진다(기억 4).
 //   할머니·아이들·사진 장면은 05d(사람은 임시 모형, 인물 에셋을 받으면 교체).
 import * as THREE from 'three';
+import { addHaze, createBackdrop } from '../scene/backdrop';
 import { baseViewH, deadZone, frameFor, type Pt } from '../core/framing';
 import { createChapter4, createPractice, planAction, progressOf, step, timerLeft, CAMERA_YAW, type Ch4Action, type Ch4Event, type Ch4State } from '../core/chapter4';
 import { AutoQuality, effectiveQuality, snowCount, type Quality } from '../core/quality';
@@ -97,6 +98,9 @@ export function startChapter4(models: Models): void {
   const space = createChapter4Scene(models, import.meta.env.BASE_URL, low ? 'low' : 'normal');
   setShadows(space.root, true);
   scene.add(space.root);
+  // 배경: 밤하늘·달·먼 언덕·숲·이웃집(놀이 공간과 사진기 쪽은 비운다)
+  scene.add(createBackdrop(models, { center: W(20, 0), forest: [16, 95], trees: 460, keepOut: (p) => { const l = toLane(p); return l.s > -38 && l.s < 50 && Math.abs(l.t) < 15; } }));
+  addHaze(scene);
 
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 300);
   const camOffset = new THREE.Vector3(Math.sin(CAMERA_YAW) * Math.cos(CAMERA_PITCH), Math.sin(CAMERA_PITCH), Math.cos(CAMERA_YAW) * Math.cos(CAMERA_PITCH)).multiplyScalar(60);

@@ -18,8 +18,9 @@ export const LANE_HALF = 3.2;
 export const GARDEN_WALL = { s: 14, gate: [-1.4, 1.4] as const, height: 2.1 };
 /** 정원: 담장 ~ 할머니네 집 앞, 좌우 */
 export const GARDEN = { front: 14, back: 35, half: 10.5 };
-/** 할머니네 집(정원 뒤, 앞면이 사진기 쪽) */
-export const GRANDMA_HOUSE = { s: GARDEN.back + HOUSE_HALF.d, t: 2.5, scale: HOUSE_SCALE };
+/** 할머니네 집(정원 뒤, 앞면이 사진기 쪽): 골목 집보다 1.45배 큰 이층 느낌의 집(트리보다 커 보이게) */
+const GRANDMA_K = 1.45;
+export const GRANDMA_HOUSE = { s: GARDEN.back + HOUSE_HALF.d * GRANDMA_K, t: 1.5, scale: HOUSE_SCALE * GRANDMA_K };
 
 /** 트리(정원 가운데): 줄기·아래 가지 반지름, 높이 */
 export const TREE = { s: 25, t: 0, r: 2.0, height: 9.5 };

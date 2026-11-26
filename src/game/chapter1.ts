@@ -4,6 +4,7 @@
 //   유나네 앞마당(낮은 담 안)에 들어서면 "찾았다". 망보기·현관 배달·유나 장면은 04-4b.
 //   사람(유나·지우)은 사용자가 줄 에셋으로 넣는다(지금은 창가에 실루엣 자리).
 import * as THREE from 'three';
+import { addHaze, createBackdrop } from '../scene/backdrop';
 import { baseViewH, deadZone, frameFor, type Pt } from '../core/framing';
 import { createChapter1, gazeAt, lookoutAt, planAction, step, CAMERA_YAW, type Ch1Action, type Ch1Event, type Ch1State } from '../core/chapter1';
 import { AutoQuality, effectiveQuality, snowCount, type Quality } from '../core/quality';
@@ -80,6 +81,9 @@ export function startChapter1(models: Models): void {
   const space = createChapter1Scene(models, import.meta.env.BASE_URL, low ? 'low' : 'normal');
   setShadows(space.root, true);
   scene.add(space.root);
+  // 배경: 밤하늘·달·먼 언덕·숲·이웃집(놀이 공간과 사진기 쪽은 비운다)
+  scene.add(createBackdrop(models, { center: W(25, 0), forest: [16, 95], trees: 460, keepOut: (p) => { const l = toLane(p); return l.s > -48 && l.s < 70 && Math.abs(l.t) < 20; } }));
+  addHaze(scene);
 
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 300);
   camera.layers.enable(FROST_LAYER); // 큰 화면은 창 성에가 보인다(유나가 어디를 보는지 모른다)

@@ -1,0 +1,22 @@
+<!-- 시제품(게임 코드 아님): 배경(scene/backdrop.ts)만 띄워 네 방향을 본다. /tools/prototypes/backdrop.html?fog=1 -->
+<!doctype html><html><body style="margin:0"><canvas id=c></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { Models } from '/src/scene/models.ts';
+import { createBackdrop, addHaze } from '/src/scene/backdrop.ts';
+import { createWinterLight } from '/src/scene/winterLight.ts';
+const q = new URLSearchParams(location.search);
+const r = new THREE.WebGLRenderer({ canvas: c, antialias: true }); r.setSize(1600, 500); r.setPixelRatio(1); r.setScissorTest(true);
+const s = new THREE.Scene();
+createWinterLight(s, r, { shadows: false, mapSize: 512 });
+const models = await Models.load(['ttHouse'], '/');
+s.add(createBackdrop(models, { center: { x: 0, z: 0 }, forest: [16, 95], trees: 460, keepOut: (p) => Math.abs(p.x) < 12 && Math.abs(p.z) < 12 }));
+if (q.get('fog') !== '0') addHaze(s);
+const yaws = [-Math.PI * 0.75, -Math.PI * 0.25, Math.PI * 0.25, Math.PI * 0.75];
+yaws.forEach((y, i) => {
+  const cam = new THREE.PerspectiveCamera(50, 400 / 500, 0.1, 400);
+  cam.position.set(0, 3, 0); cam.lookAt(Math.sin(y) * 10, 4, Math.cos(y) * 10);
+  r.setViewport(i * 400, 0, 400, 500); r.setScissor(i * 400, 0, 400, 500); r.render(s, cam);
+});
+window.__ready = true;
+</script></body></html>

@@ -4,6 +4,7 @@
 const CSS = `
 .offscreen-mark { position: fixed; z-index: 15; width: 44px; height: 44px; margin: -22px 0 0 -22px; pointer-events: none; display: none; }
 .offscreen-mark.on { display: block; }
+body.cutscene .offscreen-mark { display: none !important; }
 .offscreen-mark .dot { position: absolute; inset: 6px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 2px #1b2433; }
 .offscreen-mark .arrow { position: absolute; left: 50%; top: 50%; width: 0; height: 0; margin: -9px 0 0 -2px;
   border-left: 16px solid #fff; border-top: 9px solid transparent; border-bottom: 9px solid transparent;
