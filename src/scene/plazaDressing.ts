@@ -355,9 +355,19 @@ function edgeFence(models: Models, from: { x: number; z: number }, to: { x: numb
     let f = models.clone('ttFence');
     if (f) f.scale.setScalar(SCALE);
     else {
-      f = new THREE.Group();
-      for (const y of [0.32, 0.6]) (f as THREE.Group).add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(piece, 0.08, 0.06), wood), { position: new THREE.Vector3(0, y, 0) }));
-      for (const px of [-piece / 2 + 0.1, piece / 2 - 0.1]) (f as THREE.Group).add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.77, 0.1), wood), { position: new THREE.Vector3(px, 0.38, 0) }));
+      // 모델이 없을 때: 가로대 둘 + 기둥 둘(position은 읽기 전용이라 set으로)
+      const fb = new THREE.Group();
+      for (const y of [0.32, 0.6]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(piece, 0.08, 0.06), wood);
+        rail.position.set(0, y, 0);
+        fb.add(rail);
+      }
+      for (const px of [-piece / 2 + 0.1, piece / 2 - 0.1]) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.77, 0.1), wood);
+        post.position.set(px, 0.38, 0);
+        fb.add(post);
+      }
+      f = fb;
     }
     f.position.set(x, 0, z);
     f.rotation.y = yaw;
