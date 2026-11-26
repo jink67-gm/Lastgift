@@ -57,12 +57,14 @@ describe('광장 배치', () => {
     expect(PLAZA_COLLIDERS.some((c) => overlaps(ELF_SPAWN, ELF_RADIUS, c))).toBe(false);
   });
 
-  it('소품은 모두 광장 안에 있다', () => {
+  it('판정은 모두 광장과 겹친다(사람 크기의 바깥 집·나무는 판정 없음)', () => {
     for (const c of PLAZA_COLLIDERS) {
-      expect(c.x).toBeGreaterThanOrEqual(PLAZA_BOUNDS.minX);
-      expect(c.x).toBeLessThanOrEqual(PLAZA_BOUNDS.maxX);
-      expect(c.z).toBeGreaterThanOrEqual(PLAZA_BOUNDS.minZ);
-      expect(c.z).toBeLessThanOrEqual(PLAZA_BOUNDS.maxZ);
+      const hx = c.kind === 'box' ? c.hx : c.kind === 'circle' ? c.r : 0;
+      const hz = c.kind === 'box' ? c.hz : c.kind === 'circle' ? c.r : 0;
+      expect(c.x + hx).toBeGreaterThan(PLAZA_BOUNDS.minX);
+      expect(c.x - hx).toBeLessThan(PLAZA_BOUNDS.maxX);
+      expect(c.z + hz).toBeGreaterThan(PLAZA_BOUNDS.minZ);
+      expect(c.z - hz).toBeLessThan(PLAZA_BOUNDS.maxZ);
     }
   });
 });

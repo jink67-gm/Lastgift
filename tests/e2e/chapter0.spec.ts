@@ -155,7 +155,7 @@ test('두 요정이 선물 다섯 개를 그림 표식 네 곳에 나눠 놓으�
   await walk(page, 'p1', [{ x: -9, z: 6.8 }, { x: -4.5, z: 2.2 }, { x: -3, z: -4 }, { x: -0.5, z: -5.2 }, { x: 3.6, z: -5.2 }, grip(c, 1)], 0.25);
   await press(page, 'p1');
   expect((await st(page)).sewing.crate.lifted).toBe(true);
-  for (const wp of [{ x: 2, z: -4.6 }, { x: 12.7, z: -4.6 }]) await carry(page, { ...wp, yaw: Math.PI / 2 });
+  for (const wp of [{ x: 2, z: -5 }, { x: 12.7, z: -5 }]) await carry(page, { ...wp, yaw: Math.PI / 2 });
   await press(page, 'p0');
   s = await st(page);
   expect(s.crateSorted).toBe(true);

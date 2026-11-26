@@ -1,12 +1,18 @@
 // Kenney Holiday Kit(CC0) 조각으로 통나무집과 소품을 만든다. 1칸 = 1단위(×KENNEY_SCALE = 2 m).
-// 조각 규칙(직접 재서 확인): 벽 조각은 칸 중심 기준 +z 가장자리에 서 있고, 지붕은 높이 1에 얹는다.
+// 조각 규칙(직접 재서 확인): 벽 조각은 칸 중심 기준 +z 가장자리에 서 있고(두께 0.3~0.7 → 바깥면은 칸 가장자리 + 0.2),
+// 지붕은 높이 1에 얹는다. 그래서 2 × N칸 집의 바깥 둘레는 (2 + 0.4) × (N + 0.4)단위다.
 // 시험 조립 화면으로 확인한 배치를 그대로 쓴다. 모델이 없으면 null을 돌려준다(기본 도형으로 대신).
 import * as THREE from 'three';
 import { KENNEY_SCALE, type ModelName, type Models } from './models';
+import { TOWN } from '../data/townScale';
 import { warmPool } from './winterLight';
 
 /** 창·문 안쪽의 살구색 불빛(빛을 받지 않는 재질 = 밤에도 밝게 보인다) */
 const WARM = new THREE.MeshBasicMaterial({ color: '#ffc47e' });
+const DOOR = new THREE.MeshStandardMaterial({ color: '#7a4a2c', roughness: 0.85 });
+const DOOR_DARK = new THREE.MeshStandardMaterial({ color: '#5c361f', roughness: 0.9 });
+const KNOB = new THREE.MeshStandardMaterial({ color: '#d8b04a', metalness: 0.6, roughness: 0.35 });
+const STONE = new THREE.MeshStandardMaterial({ color: '#a9a39a', roughness: 0.95 });
 
 const R = { pz: 0, px: Math.PI / 2, nz: Math.PI, nx: -Math.PI / 2 };
 
@@ -15,6 +21,8 @@ export interface CabinOptions {
   depth: number;
   /** 앞벽 왼쪽 칸에 문, 오른쪽 칸에 창(앞 = 회전 전 +z) */
   wreath?: boolean;
+  /** 배율(기본 KENNEY_SCALE). 사람 집은 KENNEY_HOUSE_SCALE(문 열린 부분 = 요정 키 × 4.5) */
+  scale?: number;
 }
 
 /** 2 × depth 칸 통나무집. 원점 = 바닥 가운데, 앞 = +z */
@@ -59,16 +67,37 @@ export function buildCabin(models: Models, opt: CabinOptions): THREE.Group | nul
   }
   // 사람이 사는 집: 창과 문 안쪽에 따뜻한 불빛, 문 앞 눈 위에 빛 웅덩이(연출 가이드 §6)
   const edge = front + 0.5;
+  // 사람 문: 열린 부분(폭 0.5 × 높이 0.8단위)에 바깥으로 조금 열린 문짝 + 사람 손 높이의 손잡이(요정 키 × 2) + 낮은 문턱
+  const s = opt.scale ?? KENNEY_SCALE;
+  const hinge = new THREE.Group();
+  hinge.position.set(-0.75, 0, edge + 0.19);
+  hinge.rotation.y = -0.35; // 바깥(+z)으로 약 20° 열림 → 안쪽 살구빛이 틈으로 보인다
+  const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, 0.035), DOOR);
+  leaf.position.set(0.25, 0.4, 0);
+  hinge.add(leaf);
+  for (const y of [0.18, 0.62]) {
+    const plank = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.05, 0.05), DOOR_DARK);
+    plank.position.set(0.25, y, 0.01);
+    hinge.add(plank);
+  }
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 8), KNOB);
+  knob.position.set(0.44, TOWN.doorKnob / s, 0.035);
+  hinge.add(knob);
+  g.add(hinge);
+  const sill = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.03, 0.2), STONE);
+  sill.position.set(-0.5, 0.015, edge + 0.28);
+  g.add(sill);
   const pane = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.36), WARM);
   pane.position.set(0.5, 0.5, edge - 0.09);
   g.add(pane);
   const door = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.78), WARM);
   door.position.set(-0.5, 0.39, edge - 0.14);
   g.add(door);
-  const pool = warmPool(0.75);
-  pool.position.set(-0.3, 0.004, edge + 0.55);
+  const pr = Math.min(0.75, 2.4 / s); // 문 앞 빛 웅덩이: 땅에서 반지름 약 2.4
+  const pool = warmPool(pr);
+  pool.position.set(-0.4, 0.004, edge + 0.2 + pr * 0.8);
   g.add(pool);
-  g.scale.setScalar(KENNEY_SCALE);
+  g.scale.setScalar(s);
   return g;
 }
 

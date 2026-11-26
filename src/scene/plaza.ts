@@ -2,6 +2,7 @@
 // 썰매·눈더미·산타·시계탑은 아직 직접 만든 기본 도형이다.
 import * as THREE from 'three';
 import { PLAZA_BOUNDS, PLAZA_PROPS, type Prop } from '../data/plaza';
+import { BENCH_SCALE, KENNEY_HOUSE_SCALE, TOWN } from '../data/townScale';
 import { buildCabin, kenneyProp } from './kenney';
 import { Models } from './models';
 import { applySnowSurface, createPlazaDressing, type Detail } from './plazaDressing';
@@ -77,39 +78,30 @@ function tree(): THREE.Group {
 
 function house(w: number, d: number): THREE.Group {
   const g = new THREE.Group();
-  const wallH = 2.4;
+  const wallH = KENNEY_HOUSE_SCALE; // 사람 집 벽 높이(문 열린 부분 = 요정 키 × 4.5보다 조금 높다)
   g.add(mesh(new THREE.BoxGeometry(w, wallH, d), mat('#c9a27a'), 0, wallH / 2, 0));
-  const roof = mesh(new THREE.ConeGeometry(Math.SQRT1_2, 1, 4), mat('#7a3a2e'), 0, wallH + 0.7, 0);
+  const roof = mesh(new THREE.ConeGeometry(Math.SQRT1_2, 1, 4), mat('#7a3a2e'), 0, wallH * 1.275, 0);
   roof.rotation.y = Math.PI / 4;
-  roof.scale.set(w + 0.6, 1.4, d + 0.6);
+  roof.scale.set(w + 0.6, wallH * 0.55, d + 0.6);
   g.add(roof);
-  const snowCap = mesh(new THREE.ConeGeometry(Math.SQRT1_2, 1, 4), mat('#f7fbff', { roughness: 1 }), 0, wallH + 1.25, 0);
+  const snowCap = mesh(new THREE.ConeGeometry(Math.SQRT1_2, 1, 4), mat('#f7fbff', { roughness: 1 }), 0, wallH * 1.48, 0);
   snowCap.rotation.y = Math.PI / 4;
-  snowCap.scale.set((w + 0.6) * 0.45, 0.6, (d + 0.6) * 0.45);
+  snowCap.scale.set((w + 0.6) * 0.45, wallH * 0.25, (d + 0.6) * 0.45);
   g.add(snowCap);
   // 카메라 쪽(+z, +x) 벽에 문과 창
-  g.add(mesh(new THREE.BoxGeometry(0.9, 1.5, 0.06), mat('#5a3620'), -w * 0.2, 0.75, d / 2 + 0.03));
-  g.add(mesh(new THREE.BoxGeometry(0.8, 0.7, 0.06), mat('#ffe6a0', { emissive: '#ffcc66', emissiveIntensity: 0.5 }), w * 0.22, 1.4, d / 2 + 0.03));
+  g.add(mesh(new THREE.BoxGeometry(TOWN.doorOpening * 0.6, TOWN.doorOpening, 0.06), mat('#5a3620'), -w * 0.2, TOWN.doorOpening / 2, d / 2 + 0.03));
+  g.add(mesh(new THREE.SphereGeometry(0.14, 10, 8), mat('#d8b04a'), -w * 0.2 + TOWN.doorOpening * 0.24, TOWN.doorKnob, d / 2 + 0.1)); // 손잡이
+  g.add(mesh(new THREE.BoxGeometry(w * 0.22, wallH * 0.28, 0.06), mat('#ffe6a0', { emissive: '#ffcc66', emissiveIntensity: 0.5 }), w * 0.22, wallH * 0.55, d / 2 + 0.03));
   return g;
 }
 
-function bench(w: number, d: number): THREE.Group {
+function bench(w: number, d: number, seat = 0.45): THREE.Group {
   const g = new THREE.Group();
   const wood = mat('#7d5233');
-  g.add(mesh(new THREE.BoxGeometry(w, 0.1, d), wood, 0, 0.45, 0));
-  g.add(mesh(new THREE.BoxGeometry(w, 0.4, 0.08), wood, 0, 0.75, -d / 2 + 0.04));
-  for (const x of [-w / 2 + 0.15, w / 2 - 0.15]) g.add(mesh(new THREE.BoxGeometry(0.08, 0.45, d * 0.9), mat('#2f3340'), x, 0.22, 0));
-  g.add(mesh(new THREE.BoxGeometry(w, 0.06, d), mat('#f7fbff', { roughness: 1 }), 0, 0.53, 0)); // 소복한 눈
-  return g;
-}
-
-function lamp(): THREE.Group {
-  const g = new THREE.Group();
-  g.add(mesh(new THREE.CylinderGeometry(0.06, 0.09, 2.6, 8), mat('#2f3340'), 0, 1.3, 0));
-  g.add(mesh(new THREE.SphereGeometry(0.2, 12, 10), mat('#fff1c2', { emissive: '#ffd98a', emissiveIntensity: 1.2 }), 0, 2.75, 0));
-  const light = new THREE.PointLight('#ffd98a', 2.5, 5, 1.6);
-  light.position.y = 2.6;
-  g.add(light);
+  g.add(mesh(new THREE.BoxGeometry(w, 0.12, d), wood, 0, seat, 0));
+  g.add(mesh(new THREE.BoxGeometry(w, seat * 0.9, 0.1), wood, 0, seat * 1.6, -d / 2 + 0.05));
+  for (const x of [-w / 2 + 0.2, w / 2 - 0.2]) g.add(mesh(new THREE.BoxGeometry(0.12, seat, d * 0.9), mat('#2f3340'), x, seat / 2, 0));
+  g.add(mesh(new THREE.BoxGeometry(w, 0.08, d), mat('#f7fbff', { roughness: 1 }), 0, seat + 0.1, 0)); // 소복한 눈
   return g;
 }
 
@@ -149,35 +141,73 @@ function pine(): THREE.Group {
   return g;
 }
 
+/**
+ * 사람 가로등: 눈 바닥 ~ 등불 가운데 = 요정 키 × 7. 기둥은 굵기를 따로(지름 = 요정 키 × 0.2) 정해 가늘고 높게.
+ * 받침 · 가는 기둥 · 장식 고리 · 등불 상자(빛나는 유리) · 눈 얹힌 갓
+ */
+export function townLamp(): THREE.Group {
+  const g = new THREE.Group();
+  const iron = mat('#2f3340', { roughness: 0.6, metalness: 0.3 });
+  const top = TOWN.lampLight;
+  const r = TOWN.lampPoleDiameter / 2;
+  g.add(mesh(new THREE.CylinderGeometry(r * 2.2, r * 2.8, 0.55, 12), iron, 0, 0.275, 0)); // 받침
+  g.add(mesh(new THREE.CylinderGeometry(r * 0.8, r, top - 0.9, 10), iron, 0, 0.55 + (top - 0.9 - 0.55) / 2 + 0.275, 0));
+  const ring = mesh(new THREE.TorusGeometry(r * 2, r * 0.35, 6, 14), iron, 0, top - 0.75, 0);
+  ring.rotation.x = Math.PI / 2;
+  g.add(ring);
+  const glass = mat('#fff1c2', { emissive: '#ffd98a', emissiveIntensity: 1.3 });
+  g.add(mesh(new THREE.BoxGeometry(0.42, 0.62, 0.42), glass, 0, top, 0));
+  for (const [x, z] of [[-0.22, -0.22], [0.22, -0.22], [-0.22, 0.22], [0.22, 0.22]]) g.add(mesh(new THREE.BoxGeometry(0.05, 0.7, 0.05), iron, x, top, z));
+  const cap = mesh(new THREE.ConeGeometry(0.42, 0.34, 4), iron, 0, top + 0.5, 0);
+  cap.rotation.y = Math.PI / 4;
+  g.add(cap);
+  const snow = mesh(new THREE.ConeGeometry(0.3, 0.16, 4), mat('#f7fbff', { roughness: 1 }), 0, top + 0.62, 0);
+  snow.rotation.y = Math.PI / 4;
+  g.add(snow);
+  return g;
+}
+
 function build(p: Prop, models: Models, lampLights: { n: number }): THREE.Object3D {
   switch (p.kind) {
-    case 'sleigh': return sleigh();
-    case 'snowPile': return snowPile(p.r ?? 2);
-    case 'santa': return santa();
-    case 'clockTower': return clockTower();
-    case 'tree': return kenneyProp(models, 'treeDecorated') ?? tree();
-    case 'pine': return kenneyProp(models, p.x + p.z > 0 ? 'treeSnowB' : 'treeSnowA') ?? pine();
+    case 'sleigh': return scaled(sleigh(), 1.8); // 산타 썰매: 산타(사람 어른)가 앉을 크기
+    case 'snowPile': return scaled(snowPile(2.2), 1.3);
+    case 'santa': return scaled(santa(), 2.05); // 사람 어른: 요정 키의 약 4배
+    case 'clockTower': return scaled(clockTower(), 2.5); // 집(약 12)보다 높은 랜드마크
+    case 'tree': return kenneyProp(models, 'treeDecorated', 4.4) ?? scaled(tree(), 3.3); // 마을 트리 약 10
+    case 'pine': return kenneyProp(models, p.x + p.z > 0 ? 'treeSnowB' : 'treeSnowA', 5.4) ?? scaled(pine(), 3.4);
     case 'cabin': {
       // 집 모양은 회전 전 기준(앞 = +z)으로 만들고, 배치 때 rotY로 돌린다
-      const cells = p.cells ?? 3;
-      return buildCabin(models, { depth: cells, wreath: true }) ?? house(4.4, cells * 2 + 0.4);
+      const cells = p.cells ?? 2;
+      return buildCabin(models, { depth: cells, wreath: true, scale: KENNEY_HOUSE_SCALE }) ?? house(2 * KENNEY_HOUSE_SCALE, cells * KENNEY_HOUSE_SCALE);
     }
-    case 'bench': return kenneyProp(models, 'bench', 1.25) ?? bench(p.w ?? 2, p.d ?? 0.6); // 앉는 높이 약 0.45 m
+    case 'bench': return townBench(models);
     case 'lamp': {
-      const k = kenneyProp(models, 'lantern', 1.5); // 높이 약 2.6 m
-      if (!k) return lamp();
-      // 빛은 세 개까지만(저사양 기기)
-      const pool = warmPool(1.1 / 1.5);
+      const g = townLamp();
+      const pool = warmPool(1.6);
       pool.position.y = 0.003;
-      (k as THREE.Object3D).add(pool);
+      g.add(pool);
+      // 빛은 세 개까지만(저사양 기기). 높아진 등불에서 바닥까지 닿게
       if (lampLights.n++ < 3) {
-        const light = new THREE.PointLight('#ffd98a', 2.5, 5, 1.6);
-        light.position.y = 1.6; // 랜턴 안(1.5배 안쪽 좌표)
-        (k as THREE.Object3D).add(light);
+        const light = new THREE.PointLight('#ffd98a', 14, 13, 1.6);
+        light.position.y = TOWN.lampLight;
+        g.add(light);
       }
-      return k;
+      return g;
     }
   }
+}
+
+/** 사람 벤치: 앉는 면 = 요정 어깨~정수리, 폭 = 요정 키 × 3.6(폭과 높이 배율을 따로) */
+export function townBench(models: Models): THREE.Object3D {
+  const k = models.clone('bench');
+  if (!k) return bench(TOWN.benchWidth, 0.64 * BENCH_SCALE.z, TOWN.benchSeat);
+  k.scale.set(BENCH_SCALE.x, BENCH_SCALE.y, BENCH_SCALE.z);
+  return k;
+}
+
+function scaled<T extends THREE.Object3D>(o: T, k: number): T {
+  o.scale.multiplyScalar(k);
+  return o;
 }
 
 export function createPlaza(models: Models = Models.none(), detail: Detail = 'normal'): THREE.Group {
@@ -215,6 +245,8 @@ export function createPlaza(models: Models = Models.none(), detail: Detail = 'no
     o.position.z = p.z;
     if (p.rotY) o.rotation.y += p.rotY;
     o.name = p.id;
+    // 사람 크기의 큰 물체: 요정을 가리면 잠시 흐리게(game/occlusionFade)
+    if (p.kind === 'cabin' || p.kind === 'pine' || p.kind === 'tree' || p.kind === 'clockTower') o.userData.fadeable = true;
     root.add(o);
   }
   return root;

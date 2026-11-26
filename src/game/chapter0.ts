@@ -17,7 +17,9 @@ import { createStaminaBar, createSwapSign } from '../scene/chapter2';
 import { createElfAvatar } from '../scene/elfAvatar';
 import { createGift, createTargetRing } from '../scene/gifts';
 import type { Models } from '../scene/models';
-import { createPlaza } from '../scene/plaza';
+import { createOcclusionFader } from '../scene/occlusionFade';
+import { createPlaza, townBench, townLamp } from '../scene/plaza';
+import { TOWN } from '../data/townScale';
 import { LocalRun } from '../session/localRun';
 import { sewingIcon, type ActionIcon } from '../ui/actionIcons';
 import { createControls } from '../ui/controls';
@@ -141,7 +143,8 @@ export function startChapter0(models: Models): void {
   const gifts = new Map(
     SORT_GIFTS.map((g) => {
       const v = createGift(g.kind);
-      v.scale.setScalar(1.6);
+      // 사람 아이의 물건(축구공 지름 ≈ 요정 키 × 0.5)은 실제 크기에 맞추고, 나머지는 요정이 들기 좋은 크기
+      v.scale.setScalar(g.kind === 'ball' ? 1.35 : 1.6);
       setShadows(v, true);
       scene.add(v);
       const tag = createTag(g.dest);
@@ -150,6 +153,7 @@ export function startChapter0(models: Models): void {
     }),
   );
 
+  const fader = createOcclusionFader(scene, camera);
   const idle: SewingInput = { move: { x: 0, y: 0 }, actionDown: false, actionHeld: false };
   let last = performance.now();
   let acc = 0;
@@ -250,6 +254,11 @@ export function startChapter0(models: Models): void {
     camera.position.copy(camTarget).add(camOffset);
     camera.lookAt(camTarget);
     light.follow(camTarget.x, camTarget.z, viewH * aspect, viewH / Math.sin(CAMERA_PITCH));
+    // 사람 크기 집·울타리가 요정·짐을 가리면 그 물체만 잠시 흐리게
+    const pts: THREE.Vector3[] = [];
+    for (const p of sw.players) if (p.connected) pts.push(new THREE.Vector3(p.x, 0.5, p.z), new THREE.Vector3(p.x, 1.05, p.z));
+    pts.push(new THREE.Vector3(c.x, 0.4, c.z));
+    fader.update(pts, frame);
     renderer.render(scene, camera);
   }
 
@@ -275,6 +284,36 @@ export function startChapter0(models: Models): void {
       runEffects: () => run.log.map((e) => e.type),
       savedCheckpoint: () => localStorage.getItem('lastgift.cp.v1.dev-ch0'),
       /** 화면 비교 촬영용: 지금 카메라(바라보는 땅 위 점, 화면 높이 m, 각도) */
+      /** 비율 확인용: 요정 키(발바닥~정수리, 모자 제외)와 사람 물건 치수 */
+      measure: () => {
+        const e = elves[0]!.root;
+        const hats: THREE.Object3D[] = [];
+        e.traverse((o) => o.name === 'elfHat' && hats.push(o));
+        hats.forEach((h) => (h.visible = false));
+        e.updateMatrixWorld(true);
+        const box = new THREE.Box3();
+        e.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (!m.isMesh || !m.visible || o.userData.flat) return;
+          let vis = true;
+          for (let q: THREE.Object3D | null = o; q; q = q.parent) if (!q.visible) vis = false;
+          if (!vis || (m.material as THREE.Material).transparent) return; // 발밑 원형 그림자 제외
+          box.expandByObject(o, true);
+        });
+        hats.forEach((h) => (h.visible = true));
+        const elf = box.max.y - Math.max(0, box.min.y);
+        return { elf, feet: box.min.y, crown: box.max.y, ...TOWN, ratios: { benchSeat: TOWN.benchSeat / elf, door: TOWN.doorOpening / elf, knob: TOWN.doorKnob / elf, lamp: TOWN.lampLight / elf } };
+      },
+      /** 비율 확인용: 오른쪽 아래 집 현관 앞에 벤치·가로등을 같은 바닥 높이로 나란히 세운다(시험 모드만) */
+      lineup: () => {
+        const b = townBench(models);
+        b.position.set(PLAZA_DRESSING.porch.x + 4.2, 0, PLAZA_DRESSING.porch.z + 2.4);
+        scene.add(b);
+        const l = townLamp();
+        l.position.set(PLAZA_DRESSING.porch.x - 3.0, 0, PLAZA_DRESSING.porch.z + 2.0);
+        scene.add(l);
+      },
+      faded: () => fader.faded(),
       camera: () => ({ target: { x: camTarget.x, z: camTarget.z }, viewH, aspect, yawDeg: (CAMERA_YAW * 180) / Math.PI, pitchDeg: (CAMERA_PITCH * 180) / Math.PI }),
       /** 화면 비교 촬영용(시험 모드에서만): 요정을 그 자리에 세우고 카메라를 바로 맞춘다 */
       debugPlace: (id: string, x: number, z: number, facing = 0) => {

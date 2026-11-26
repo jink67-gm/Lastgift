@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { PLAZA_DRESSING, PLAZA_PROPS, type Prop } from '../data/plaza';
+import { FENCE_SCALE, KENNEY_HOUSE_SCALE, MAILBOX_SCALE, TOWN } from '../data/townScale';
 import type { Models } from './models';
 import { warmPool } from './winterLight';
 
@@ -286,20 +287,20 @@ function drift(len: number, depth: number, h: number): THREE.Mesh {
 /** 통나무집 벽 밑 눈(처마 아래 그늘 띠와 함께). 회전은 집과 같이 */
 function cabinBase(p: Prop): THREE.Group {
   const g = new THREE.Group();
-  const w = 4.4, d = (p.cells ?? 3) * 2 + 0.4; // 회전 전 가로·깊이
+  const w = 2.4 * KENNEY_HOUSE_SCALE, d = ((p.cells ?? 2) + 0.4) * KENNEY_HOUSE_SCALE; // 회전 전 벽 바깥 둘레(사람 집)
   // 처마 밑 그늘: 벽에서 조금 나온 띠
-  for (const [x, z, sw, sd] of [[0, d / 2 + 0.35, w + 0.6, 0.8], [0, -d / 2 - 0.35, w + 0.6, 0.8], [w / 2 + 0.35, 0, 0.8, d + 0.6], [-w / 2 - 0.35, 0, 0.8, d + 0.6]] as const) {
+  for (const [x, z, sw, sd] of [[0, d / 2 + 0.9, w + 1.6, 2.0], [0, -d / 2 - 0.9, w + 1.6, 2.0], [w / 2 + 0.9, 0, 2.0, d + 1.6], [-w / 2 - 0.9, 0, 2.0, d + 1.6]] as const) {
     const c = contactShadow(sw, sd, 0.3);
     c.position.set(x, 0.008, z);
     g.add(c);
   }
   // 벽 밑에 두툼하게 남은 눈(현관 앞 문 자리는 비운다)
-  const front = d / 2 + 0.15;
+  const front = d / 2 + 0.3;
   const parts: [number, number, number, number, number][] = [
-    [1.15, front, 2.0, 0.7, 0.32], // 앞벽 오른쪽(창 밑)
-    [0, -d / 2 - 0.15, w, 0.7, 0.38],
-    [w / 2 + 0.15, 0, 0.7, d, 0.36],
-    [-w / 2 - 0.15, 0, 0.7, d, 0.36],
+    [w * 0.26, front, w * 0.42, 1.4, 0.7], // 앞벽 오른쪽(창 밑). 문 앞(왼쪽)은 비워 현관 바닥이 평평하다
+    [0, -d / 2 - 0.3, w, 1.4, 0.8],
+    [w / 2 + 0.3, 0, 1.4, d, 0.75],
+    [-w / 2 - 0.3, 0, 1.4, d, 0.75],
   ];
   for (const [x, z, sx, sz, h] of parts) {
     const m = drift(Math.max(sx, sz), Math.min(sx, sz), h);
@@ -315,11 +316,11 @@ function cabinBase(p: Prop): THREE.Group {
 /** 벤치 다리 밑 눈과 그늘(벤치 좌판 아래는 눈이 덜 쌓여 그늘진다) */
 function benchBase(p: Prop): THREE.Group {
   const g = new THREE.Group();
-  const c = contactShadow((p.w ?? 1.5) + 0.3, (p.d ?? 0.85) + 0.2, 0.38);
+  const c = contactShadow((p.w ?? 1.5) + 0.5, (p.d ?? 0.85) + 0.4, 0.38);
   g.add(c);
   for (const s of [-1, 1]) {
-    const m = drift(0.7, 0.55, 0.16);
-    m.position.set((s * (p.w ?? 1.5)) / 2, 0, 0.1);
+    const m = drift(1.3, 1.0, 0.3);
+    m.position.set((s * (p.w ?? 1.5)) / 2.3, 0, 0.1);
     g.add(m);
   }
   g.position.set(p.x, 0, p.z);
@@ -344,7 +345,7 @@ function edgeFence(models: Models, from: { x: number; z: number }, to: { x: numb
   const g = new THREE.Group();
   const dx = to.x - from.x, dz = to.z - from.z, len = Math.hypot(dx, dz);
   const yaw = -Math.atan2(dz, dx); // 울타리 조각의 +x를 진행 방향으로
-  const SCALE = 0.6; // 조각 2.5 m → 1.5 m, 높이 0.77 m(요정 허리)
+  const SCALE = FENCE_SCALE; // 사람 무릎~허리 높이(요정 키 × 1.6)
   const piece = 2.5 * SCALE;
   const n = Math.floor(len / piece);
   const snowMat = new THREE.MeshStandardMaterial({ color: C.drift, roughness: 1 });
@@ -358,27 +359,28 @@ function edgeFence(models: Models, from: { x: number; z: number }, to: { x: numb
       // 모델이 없을 때: 가로대 둘 + 기둥 둘(position은 읽기 전용이라 set으로)
       const fb = new THREE.Group();
       for (const y of [0.32, 0.6]) {
-        const rail = new THREE.Mesh(new THREE.BoxGeometry(piece, 0.08, 0.06), wood);
-        rail.position.set(0, y, 0);
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(piece, 0.12, 0.08), wood);
+        rail.position.set(0, y * (TOWN.fence / 0.77), 0);
         fb.add(rail);
       }
       for (const px of [-piece / 2 + 0.1, piece / 2 - 0.1]) {
-        const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.77, 0.1), wood);
-        post.position.set(px, 0.38, 0);
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, TOWN.fence, 0.14), wood);
+        post.position.set(px, TOWN.fence / 2, 0);
         fb.add(post);
       }
       f = fb;
     }
-    f.position.set(x, 0, z);
-    f.rotation.y = yaw;
-    f.traverse((o) => (o.userData.noCast = true)); // 낮은 울타리 그림자는 빼서 그림자 지도 부담을 줄인다
-    g.add(f);
-    // 가로대·기둥 위에 얹힌 눈
-    const cap = new THREE.Mesh(roundedBox(piece * 0.96, 0.1, 0.2), snowMat);
-    cap.userData.noCast = true;
-    cap.position.set(x, 0.8, z);
-    cap.rotation.y = yaw;
-    g.add(cap);
+    // 조각 하나 = 울타리 + 위에 얹힌 눈(같이 흐려지도록 한 묶음)
+    const pg = new THREE.Group();
+    pg.add(f);
+    const cap = new THREE.Mesh(roundedBox(piece * 0.96, 0.14, 0.3), snowMat);
+    cap.position.y = TOWN.fence + 0.03;
+    pg.add(cap);
+    pg.position.set(x, 0, z);
+    pg.rotation.y = yaw;
+    pg.traverse((o) => (o.userData.noCast = true)); // 낮은 울타리 그림자는 빼서 그림자 지도 부담을 줄인다
+    pg.userData.fadeable = true; // 앞쪽 울타리가 요정을 가리면 잠시 흐리게
+    g.add(pg);
   }
   // 바깥(광장 밖) 눈둑: 울타리 아랫단을 덮고 그 너머 땅을 가린다
   const out = new THREE.Vector3(-dz / len, 0, dx / len);
@@ -386,11 +388,11 @@ function edgeFence(models: Models, from: { x: number; z: number }, to: { x: numb
   if (Math.abs(center.x + out.x) < Math.abs(center.x) || Math.abs(center.z + out.z) < Math.abs(center.z)) out.negate();
   for (let i = 0; i < Math.ceil(len / 3.2); i++) {
     const t = (i + 0.5) * (len / Math.ceil(len / 3.2));
-    const m = drift(4.2, 1.4, 0.34 + ((i * 37) % 5) * 0.03);
-    m.position.set(from.x + (dx / len) * t + out.x * 0.75, 0, from.z + (dz / len) * t + out.z * 0.75);
+    const m = drift(4.6, 2.0, 0.6 + ((i * 37) % 5) * 0.05);
+    m.position.set(from.x + (dx / len) * t + out.x * 1.1, 0, from.z + (dz / len) * t + out.z * 1.1);
     m.rotation.y = yaw;
     g.add(m);
-    const inner = drift(3.6, 0.7, 0.2);
+    const inner = drift(3.8, 0.9, 0.3);
     inner.position.set(from.x + (dx / len) * t - out.x * 0.35, 0, from.z + (dz / len) * t - out.z * 0.35);
     inner.rotation.y = yaw;
     g.add(inner);
@@ -421,25 +423,28 @@ function alleyHouse(models: Models, h: { x: number; z: number; rotY: number; sca
     house.scale.setScalar(h.scale);
     g.add(house);
     // 배경 집의 창빛은 약하게: 문 옆 벽등 아래 작은 빛 웅덩이
-    const pool = warmPool(1.1);
+    const pool = warmPool(2.2);
     (pool.material as THREE.MeshBasicMaterial).opacity = 0.6;
-    pool.position.set(0.3 * h.scale * 2, 0.005, 4.0 * h.scale);
+    pool.position.set(0.8 * h.scale, 0.005, 4.6 * h.scale);
     g.add(pool);
   } else {
     // 모델이 없을 때: 벽 + 박공지붕 + 눈
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(3.6, 2.4, 4), new THREE.MeshStandardMaterial({ color: '#9aa7c4' }));
-    wall.position.y = 1.2;
+    const k = h.scale; // 모델 단위 → 게임 단위(Tiny Treats 집: 폭 5.9 · 벽 약 3.4 · 지붕 끝 5.6)
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(5.6 * k, 3.4 * k, 6 * k), new THREE.MeshStandardMaterial({ color: '#9aa7c4' }));
+    wall.position.y = 1.7 * k;
     g.add(wall);
     const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.SQRT1_2, 1, 4), new THREE.MeshStandardMaterial({ color: '#d9e2f0' }));
     roof.rotation.y = Math.PI / 4;
-    roof.scale.set(4.4, 1.6 * (h.scale / 0.64), 4.8);
-    roof.position.y = 3.2;
+    roof.scale.set(6.6 * k, 2.2 * k, 7 * k);
+    roof.position.y = 4.5 * k;
     g.add(roof);
   }
-  const shade = contactShadow(4.6 * (h.scale / 0.64), 5.2 * (h.scale / 0.64), 0.3);
+  const shade = contactShadow(7.2 * h.scale, 8.2 * h.scale, 0.3);
+  shade.position.z = 1 * h.scale;
   g.add(shade);
   g.position.set(h.x, 0, h.z);
   g.rotation.y = h.rotY;
+  g.userData.fadeable = true; // 사람 크기 집: 요정을 가리면 잠시 흐리게
   return g;
 }
 
@@ -448,53 +453,53 @@ function fishMailbox(models: Models): THREE.Object3D {
   const g = new THREE.Group();
   const mb = models.clone('ttMailbox');
   if (mb) {
-    mb.scale.setScalar(0.75);
+    mb.scale.setScalar(MAILBOX_SCALE);
     g.add(mb);
   } else {
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.4, 0.14), new THREE.MeshStandardMaterial({ color: '#8a5a3a' }));
-    post.position.y = 0.7;
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, TOWN.mailbox * 0.7, 0.2), new THREE.MeshStandardMaterial({ color: '#8a5a3a' }));
+    post.position.y = TOWN.mailbox * 0.35;
     g.add(post);
-    const box = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.6), new THREE.MeshStandardMaterial({ color: '#e0b33c' }));
-    box.position.set(0, 1.35, 0.3);
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.6, 1.1), new THREE.MeshStandardMaterial({ color: '#e0b33c' }));
+    box.position.set(0, TOWN.mailbox * 0.78, 0.5);
     g.add(box);
   }
   const blue = new THREE.MeshStandardMaterial({ color: '#4a9be8', roughness: 0.6 });
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 10), blue);
+  const k = MAILBOX_SCALE / 0.75; // 예전(요정 크기) 우편함 대비
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.22 * k, 16, 10), blue);
   body.scale.set(1.5, 1, 0.5);
-  body.position.set(0, 1.95, 0.35);
+  body.position.set(0, 1.95 * k, 0.35 * k);
   g.add(body);
   const tail = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.26, 3), blue);
   tail.rotation.z = Math.PI / 2;
-  tail.position.set(0.42, 1.95, 0.35);
+  tail.scale.setScalar(k);
+  tail.position.set(0.42 * k, 1.95 * k, 0.35 * k);
   g.add(tail);
-  const cap = new THREE.Mesh(roundedBox(0.5, 0.08, 0.72), driftMat);
-  cap.position.set(0, 1.66, 0.38);
+  const cap = new THREE.Mesh(roundedBox(0.5 * k, 0.08 * k, 0.72 * k), driftMat);
+  cap.position.set(0, 1.66 * k, 0.38 * k);
   g.add(cap);
-  g.add(contactShadow(0.9, 1.2, 0.35));
+  g.add(contactShadow(0.9 * k, 1.2 * k, 0.35));
   const p = PLAZA_DRESSING.mailbox;
   g.position.set(p.x, 0, p.z);
   g.rotation.y = p.rotY;
   return g;
 }
 
-/** 현관 계단(오른쪽 집): 나무 계단 두 단 + 계단에 흐릿하게 번진 살구빛 */
+/** 오른쪽 아래 집 현관 바닥: 높이 0 그대로(요정이 서고 선물을 놓는 곳). 사람용 발판 매트 + 문 앞 살구빛 */
 function porch(): THREE.Group {
   const g = new THREE.Group();
-  const wood = new THREE.MeshStandardMaterial({ color: '#7d5233', roughness: 0.9 });
-  const s1 = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.16, 0.5), wood);
-  s1.position.set(0, 0.08, 0.55);
-  const s2 = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.3, 0.4), wood);
-  s2.position.set(0, 0.15, 0.15);
-  g.add(s1, s2);
-  const snow = new THREE.Mesh(roundedBox(0.4, 0.08, 0.45), driftMat);
-  snow.position.set(0.62, 0.2, 0.55);
-  g.add(snow);
-  const glow = warmPool(1.0);
-  glow.position.set(0, 0.32, 0.5);
+  const mat = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 1.5), new THREE.MeshStandardMaterial({ color: '#8c4a3a', roughness: 1 }));
+  mat.rotation.x = -Math.PI / 2;
+  mat.position.set(0, 0.012, 0.95);
+  mat.userData.flat = true;
+  g.add(mat);
+  const stripe = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 0.18), new THREE.MeshStandardMaterial({ color: '#d9b35a', roughness: 1 }));
+  stripe.rotation.x = -Math.PI / 2;
+  stripe.position.set(0, 0.014, 0.95);
+  stripe.userData.flat = true;
+  g.add(stripe);
+  const glow = warmPool(2.6);
+  glow.position.set(0, 0.006, 1.6);
   g.add(glow);
-  const glow2 = warmPool(1.5);
-  glow2.position.set(0, 0.006, 1.4);
-  g.add(glow2);
   g.position.set(PLAZA_DRESSING.porch.x, 0, PLAZA_DRESSING.porch.z);
   return g;
 }
@@ -506,11 +511,11 @@ function farTown(): THREE.Group {
   const g = new THREE.Group();
   const rows: { line: (t: number) => { x: number; z: number }; n: number; shade: number }[] = [
     // 북쪽(-z) 줄: 골목 집 뒤
-    { line: (t) => ({ x: -36 + t * 60, z: -25 }), n: 13, shade: 0 },
-    { line: (t) => ({ x: -40 + t * 62, z: -31 }), n: 14, shade: 1 },
+    { line: (t) => ({ x: -50 + t * 90, z: -46 }), n: 9, shade: 0 },
+    { line: (t) => ({ x: -60 + t * 100, z: -60 }), n: 10, shade: 1 },
     // 서쪽(-x) 줄
-    { line: (t) => ({ x: -27, z: -22 + t * 40 }), n: 9, shade: 0 },
-    { line: (t) => ({ x: -33, z: -28 + t * 50 }), n: 11, shade: 1 },
+    { line: (t) => ({ x: -44, z: -40 + t * 60 }), n: 6, shade: 0 },
+    { line: (t) => ({ x: -58, z: -50 + t * 76 }), n: 8, shade: 1 },
   ];
   let seed = 3;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
@@ -520,18 +525,19 @@ function farTown(): THREE.Group {
   for (const r of rows) {
     for (let i = 0; i < r.n; i++) {
       const p = r.line((i + rnd() * 0.4) / r.n);
-      const w = 3 + rnd() * 2.4, d = 3.5 + rnd() * 2, h = 2.4 + rnd() * 2.2 + r.shade * 1.2;
+      // 사람 집 크기(벽 약 6, 폭 약 10)
+      const w = 8 + rnd() * 5, d = 9 + rnd() * 4, h = 5.5 + rnd() * 3 + r.shade * 2;
       const house = new THREE.Group();
       const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMats[r.shade]!);
       wall.position.y = h / 2;
       house.add(wall);
       const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.SQRT1_2, 1, 4), roofMat);
       roof.rotation.y = Math.PI / 4;
-      roof.scale.set(w + 0.5, 1.2 + rnd() * 1.4, d + 0.5);
+      roof.scale.set(w + 1, 3 + rnd() * 3, d + 1);
       roof.position.y = h + roof.scale.y / 2;
       house.add(roof);
       if (rnd() < 0.55) {
-        const pane = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6), win);
+        const pane = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.5), win);
         pane.position.set((rnd() - 0.5) * w * 0.5, h * 0.55, d / 2 + 0.02);
         house.add(pane);
       }

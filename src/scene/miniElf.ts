@@ -182,6 +182,7 @@ export function createMiniElf(models: Models, look: ElfLook): ElfView | null {
     const hatK = ((Math.max(size.x, size.z) / 2) * 1.02) / 0.158;
     const qInv = head.getWorldQuaternion(new THREE.Quaternion()).invert();
     const hat = elfHat(look);
+    hat.name = 'elfHat'; // 키를 잴 때(모자 제외) 찾는다
     hat.scale.setScalar(hatK / ws);
     head.add(hat);
     hat.position.copy(head.worldToLocal(new THREE.Vector3(hp.x, brow.max.y + 0.005 + 0.035 * hatK, (headB.min.z + headB.max.z) / 2 - 0.01)));
