@@ -33,6 +33,8 @@ export interface PrologueCast {
   snowPile: THREE.Object3D | null;
   /** 썰매에서 흩어져 떨어질 물건(선물 넷 + 재봉틀 상자)과 떨어질 자리 */
   cargo: { v: THREE.Object3D; to: Spot; heavy?: boolean }[];
+  /** 그림 이름표(cargo와 같은 순서, 떨어진 자리 위 높이 y). 연출 끝에 하나씩 나타난다 */
+  tags: { obj: THREE.Object3D; y: number }[];
   /** 썰매를 받치면 앞이 덜 처박힌다(받친 뒤 기울기) */
   sleighHeldTilt: number;
   reduceMotion: boolean;
@@ -209,7 +211,7 @@ export function createPrologue(cast: PrologueCast): Prologue {
   // 인물 자리
   const santaSeat = new THREE.Vector3(end.x - 1.5, 0.85, end.z);
   const santaHop = new THREE.Vector3(5.7, 0, -8.3); // 썰매 북동쪽(울타리 끝 옆)
-  const dotoPop = new THREE.Vector3(5.4, 0, -5.0); // 눈더미 남쪽
+  const dotoPop = new THREE.Vector3(6.6, 0, -4.9); // 눈더미 남동쪽(썰매 앞머리와 떨어져 사진기에 잘 보이게)
   const dotoFix = new THREE.Vector3(cast.dotoFix.x, 0, cast.dotoFix.z);
 
   let t = 0;
@@ -260,7 +262,9 @@ export function createPrologue(cast: PrologueCast): Prologue {
     // ── ① 단체사진(먼 훗날, 고친 썰매 앞) ──
     if (photoPhase) {
       const c = photo.camera;
-      setCam(c.x, c.y, c.z, c.tx, c.ty, c.tz);
+      // 사진기가 천천히 다가간다(마지막 자리 = 저장한 사진 구도)
+      const push = 1 - ease(seg(t, P.photo.push));
+      setCam(c.x, c.y + 0.25 * push, c.z + 1.8 * push, c.tx, c.ty + 0.2 * push, c.tz);
       camera.fov = c.fov;
       sleigh.position.set(end.x, 0, end.z);
       sleigh.rotation.set(0, sleighBase.rot.y, 0, 'YZX');
@@ -373,6 +377,21 @@ export function createPrologue(cast: PrologueCast): Prologue {
       burst(end.x, 0.4, end.z + 1.2, 40, 2.2, 3);
       if (!cast.reduceMotion) shake = 1;
     }
+    // 부딪히는 순간 눈 구름이 하얗게 일었다 가라앉는다
+    if (t >= C.impact) ui.flash(0.55 * (1 - ease(seg(t, [C.impact, C.impact + 0.9]))));
+    // 그림 이름표: 사진기가 선물들을 훑을 때 하나씩 톡
+    cast.tags.forEach((g, i) => {
+      const s0 = C.tags[0] + i * 0.4;
+      const k = seg(t, [s0, s0 + 0.35]);
+      g.obj.visible = k > 0;
+      if (!g.obj.visible) return;
+      const base = (g.obj.userData.baseScale as THREE.Vector3 | undefined) ?? g.obj.scale.clone();
+      g.obj.userData.baseScale = base;
+      const pop = k < 1 ? Math.sin(k * Math.PI * 0.5) * (1 + 0.35 * Math.sin(k * Math.PI)) : 1;
+      g.obj.scale.copy(base).multiplyScalar(Math.max(0.01, pop));
+      const to = cast.cargo[i]!.to;
+      g.obj.position.set(to.x, g.y, to.z);
+    });
     if (cast.snowPile && pileScale) {
       const k = seg(t, [C.impact, C.impact + 0.7]);
       const squash = t < C.impact ? 1 : 1 - 0.3 * Math.sin(k * Math.PI) * (1 - k * 0.5);
@@ -396,11 +415,12 @@ export function createPrologue(cast: PrologueCast): Prologue {
       }
     });
 
-    // 요정들: 짐칸에서 굴러 나와 시작 자리에 선다
+    // 요정들: 짐칸에서 튕겨 나가 눈밭에 쓰러진다 → (정적) → 하나씩 일어나 두리번거린다
     cast.elves.forEach((e, i) => {
-      const s0 = C.elves[0] + i * 0.28;
+      const s0 = C.elves[0] + i * 0.25;
       const k = seg(t, [s0, s0 + 0.85]);
       const spot = cast.elfStarts[i]!;
+      const rise = C.elfUp[0] + i * 0.7;
       e.look?.(0);
       if (t < s0) {
         e.root.visible = false;
@@ -408,13 +428,31 @@ export function createPrologue(cast: PrologueCast): Prologue {
       }
       e.root.visible = true;
       arc(tmpB.set(end.x - 0.8, 2.1, end.z + 0.4), tmpA.set(spot.x, 0, spot.z), 2.4, k, e.root.position);
-      e.root.rotation.set(k < 1 ? k * Math.PI * 2 : 0, spot.facing, 0);
-      if (k >= 1 && !landed[i]) {
+      // 공중제비는 떨어지기 직전에 끝나고, 닿기 직전부터 쓰러지는 동작
+      const spin = Math.min(1, k / 0.75);
+      // 쓰러져 있다 일어나 두리번거리는 동안은 사진기(남동쪽) 쪽을 보고, 사진기가 산타에게 간 뒤 시작 방향으로 돈다
+      const toCam = 0.35 + (i % 2 ? 0.4 : -0.35);
+      const back = ease(seg(t, [C.santaUp[0] + 0.6, C.santaUp[0] + 1.6]));
+      let yaw = toCam + (spot.facing - toCam) * back;
+      if (k >= 0.75 && !landed[i]) {
         landed[i] = true;
-        e.act?.('HitRecieve', { once: true });
-        burst(spot.x, 0.1, spot.z, 8, 0.8, 0.5);
+        e.act?.('Death', { once: true, speed: 1.6 });
       }
-      if (landed[i] && t > s0 + 0.85 + 0.75) e.act?.(null);
+      if (k >= 1 && e.root.userData.puffed !== true) {
+        e.root.userData.puffed = true;
+        burst(spot.x, 0.1, spot.z, 14, 1.0, 0.6);
+      }
+      if (t >= rise) {
+        if (e.root.userData.rose !== true) {
+          e.root.userData.rose = true;
+          e.act?.(null, { fade: 1.1 }); // 쓰러진 자세에서 천천히 일어선다
+        }
+        // 일어나서 두리번(왼쪽·오른쪽을 본다) → 시작 방향
+        const u = seg(t, [rise + 0.9, C.elfUp[1] + 0.4]);
+        yaw += Math.sin(u * Math.PI * 2) * 0.7 * (1 - u);
+        e.look?.(0.25 * Math.sin(Math.min(1, (t - rise) / 0.9) * Math.PI));
+      }
+      e.root.rotation.set(k < 1 ? spin * Math.PI * 2 : 0, yaw, 0);
       e.animate(t, false);
     });
 
@@ -427,7 +465,8 @@ export function createPrologue(cast: PrologueCast): Prologue {
       const toCam = Math.atan2(camPos.x - santaHop.x, camPos.z - santaHop.z);
       if (t < C.santaOut[0]) {
         const k = ease(seg(t, C.santaUp));
-        place(santa, santaSeat.x, -2.6 + (santaSeat.y + 2.6) * k, santaSeat.z, 0.4);
+        // 모자가 먼저 쑥, 어리둥절하게 고개를 저으며 일어선다
+        place(santa, santaSeat.x, -2.6 + (santaSeat.y + 2.6) * k, santaSeat.z, 0.4 + Math.sin(t * 5) * 0.25 * (1 - k));
         santaAct(null);
         santa.look?.(0.35 * (1 - k));
       } else if (t < C.santaWave[0]) {
@@ -478,32 +517,98 @@ export function createPrologue(cast: PrologueCast): Prologue {
       }
     }
 
-    // 사진기(눈보라 하늘 → 내려오는 썰매 → 광장)
-    if (t < C.sleigh[0]) {
-      // 광장 남동쪽에서 북서쪽 하늘을 올려다본다. 별빛을 반쯤 따라간다
-      const sky0 = tmpB.set(-34, 18, -12);
-      const look = ks > 0 ? sky0.lerp(streakAt(ks, tmpV), 0.55) : sky0;
-      setCam(10, 1.8, 10, look.x, look.y, look.z);
-      camera.fov = 54;
-    } else if (t < C.impact) {
-      // 내려오는 썰매를 가운데에 두고 따라간다(조금 앞서 본다)
-      const k = ease(seg(t, C.sleigh));
-      tmpA.set(10, 1.8, 10).lerp(tmpB.set(10.5, 5.2, 7.5), k);
-      const ahead = path.getPointAt(Math.min(1, 1 - Math.pow(1 - seg(t, C.sleigh), 1.5) + 0.08), tmpV);
-      const from = tmpB.set(-34, 18, -12).lerp(streakAt(1, new THREE.Vector3()), 0.55);
-      const look = from.lerp(ahead, ease(Math.min(1, seg(t, C.sleigh) * 3)));
-      setCam(tmpA.x, tmpA.y, tmpA.z, look.x, look.y, look.z);
-      camera.fov = 54 - 10 * k;
-    } else {
-      const k = ease(seg(t, [C.impact, C.impact + 1.6]));
-      const k2 = ease(seg(t, [C.santaHold[0], P.end]));
-      tmpA.set(10.5, 5.2, 7.5).lerp(tmpB.set(11.5, 8.2, 9.5), k);
-      tmpA.lerp(tmpB.set(12.5, 10.5, 12.5), k2);
-      const look = tmpB.copy(end).lerp(new THREE.Vector3(3.6, 1.2, -4.6), k);
-      look.lerp(new THREE.Vector3(2.5, 0.6, -2.2), k2);
-      setCam(tmpA.x, tmpA.y, tmpA.z, look.x, look.y, look.z);
-      camera.fov = 44;
+    // 사진기: 장면마다 한 컷, 컷 사이는 부드럽게 옮긴다
+    const shot = shotAt(t, ks);
+    setCam(shot.p.x, shot.p.y, shot.p.z, shot.q.x, shot.q.y, shot.q.z);
+    camera.fov = shot.fov;
+  }
+
+  type Shot = { p: THREE.Vector3; q: THREE.Vector3; fov: number };
+  const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const elfMid = () => {
+    const m = V(0, 0, 0);
+    cast.elfStarts.forEach((s) => m.add(V(s.x, 0, s.z)));
+    return m.multiplyScalar(1 / Math.max(1, cast.elfStarts.length));
+  };
+  const SKY0 = V(-34, 18, -12);
+  /** 컷 목록: 시작 시각, 앞 컷에서 옮겨 오는 시간, 그 시각의 사진기 */
+  const SHOTS: { at: number; blend: number; get: (t: number, ks: number) => Shot }[] = [
+    // 폭풍 전 고요: 아무도 없는 광장(썰매 자리)을 보다가 하늘로 고개를 든다
+    {
+      at: P.card.hide[0],
+      blend: 0,
+      get: (t) => {
+        const k = ease(seg(t, C.quiet));
+        return { p: V(15, 3.4, 13).lerp(V(10, 1.8, 10), k), q: V(1, 1.2, -4).lerp(SKY0, k), fov: 54 };
+      },
+    },
+    // 별빛을 반쯤 따라간다
+    { at: C.streak[0], blend: 0, get: (_t, ks) => ({ p: V(10, 1.8, 10), q: SKY0.clone().lerp(streakAt(ks, V(0, 0, 0)), 0.55 * Math.min(1, ks * 3)), fov: 54 }) },
+    // 내려오는 썰매를 가운데에 두고 따라간다(조금 앞서 본다)
+    {
+      at: C.sleigh[0],
+      blend: 0,
+      get: (t) => {
+        const k = ease(seg(t, C.sleigh));
+        const ahead = path.getPointAt(Math.min(1, 1 - Math.pow(1 - seg(t, C.sleigh), 1.5) + 0.08), V(0, 0, 0));
+        const from = SKY0.clone().lerp(streakAt(1, V(0, 0, 0)), 0.55);
+        return { p: V(10, 1.8, 10).lerp(V(10.5, 5.2, 7.5), k), q: from.lerp(ahead, ease(Math.min(1, seg(t, C.sleigh) * 3))), fov: 54 - 10 * k };
+      },
+    },
+    // 부딪힘: 썰매와 흩어지는 짐
+    { at: C.impact, blend: 0, get: () => ({ p: V(10.5, 5.2, 7.5), q: end.clone(), fov: 44 }) },
+    // 눈 구름이 가라앉는 동안 쓰러진 요정들에게 낮게, 천천히 다가간다
+    {
+      at: C.settle[0] - 0.3,
+      blend: 1.4,
+      get: (t) => {
+        const m = elfMid();
+        const k = ease(seg(t, [C.settle[0], C.elfUp[1]]));
+        const up = ease(seg(t, C.elfUp));
+        // 누워 있을 때는 바짝, 일어나면 한 걸음 물러나 둘 다 머리끝까지 들어오게
+        const p = m.clone().add(V(1.6, 0.55, 3.4).lerp(V(1.0, 0.5, 2.3), k)).add(V(0.4, 0.4, 1.6).multiplyScalar(up));
+        return { p, q: m.clone().add(V(0, 0.25 + 0.55 * up, 0)), fov: 40 };
+      },
+    },
+    // 산타: 썰매 안에서 모자가 쑥 → 일어나 내려서 손을 흔든다
+    {
+      at: C.santaUp[0],
+      blend: 0.9,
+      get: () => ({ p: V(10.5, 3.2, -0.6), q: cast.santa.root.position.clone().add(V(0, 2.6, 0)), fov: 44 }),
+    },
+    // 도토: 눈더미에서 튀어나와 눈을 털고 썰매 날로
+    {
+      at: C.dotoUp[0] + 0.2,
+      blend: 0.8,
+      get: () => {
+        const d = cast.doto.root.position;
+        // 남쪽 조금 높은 데서(썰매가 앞을 가리지 않게)
+        return { p: V(d.x - 1.3, 3.0, d.z + 5.0), q: V(d.x - 0.2, 0.8, d.z), fov: 40 };
+      },
+    },
+    // 산타가 썰매를 받치는 동안 물러나며 흩어진 선물(이름표)을 훑고 광장 전체로
+    {
+      at: C.santaHold[0],
+      blend: 1.2,
+      get: (t) => {
+        const k = ease(seg(t, [C.santaHold[0], P.fadeOut[1]]));
+        return { p: V(10.5, 5.5, 6.5).lerp(V(12.5, 11, 12.5), k), q: V(4, 1.2, -4.5).lerp(V(2.5, 0.6, -2.2), k), fov: 44 };
+      },
+    },
+  ];
+  function shotAt(t: number, ks: number): Shot {
+    let i = 0;
+    while (i + 1 < SHOTS.length && t >= SHOTS[i + 1]!.at) i++;
+    const cur = SHOTS[i]!.get(t, ks);
+    const sh = SHOTS[i]!;
+    if (i > 0 && sh.blend > 0 && t < sh.at + sh.blend) {
+      const prev = SHOTS[i - 1]!.get(t, ks);
+      const k = ease((t - sh.at) / sh.blend);
+      cur.p.lerpVectors(prev.p, cur.p, k);
+      cur.q.lerpVectors(prev.q, cur.q, k);
+      cur.fov = prev.fov + (cur.fov - prev.fov) * k;
     }
+    return cur;
   }
 
   function updatePuffs(dt: number): void {
@@ -548,6 +653,12 @@ export function createPrologue(cast: PrologueCast): Prologue {
     cast.doto.root.scale.setScalar(cast.elfScale);
     place(cast.doto, cast.dotoFix.x, 0, cast.dotoFix.z, cast.dotoFix.facing);
     dotoAct('Interact');
+    cast.tags.forEach((g, i) => {
+      g.obj.visible = true;
+      const base = g.obj.userData.baseScale as THREE.Vector3 | undefined;
+      if (base) g.obj.scale.copy(base);
+      g.obj.position.set(cast.cargo[i]!.to.x, g.y, cast.cargo[i]!.to.z);
+    });
     cast.kongi.root.visible = false;
     streak.visible = false;
     for (let i = 0; i < N; i++) puffLife[i] = 0;

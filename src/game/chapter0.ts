@@ -258,6 +258,7 @@ export function startChapter0(models: Models): void {
         { v: crate, to: { x: CH0.crateStart.x, z: CH0.crateStart.z, facing: CH0.crateStart.yaw - Math.PI / 2 }, heavy: true },
         ...SORT_GIFTS.map((g) => ({ v: gifts.get(g.id)!.v, to: { x: g.x, z: g.z, facing: 0 } })),
       ],
+      tags: [{ obj: crateTag, y: 1.05 }, ...SORT_GIFTS.map((g) => ({ obj: gifts.get(g.id)!.tag, y: 0.95 }))],
       sleighHeldTilt,
       reduceMotion,
       storm: (k) => {

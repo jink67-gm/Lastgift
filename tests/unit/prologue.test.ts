@@ -45,6 +45,15 @@ describe('프롤로그 시간표', () => {
     expect(C.gifts[0]).toBeGreaterThan(C.impact);
     expect(PROLOGUE.end).toBeGreaterThan(C.santaHold[1]);
   });
+  it('호흡: 불시착 뒤 쓰러진 요정들을 보여 주는 정적(2초 이상)이 있고, 그 뒤에 일어난다. 전체 30초 이상', () => {
+    const C = PROLOGUE.crash;
+    expect(C.settle[0]).toBeGreaterThanOrEqual(C.elves[1]);
+    expect(C.settle[1] - C.settle[0]).toBeGreaterThanOrEqual(2);
+    expect(C.elfUp[0]).toBeGreaterThanOrEqual(C.settle[1]);
+    expect(C.santaUp[0]).toBeGreaterThanOrEqual(C.elfUp[1]);
+    expect(C.tags[1]).toBeLessThanOrEqual(PROLOGUE.fadeOut[0]);
+    expect(PROLOGUE.end).toBeGreaterThanOrEqual(30);
+  });
   it('seg는 구간 밖에서 0·1로 자른다', () => {
     expect(seg(0, [1, 2])).toBe(0);
     expect(seg(1.5, [1, 2])).toBeCloseTo(0.5);
