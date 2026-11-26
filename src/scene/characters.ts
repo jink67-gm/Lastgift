@@ -185,6 +185,8 @@ export interface DogView {
   update(dt: number): void;
   /** 꼬리 흔들기 세기(0~1) */
   wag(amount: number): void;
+  /** 코를 땅에 대고 달리기(0~1): 목을 숙여 머리를 낮춘다 */
+  nose(amount: number): void;
 }
 
 /** 콩이 크기: 머리 꼭대기 약 1.15(0장 요정 키 1.32보다 조금 작다). 사람 기준 시바견(약 45 cm) */
@@ -202,7 +204,7 @@ export function createKongi(models: Models): DogView {
     const tail = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.04, 6, 12, Math.PI * 1.5), std('#f6ead8'));
     tail.position.set(-0.5, 0.65, 0);
     root.add(tail);
-    return { root, play: () => false, update() {}, wag() {} };
+    return { root, play: () => false, update() {}, wag() {}, nose() {} };
   }
   model.traverse((o) => {
     const m = o as THREE.Mesh;
@@ -231,6 +233,11 @@ export function createKongi(models: Models): DogView {
   });
   tail = tail.sort((a, b) => a.name.localeCompare(b.name));
   const tailClean = tail.map((b) => b.quaternion.clone());
+  const necks = ['Neck1', 'Neck2'].map((n) => model.getObjectByName(n) as THREE.Bone | undefined).filter((b): b is THREE.Bone => !!b);
+  const neckClean = necks.map((b) => b.quaternion.clone());
+  let noseDown = 0;
+  const qRoot = new THREE.Quaternion(), qPar = new THREE.Quaternion(), qCur = new THREE.Quaternion(), qRot = new THREE.Quaternion();
+  const ax = new THREE.Vector3();
   let wag = 0;
   let t = 0;
   const play = (name: string, o: { speed?: number; fade?: number } = {}) => {
@@ -261,8 +268,23 @@ export function createKongi(models: Models): DogView {
     update(dt) {
       t += dt;
       tail.forEach((b, i) => b.quaternion.copy(tailClean[i]!));
+      necks.forEach((b, i) => b.quaternion.copy(neckClean[i]!));
       mixer.update(dt);
       tail.forEach((b, i) => tailClean[i]!.copy(b.quaternion));
+      necks.forEach((b, i) => neckClean[i]!.copy(b.quaternion));
+      // 코를 땅에: 개 기준 옆 축(+x)으로 목을 앞아래로 숙인다
+      if (noseDown > 0.001) {
+        root.updateMatrixWorld(true);
+        root.getWorldQuaternion(qRoot);
+        ax.set(1, 0, 0).applyQuaternion(qRoot);
+        qRot.setFromAxisAngle(ax, 0.42 * noseDown);
+        for (const b of necks) {
+          b.getWorldQuaternion(qCur).premultiply(qRot);
+          b.parent!.getWorldQuaternion(qPar);
+          b.quaternion.copy(qPar.invert().multiply(qCur));
+          b.updateMatrixWorld(true);
+        }
+      }
       if (wag > 0.001) {
         const q = new THREE.Quaternion();
         tail.forEach((b, i) => b.quaternion.multiply(q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.sin(t * 16 - i * 0.6) * 0.35 * wag)));
@@ -270,6 +292,9 @@ export function createKongi(models: Models): DogView {
     },
     wag(a) {
       wag = Math.max(0, Math.min(1, a));
+    },
+    nose(a) {
+      noseDown = Math.max(0, Math.min(1, a));
     },
   };
 }

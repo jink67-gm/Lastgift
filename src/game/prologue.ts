@@ -285,11 +285,13 @@ export function createPrologue(cast: PrologueCast): Prologue {
       const run = k > 0 && k < 1;
       cast.kongi.root.visible = run;
       if (run) {
-        const x0 = c.x + 3.4;
-        const x1 = c.x - 3.4;
-        place(cast.kongi, x0 + (x1 - x0) * k, 0, c.z - 1.55, -Math.PI / 2);
+        const x0 = c.x + 2.4;
+        const x1 = c.x - 2.4;
+        // 사진기 1.25 m 앞: 화면 아래 가장자리가 땅 위 약 0.85 m. 코를 땅에 대고 달려 머리는 그 아래, 말린 꼬리만 위로 보인다
+        place(cast.kongi, x0 + (x1 - x0) * k, 0, c.z - 1.25, -Math.PI / 2);
         cast.kongi.play('Gallop', { speed: 1.4 });
         cast.kongi.wag(1);
+        cast.kongi.nose(1);
       }
       cast.kongi.update(dt);
       ui.finder(t < P.photo.shutter, blinkOn(t));
