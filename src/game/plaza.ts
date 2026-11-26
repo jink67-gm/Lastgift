@@ -117,12 +117,12 @@ export function startPlaza(models: Models): void {
   function syncViews(timeSec: number): void {
     elf.root.position.set(player.x, 0, player.z);
     elf.root.rotation.y = player.facing;
-    elf.animate(timeSec, player.moving);
+    elf.animate(timeSec, player.moving, { carry: items.some((i) => i.carriedBy !== null) ? 'light' : 'none', act: 0, tired: false });
     for (const it of items) {
       const v = giftViews.get(it.id)!;
       if (it.carriedBy === ME) {
-        // 머리 위로 번쩍 들고 간다
-        v.position.set(player.x, 1.45 + (player.moving ? Math.abs(Math.sin(timeSec * 14)) * 0.04 : 0), player.z);
+        // 가슴 앞에 두 손으로 안고 간다
+        v.position.set(player.x + Math.sin(player.facing) * 0.36, 0.62 + (player.moving ? Math.abs(Math.sin(timeSec * 14)) * 0.03 : 0), player.z + Math.cos(player.facing) * 0.36);
         v.rotation.y = player.facing;
       } else {
         v.position.set(it.x, 0, it.z);

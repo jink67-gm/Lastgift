@@ -139,15 +139,15 @@ export function createChapter2Screen(host: HTMLElement, models: Models): Chapter
         e.root.visible = true;
         e.root.position.set(ps.x, 0, ps.z);
         e.root.rotation.y = ps.yaw;
-        e.animate(o.elapsed, p.moving);
-        bars[i]!.group.position.set(ps.x, 1.75, ps.z);
+        e.animate(o.elapsed, p.moving, { carry: p.holding !== null ? (s.crate.lifted ? 'heavy' : 'grip') : 'none', act: 0, tired: needsSwap(s, p) });
+        bars[i]!.group.position.set(ps.x, 2.05, ps.z);
         bars[i]!.group.quaternion.copy(camera.quaternion);
         bars[i]!.set(p.stamina, needsSwap(s, p), p.holding !== null || p.stamina < 100);
         const sw = swapSigns[i]!;
         sw.visible = needsSwap(s, p);
         if (p.holding !== null) {
           const g = gripPos(cs, p.holding);
-          sw.position.set(g.x, 2.15 + Math.sin(o.elapsed * 6) * 0.05, g.z);
+          sw.position.set(g.x, 1.5, g.z); // 꼬리 끝이 손잡이 위
         }
         // 미리보기 고리: 지금 행동하면 무엇을 하는지 그 대상에 표시
         const show = o.canPlay && o.previewFor.includes(p.id);

@@ -40,7 +40,9 @@ const PLAYERS = ['p0', 'p1'] as const;
  * 시험 모드에서만 ?elf=배율로 바꿔 비교할 수 있다. 판정(충돌 반지름·손잡이 거리)은 그대로다.
  */
 const ELF_SCALE = testParams.has('test') && testParams.get('elf') ? Number(testParams.get('elf')) : 1.2;
-const CARRY_Y = 1.55 * ELF_SCALE;
+/** 가벼운 선물은 가슴 앞에 두 손으로 든다(머리 위로 들면 긴 모자 위에 떠 보였다) */
+const CARRY_Y = 0.62 * ELF_SCALE;
+const CARRY_AHEAD = 0.36 * ELF_SCALE;
 
 function iconOf(a: SortAction): ActionIcon {
   if (a.kind === 'pick') return 'pick';
@@ -160,6 +162,8 @@ export function startChapter0(models: Models): void {
   );
 
   const fader = createOcclusionFader(scene, camera);
+  /** 요정별 마지막 손 동작(집기·놓기·잡기) 시각 */
+  const actAt = new Map<string, number>();
   const idle: SewingInput = { move: { x: 0, y: 0 }, actionDown: false, actionHeld: false };
   let last = performance.now();
   let acc = 0;
@@ -179,6 +183,10 @@ export function startChapter0(models: Models): void {
       sort = r.state;
       for (const e of r.events) {
         events.push(e);
+        // 집기·놓기·잡기·놓기·들어올리기: 그 요정의 손 뻗는 동작을 시작한다
+        if (e.type === 'pick' || e.type === 'drop') actAt.set(e.playerId, elapsed);
+        if (e.type === 'sewing' && (e.event.type === 'grab' || e.event.type === 'release')) actAt.set(e.event.playerId, elapsed);
+        if (e.type === 'sewing' && e.event.type === 'lift') for (const q of sort.sewing.players) if (q.holding !== null) actAt.set(q.id, elapsed);
         if (e.type === 'sorted') markers.flash(e.dest, true);
         if (e.type === 'wrong') markers.flash(e.dest, false);
         // 다섯 물건이 모두 제자리 → 0장 완료(1장 최초 체크포인트 저장)
@@ -202,10 +210,15 @@ export function startChapter0(models: Models): void {
     for (const it of sort.items) {
       const g = gifts.get(it.id)!;
       const carried = it.carriedBy !== null;
-      const bob = carried ? Math.abs(Math.sin(elapsed * 14)) * 0.04 : 0;
-      g.v.position.set(it.x, carried ? CARRY_Y + bob : 0, it.z);
+      const bob = carried ? Math.abs(Math.sin(elapsed * 14)) * 0.03 : 0;
+      const holder = carried ? sw.players.find((q) => q.id === it.carriedBy) : undefined;
+      const ax = holder ? Math.sin(holder.facing) * CARRY_AHEAD : 0;
+      const az = holder ? Math.cos(holder.facing) * CARRY_AHEAD : 0;
+      g.v.position.set(it.x + ax, carried ? CARRY_Y + bob : 0, it.z + az);
+      g.v.rotation.y = holder ? holder.facing : 0;
       g.tag.visible = !it.sorted;
-      g.tag.position.set(it.x, (carried ? CARRY_Y : 0) + 0.95, it.z);
+      // 이름표: 들고 있으면 요정 머리 위(모자 옆), 땅에 있으면 선물 위
+      g.tag.position.set(it.x + ax, carried ? 1.9 * ELF_SCALE : 0.95, it.z + az);
     }
 
     let mine: SortAction = { kind: 'none' };
@@ -213,14 +226,20 @@ export function startChapter0(models: Models): void {
       const e = elves[i]!;
       e.root.position.set(p.x, 0, p.z);
       e.root.rotation.y = p.facing;
-      e.animate(elapsed, p.moving);
-      bars[i]!.group.position.set(p.x, 1.95 * ELF_SCALE, p.z);
+      const carrying = sort.items.some((it) => it.carriedBy === p.id);
+      const since = elapsed - (actAt.get(p.id) ?? -9);
+      e.animate(elapsed, p.moving, {
+        carry: p.holding !== null ? (c.lifted ? 'heavy' : 'grip') : carrying ? 'light' : 'none',
+        act: since >= 0 && since < 0.35 ? since / 0.35 : 0,
+        tired: needsSwap(sw, p),
+      });
+      bars[i]!.group.position.set(p.x, 2.2 * ELF_SCALE, p.z);
       bars[i]!.group.quaternion.copy(camera.quaternion);
       bars[i]!.set(p.stamina, needsSwap(sw, p), p.holding !== null || p.stamina < 100);
       swaps[i]!.visible = needsSwap(sw, p);
       if (p.holding !== null) {
         const g = gripPos(c, p.holding);
-        swaps[i]!.position.set(g.x, 2.3 * ELF_SCALE, g.z);
+        swaps[i]!.position.set(g.x, 1.5 * ELF_SCALE, g.z); // 꼬리 끝이 손잡이 위(요정 어깨 옆)
       }
       const a = run.canPlay ? planAction(sort, p.id) : ({ kind: 'none' } as const);
       if (i === 0) mine = a;
@@ -322,6 +341,10 @@ export function startChapter0(models: Models): void {
         scene.add(l);
       },
       faded: () => fader.faded(),
+      /** 화면 확인용(시험 모드만): 요정 체력을 정한다 */
+      debugStamina: (id: string, v: number) => {
+        sort = { ...sort, sewing: { ...sort.sewing, players: sort.sewing.players.map((p) => (p.id === id ? { ...p, stamina: v } : p)) } };
+      },
       camera: () => ({ target: { x: camTarget.x, z: camTarget.z }, viewH, aspect, yawDeg: (CAMERA_YAW * 180) / Math.PI, pitchDeg: (CAMERA_PITCH * 180) / Math.PI }),
       /** 화면 비교 촬영용(시험 모드에서만): 요정을 그 자리에 세우고 카메라를 바로 맞춘다 */
       debugPlace: (id: string, x: number, z: number, facing = 0) => {

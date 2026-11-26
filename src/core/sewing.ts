@@ -13,7 +13,8 @@ import { SEWING_LAYOUTS, type SewingLayout, type SewingLayoutId } from '../data/
 
 export const ELF_R = 0.35;
 export const FREE_SPEED = 3.6; // m/s
-export const CARRY_SPEED = 2.2; // m/s, 손잡이 하나가 움직이는 속도
+// 무거운 짐을 함께 들면 맨몸(3.6)의 절반 아래로 천천히 걷는다(화면에서도 느린 걸음 동작)
+export const CARRY_SPEED = 1.6; // m/s, 손잡이 하나가 움직이는 속도
 export const CRATE_HALF_LEN = 0.8;
 export const CRATE_HALF_WID = 0.4;
 /** 상자 중심에서 운반자 위치까지 */
@@ -21,9 +22,9 @@ export const GRIP = CRATE_HALF_LEN + 0.35;
 export const GRAB_RANGE = 0.85;
 export const DOOR_RANGE = 1.2;
 export const STAMINA_MAX = 100;
-// 들고 있을 때 초당 감소. 가득 찬 상태로 약 28.6초 버틴다.
+// 들고 있을 때 초당 감소. 가득 찬 상태로 약 39초 버틴다(걸음이 느려진 만큼 늘려 들고 갈 수 있는 거리는 그대로 약 63 m).
 // 받침대(쉼터)→덧문→통로→작업대 구간을 2인 팀이 문턱에서 잠깐 기다려도 한 번에 닿도록 잡은 값(명세서 §2장 쉼터 간격).
-export const STAMINA_DRAIN = 3.5;
+export const STAMINA_DRAIN = 3.5 * (CARRY_SPEED / 2.2);
 export const STAMINA_REGEN = 20; // 초당(들고 있지 않을 때)
 export const STAMINA_WARN = 25;
 export const DOOR_OPEN_SEC = 4;

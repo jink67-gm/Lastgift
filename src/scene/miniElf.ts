@@ -5,6 +5,7 @@
 // 시제품: tools/prototypes/mini-elf-hooded.html
 import * as THREE from 'three';
 import type { ElfLook, HatPattern } from '../data/elves';
+import { NO_POSE, type ElfPose } from './elf';
 import type { ElfView } from './elf';
 import type { Models } from './models';
 
@@ -164,6 +165,7 @@ export function createMiniElf(models: Models, look: ElfLook): ElfView | null {
   box = new THREE.Box3().setFromObject(model);
   model.position.y -= box.min.y;
   model.updateMatrixWorld(true);
+  const baseY = model.position.y;
 
   // 모자·귀: 눈썹과 머리 크기를 실제로 재서 붙인다. 머리 뼈에 붙여 동작 중에도 따라간다
   const head = findBone(model, 'Head');
@@ -207,22 +209,58 @@ export function createMiniElf(models: Models, look: ElfLook): ElfView | null {
   shadow.position.y = 0.01;
   root.add(shadow);
 
+  // 팔 뼈: 위팔을 Z축으로 돌리면 앞으로 든다(왼쪽 -, 오른쪽 +, 시제품 tools/prototypes/elf-arm-axes.html로 확인)
+  const bones = {
+    ul: findBone(model, 'UpperArmL'),
+    ur: findBone(model, 'UpperArmR'),
+    ll: findBone(model, 'LowerArmL'),
+    lr: findBone(model, 'LowerArmR'),
+  };
+  const zAxis = new THREE.Vector3(0, 0, 1);
+  const tmp = new THREE.Quaternion();
+  const raise = (b: THREE.Object3D | null | undefined, a: number) => {
+    if (b && a !== 0) b.quaternion.multiply(tmp.setFromAxisAngle(zAxis, a));
+  };
+  // 자세별 팔 목표(위팔 앞으로 든 각, 아래팔 굽힘): 가슴 앞에 안기 / 손잡이 높이로 앞 / 빈손
+  const ARMS: Record<ElfPose['carry'], [number, number]> = { none: [0, 0], light: [1.15, 0.75], grip: [0.75, 0.55], heavy: [1.0, 0.7] };
+  const walk = action('Walk');
   let last = -1;
-  let moving = false;
+  let gait: 'idle' | 'run' | 'walk' = 'idle';
+  let up = 0;
+  let low = 0;
+  const actionOf = (g: typeof gait) => (g === 'run' ? run : g === 'walk' ? walk ?? run : idle);
   return {
     root,
-    animate(timeSec, isMoving) {
+    animate(timeSec, isMoving, pose = NO_POSE) {
       const dt = last < 0 ? 0 : Math.min(0.1, Math.max(0, timeSec - last));
       last = timeSec;
-      if (isMoving !== moving && idle && run) {
-        // 걷기·서기 전환은 짧게 섞는다
-        const from = isMoving ? idle : run;
-        const to = isMoving ? run : idle;
-        to.reset().play();
-        from.crossFadeTo(to, 0.15, false);
-        moving = isMoving;
+      // 걸음: 빈손·가벼운 짐은 달리기, 무거운 짐을 함께 들면 느린 걸음
+      const want: typeof gait = !isMoving ? 'idle' : pose.carry === 'heavy' ? 'walk' : 'run';
+      if (want !== gait) {
+        const from = actionOf(gait);
+        const to = actionOf(want);
+        if (from && to && from !== to) {
+          to.reset().play();
+          from.crossFadeTo(to, 0.2, false);
+        }
+        gait = want;
       }
+      if (walk) walk.timeScale = 0.65; // 무거운 짐: 보폭은 그대로, 발을 천천히
       mixer.update(dt);
+      // 팔: 목표 자세로 부드럽게(뼈는 매 프레임 동작 값으로 돌아오므로 그 위에 더한다)
+      const [tu, tl] = ARMS[pose.carry];
+      const k = 1 - Math.exp(-dt * 10);
+      up += (tu - up) * k;
+      low += (tl - low) * k;
+      const reach = Math.sin(Math.PI * pose.act); // 집기·놓기: 아래 앞으로 손을 뻗는다
+      const shake = pose.tired ? Math.sin(timeSec * 34) * 0.18 : 0; // 지쳐서 손을 턴다
+      const u = up * (1 - reach) + 0.9 * reach;
+      raise(bones.ul, -(u + shake));
+      raise(bones.ur, u - shake);
+      raise(bones.ll, -low);
+      raise(bones.lr, low);
+      // 집을 때 살짝 웅크린다, 무거운 짐을 들면 몸이 조금 낮아진다
+      model.position.y = baseY - reach * 0.09 - (pose.carry === 'heavy' ? 0.03 : 0);
     },
   };
 }

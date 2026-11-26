@@ -171,61 +171,132 @@ export function createChapter2(): Chapter2View {
 }
 
 /** 체력 막대(운반자 머리 위) */
+/** 둥근 막대 모양(가로 w, 세로 h) */
+function pill(w: number, h: number): THREE.ShapeGeometry {
+  const r = h / 2;
+  const sh = new THREE.Shape();
+  sh.moveTo(-w / 2 + r, -r);
+  sh.lineTo(w / 2 - r, -r);
+  sh.absarc(w / 2 - r, 0, r, -Math.PI / 2, Math.PI / 2, false);
+  sh.lineTo(-w / 2 + r, r);
+  sh.absarc(-w / 2 + r, 0, r, Math.PI / 2, (3 * Math.PI) / 2, false);
+  return new THREE.ShapeGeometry(sh, 10);
+}
+
+/**
+ * 체력 막대: 흰 테두리 + 짙은 바깥선 + 짙은 남색 속 → 눈밭·나무·지붕 어느 배경에서도 보인다.
+ * 초록 → 절반 아래 노랑 → 25% 아래 주황빨강(깜빡임). 항상 카메라를 본다(호출 쪽에서 회전 복사).
+ */
 export function createStaminaBar(): { group: THREE.Group; set(v: number, warn: boolean, visible: boolean): void } {
   const group = new THREE.Group();
-  const bg = mesh(new THREE.PlaneGeometry(0.8, 0.12), new THREE.MeshBasicMaterial({ color: '#1b2433', transparent: true, opacity: 0.7, depthTest: false }));
-  const fillMat = new THREE.MeshBasicMaterial({ color: '#5fd36a', depthTest: false });
-  const fill = mesh(new THREE.PlaneGeometry(0.76, 0.08), fillMat, 0, 0, 0.001);
-  bg.renderOrder = 10;
-  fill.renderOrder = 11;
-  group.add(bg, fill);
+  const W = 0.95, H = 0.2;
+  const ui = (color: string, opacity = 1) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthTest: false });
+  const outline = new THREE.Mesh(pill(W + 0.1, H + 0.1), ui('#0e1420', 0.85));
+  const rim = new THREE.Mesh(pill(W + 0.05, H + 0.05), ui('#ffffff'));
+  const bg = new THREE.Mesh(pill(W - 0.02, H - 0.04), ui('#1b2433'));
+  const fillMat = ui('#5fd36a');
+  const fill = new THREE.Mesh(pill(W - 0.06, H - 0.08), fillMat);
+  [outline, rim, bg, fill].forEach((m, i) => {
+    m.renderOrder = 10 + i;
+    m.position.z = i * 0.001;
+    group.add(m);
+  });
+  const fw = W - 0.06;
   return {
     group,
     set(v, warn, visible) {
       group.visible = visible;
-      const k = Math.max(0.001, v / 100);
+      const k = Math.max(0.04, v / 100);
       fill.scale.x = k;
-      fill.position.x = -0.38 * (1 - k);
-      fillMat.color.set(warn ? '#ffd84a' : '#5fd36a');
+      fill.position.x = (-fw / 2) * (1 - k);
+      const low = warn || v <= 25;
+      fillMat.color.set(low ? '#ff6a3d' : v <= 50 ? '#ffd84a' : '#5fd36a');
+      fillMat.opacity = low ? 0.65 + 0.35 * Math.abs(Math.sin(performance.now() / 160)) : 1;
     },
   };
 }
 
-/** 교대 표시: 손잡이 옆에서 두 손이 자리를 바꾸는 그림(체력 25% 이하) */
+/** 벙어리장갑 하나(캔버스, 가운데 기준) */
+function mitten(g: CanvasRenderingContext2D, x: number, y: number, s: number, body: string, cuff: string, flip: boolean): void {
+  g.save();
+  g.translate(x, y);
+  g.scale(flip ? -s : s, s);
+  g.lineWidth = 3;
+  g.strokeStyle = '#1b2433';
+  g.fillStyle = body;
+  g.beginPath();
+  g.ellipse(0, -4, 12, 15, 0, 0, Math.PI * 2); // 손바닥
+  g.fill();
+  g.stroke();
+  g.beginPath();
+  g.ellipse(-11, 0, 5, 8, -0.6, 0, Math.PI * 2); // 엄지
+  g.fill();
+  g.stroke();
+  g.fillStyle = cuff;
+  g.fillRect(-11, 9, 22, 8);
+  g.strokeRect(-11, 9, 22, 8);
+  g.restore();
+}
+
+/** 교대 표시: 손잡이 옆에서 두 손(장갑)이 화살표를 따라 자리를 바꾸는 그림(체력 25% 이하). 흰 둥근 판 + 짙은 테두리 */
 export function createSwapSign(): THREE.Sprite {
   const c = document.createElement('canvas');
-  c.width = c.height = 128;
+  c.width = c.height = 160;
   const g = c.getContext('2d')!;
-  g.fillStyle = 'rgba(27,36,51,0.8)';
+  // 판: 바깥 짙은 선 + 흰 바탕 + 노란 안쪽 테
+  g.fillStyle = '#1b2433';
   g.beginPath();
-  g.arc(64, 64, 60, 0, Math.PI * 2);
+  g.arc(80, 76, 70, 0, Math.PI * 2);
   g.fill();
-  g.lineWidth = 6;
-  g.strokeStyle = '#1b2433';
   g.fillStyle = '#ffffff';
   g.beginPath();
-  g.arc(40, 66, 16, 0, Math.PI * 2);
+  g.arc(80, 76, 63, 0, Math.PI * 2);
   g.fill();
-  g.stroke();
-  g.fillStyle = '#ffd84a';
-  g.beginPath();
-  g.arc(88, 66, 16, 0, Math.PI * 2);
-  g.fill();
-  g.stroke();
   g.strokeStyle = '#ffd84a';
-  g.lineWidth = 8;
+  g.lineWidth = 6;
+  g.beginPath();
+  g.arc(80, 76, 56, 0, Math.PI * 2);
+  g.stroke();
+  // 판 아래 꼬리(손잡이를 가리킨다)
+  g.fillStyle = '#1b2433';
+  g.beginPath();
+  g.moveTo(68, 140);
+  g.lineTo(92, 140);
+  g.lineTo(80, 158);
+  g.fill();
+  // 두 장갑: 지친 손(빨강) ↔ 새 손(초록)
+  mitten(g, 54, 82, 1.15, '#e0505a', '#f7f7f7', false);
+  mitten(g, 106, 82, 1.15, '#3fae5a', '#f7f7f7', true);
+  // 두 장갑 위·아래를 도는 화살표
+  g.strokeStyle = '#2f6fd0';
+  g.lineWidth = 7;
   g.lineCap = 'round';
-  g.beginPath();
-  g.arc(64, 66, 34, Math.PI * 1.15, Math.PI * 1.85);
-  g.stroke();
-  g.beginPath();
-  g.arc(64, 66, 34, Math.PI * 0.15, Math.PI * 0.85);
-  g.stroke();
+  const arrow = (a0: number, a1: number, tip: [number, number], dir: number) => {
+    g.beginPath();
+    g.arc(80, 78, 40, a0, a1);
+    g.stroke();
+    g.fillStyle = '#2f6fd0';
+    g.beginPath();
+    g.moveTo(tip[0], tip[1]);
+    g.lineTo(tip[0] - 10 * dir, tip[1] - 9);
+    g.lineTo(tip[0] - 10 * dir, tip[1] + 9);
+    g.fill();
+  };
+  arrow(Math.PI * 1.2, Math.PI * 1.8, [118, 50], 1);
+  arrow(Math.PI * 0.2, Math.PI * 0.8, [42, 106], -1);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
-  sp.scale.set(0.7, 0.7, 1);
-  sp.renderOrder = 12;
+  sp.center.set(0.5, 0.05); // 꼬리 끝이 기준점(손잡이 위)
+  sp.scale.set(0.85, 0.85, 1);
+  sp.renderOrder = 14;
   sp.visible = false;
+  // 살짝 커졌다 작아지며 눈에 띄게
+  sp.onBeforeRender = () => {
+    const t = performance.now() / 1000;
+    const k = 0.85 * (1 + 0.06 * Math.sin(t * 6));
+    sp.scale.set(k, k, 1);
+    sp.material.rotation = Math.sin(t * 3) * 0.04;
+  };
   return sp;
 }

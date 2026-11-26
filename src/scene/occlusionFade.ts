@@ -6,6 +6,8 @@ import * as THREE from 'three';
 interface Fadeable {
   root: THREE.Object3D;
   meshes: THREE.Mesh[];
+  /** 깊이만 쓰는 가림막(흐릴 때만 켠다): 여러 조각이 겹친 집도 맨 앞 한 겹만 비친다 */
+  masks: THREE.Mesh[];
   mats: THREE.Material[];
   /** 원래 투명 설정(빛 웅덩이처럼 처음부터 투명한 재질은 되돌릴 때 그대로) */
   orig: { transparent: boolean; opacity: number; depthWrite: boolean }[];
@@ -14,6 +16,7 @@ interface Fadeable {
 }
 
 const FADED = 0.3;
+const DEPTH_ONLY = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true, transparent: true });
 
 export interface OcclusionFader {
   /** points: 가려지면 안 되는 땅 위 점(요정 머리·몸통, 짐) */
@@ -38,7 +41,19 @@ export function createOcclusionFader(scene: THREE.Object3D, camera: THREE.Camera
       meshes.push(mesh);
     });
     const orig = mats.map((m) => ({ transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite }));
-    if (meshes.length) items.push({ root: o, meshes, mats, orig, opacity: 1, hit: false });
+    // 원래 불투명한 조각마다 같은 모양의 깊이 가림막을 붙인다(투명 차례 맨 앞에 그려 깊이만 남긴다)
+    const masks: THREE.Mesh[] = [];
+    for (const mesh of meshes) {
+      const m0 = Array.isArray(mesh.material) ? mesh.material[0]! : mesh.material;
+      if (m0.transparent) continue;
+      const mask = new THREE.Mesh(mesh.geometry, DEPTH_ONLY);
+      mask.renderOrder = -1;
+      mask.visible = false;
+      mask.raycast = () => {};
+      mesh.add(mask);
+      masks.push(mask);
+    }
+    if (meshes.length) items.push({ root: o, meshes, masks, mats, orig, opacity: 1, hit: false });
   });
   const ray = new THREE.Raycaster();
   const dir = new THREE.Vector3();
@@ -64,6 +79,7 @@ export function createOcclusionFader(scene: THREE.Object3D, camera: THREE.Camera
         it.opacity += (target - it.opacity) * k;
         if (Math.abs(it.opacity - target) < 0.01) it.opacity = target;
         const see = it.opacity < 0.999;
+        for (const k of it.masks) k.visible = see;
         it.mats.forEach((m, i) => {
           const o = it.orig[i]!;
           m.transparent = see || o.transparent;
@@ -71,6 +87,8 @@ export function createOcclusionFader(scene: THREE.Object3D, camera: THREE.Camera
           m.depthWrite = see ? false : o.depthWrite;
           m.needsUpdate = true;
         });
+        // 흐린 조각은 가림막 다음에 그려 맨 앞면만 남긴다
+        for (const mesh of it.meshes) mesh.renderOrder = see ? 1 : 0;
       }
     },
     faded: () => items.filter((i) => i.opacity < 0.999).map((i) => i.root.name || 'fadeable'),

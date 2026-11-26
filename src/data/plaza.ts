@@ -63,7 +63,7 @@ const H = KENNEY_HOUSE_SCALE; // 집 1칸
 const HALF = 1.2 * H; // 2 × 2칸 집의 중심 ~ 벽 바깥면
 
 // 오른쪽 아래(카메라 앞) 집: 앞에 있는 사람 크기 집은 그 뒤 땅을 20 m 가까이 가리므로, 지붕 끝만 화면 가장자리에 걸리게 멀리 둔다
-const HOUSE_E = { x: 33, z: 15 };
+const HOUSE_E = { x: 40, z: 22 }; // 경계 안 어느 자리에서 봐도 요정 앞을 가리지 않는 거리(시선이 지붕 위로 지나간다)
 // 서쪽 집(앞면 +x가 광장을 본다): 집 입구 장면. 문 = 앞벽 왼쪽 칸, 창 = 오른쪽 칸
 const HOUSE_W = { x: -20.4 - HALF, z: 3 };
 export const HOUSE_W_DOOR = { x: -20.4, z: HOUSE_W.z + KENNEY_HOUSE_SCALE / 2 };
