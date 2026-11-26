@@ -6,12 +6,13 @@
 import * as THREE from 'three';
 import { baseViewH, deadZone, frameFor, type Pt } from '../core/framing';
 import { createFinale, planAction, step, stockingChecked, CAMERA_YAW, type FinaleAction, type FinaleEvent, type FinaleState } from '../core/finale';
-import { CH5_LIGHTS, CH5_PHOTO, ch5BlinkOn, lightsBeat } from '../core/finaleScenes';
+import { CH5_LIGHTS, CH5_PHOTO, CH6_END, ch5BlinkOn, endingBeat, lightsBeat } from '../core/finaleScenes';
 import { photoLineup, seg, type PhotoSetup } from '../core/prologue';
 import { AutoQuality, effectiveQuality, snowCount, type Quality } from '../core/quality';
 import type { SewingInput } from '../core/sewing';
 import { chapter, type ChapterId, type MemoryId } from '../data/chapters';
 import { BAG, FINALE_BOUNDS, SANTA_SPOT, STOCKING } from '../data/finale';
+import { SLEIGH } from '../data/plaza';
 import { ELF_LOOKS } from '../data/elves';
 import { attachKeyboard, KeyState, KEYMAP_P1, KEYMAP_P2 } from '../input/keyboard';
 import { mergeIntents } from '../input/merge';
@@ -33,6 +34,7 @@ import { createControls } from '../ui/controls';
 import { createHud } from '../ui/hud';
 import { createOffscreenMarks } from '../ui/offscreen';
 import { createPrologueUi, type PrologueUi } from '../ui/prologueUi';
+import { createMemoryView, type MemoryView } from '../ui/memories';
 import { createSettingsUi } from '../ui/settings';
 import { toSewingInput } from './chapter2';
 
@@ -286,6 +288,11 @@ export function startFinale(models: Models, startChapter: 5 | 6): void {
       }
       return;
     }
+    if (cut === 'deliver') {
+      cutT += frame;
+      drawEnding(frame);
+      return;
+    }
     if (cut === 'lights') {
       cutT += frame;
       drawLights(frame);
@@ -328,6 +335,8 @@ export function startFinale(models: Models, startChapter: 5 | 6): void {
           run.dispatch({ type: 'deliver', at: performance.now(), ...metaFor(e.playerId) });
           cut = 'deliver';
           cutT = 0;
+          giver = e.playerId;
+          startEnding();
           document.body.classList.add('cutscene');
         }
       }
@@ -388,10 +397,6 @@ export function startFinale(models: Models, startChapter: 5 | 6): void {
     bag.setOpen(0);
     void checked;
     controls.update(iconOf(mine));
-    if (cut === 'deliver') {
-      // 06b: 산타가 스노글로브를 받아 들여다본다(네 기억·뼈다귀). 지금은 건넨 순간에서 멈춘다
-      cutT += frame;
-    }
     // 카메라: 두 요정과 양말·가방·산타
     const pts: Pt[] = state.players.filter((p) => p.connected).map((p) => ({ x: p.x, z: p.z }));
     let want = frameFor(pts, state.chapter === 5 ? { x: STOCKING.x - 0.6, z: STOCKING.z } : SANTA_SPOT, aspect, CAMERA_YAW, CAMERA_PITCH);
@@ -646,8 +651,126 @@ export function startFinale(models: Models, startChapter: 5 | 6): void {
     renderer.render(scene, cine);
   }
 
+  // ── ③ 6장 끝: 건네기 → 스노글로브 속 기억 → 썰매 앞자리 → 뼈다귀 → 장갑 ──
+  let giver = 'p0';
+  let memView: MemoryView | null = null;
+  let endUi: HTMLDivElement | null = null;
+  /** 썰매 앞자리(스노글로브를 내려놓는 곳): 썰매 몸통 윗면 앞쪽 */
+  const SEAT = new THREE.Vector3(SLEIGH.x + 1.0, 1.98, SLEIGH.z + 0.35);
+  function startEnding(): void {
+    document.body.classList.add('cutscene');
+    memView = createMemoryView(document, CH6_END.memories, import.meta.env.BASE_URL);
+    // 건너뛰기(결과는 그대로) · 끝나면 다시 보기
+    endUi = document.createElement('div');
+    endUi.id = 'ending-ui';
+    endUi.style.cssText = 'position:fixed;right:calc(env(safe-area-inset-right) + 16px);bottom:calc(env(safe-area-inset-bottom) + 16px);z-index:36;display:flex;gap:10px';
+    const btn = (id: string, label: string, fn: () => void) => {
+      const b = document.createElement('button');
+      b.id = id;
+      b.type = 'button';
+      b.textContent = label;
+      b.style.cssText = 'min-height:48px;padding:0 18px;border-radius:24px;border:3px solid #fff;background:rgba(27,36,51,0.72);color:#fff;font:700 16px system-ui,sans-serif;cursor:pointer';
+      b.addEventListener('click', fn);
+      endUi!.appendChild(b);
+      return b;
+    };
+    btn('ending-replay', '다시 보기 ↺', () => (cutT = CH6_END.look[0]));
+    btn('ending-skip', '건너뛰기 ▶▶', () => (cutT = Math.max(cutT, CH6_END.end)));
+    document.body.appendChild(endUi);
+    window.addEventListener('keydown', (e) => {
+      if (cut === 'deliver' && e.key === 'Escape') cutT = Math.max(cutT, CH6_END.end);
+    });
+  }
+  function drawEnding(frame: number): void {
+    const t = cutT;
+    const E = CH6_END;
+    const beat = endingBeat(t);
+    for (const r of rings) r.visible = false;
+    controls.update('none');
+    (endUi?.querySelector('#ending-replay') as HTMLElement | null)?.style.setProperty('display', t >= E.end ? 'block' : 'none');
+    (endUi?.querySelector('#ending-skip') as HTMLElement | null)?.style.setProperty('display', t < E.end ? 'block' : 'none');
+    // 요정들: 그 자리에서 산타를 본다. 장갑 요정(첫 요정)은 끝에 제 장갑을 내려다본다
+    const gi = Math.max(0, PLAYERS.indexOf(giver as (typeof PLAYERS)[number]));
+    const thumbI = 0;
+    state.players.forEach((p, i) => {
+      const e = elves[i]!;
+      e.root.position.set(p.x, 0, p.z);
+      const thumbing = i === thumbI && t >= E.thumb[0];
+      e.root.rotation.set(0, thumbing ? yawTo(p, { x: p.x, z: p.z + 1 }) : yawTo(p, SANTA_SPOT), 0);
+      e.look?.(thumbing ? 0.75 : t >= E.place[0] && t < E.thumb[0] ? 0.1 : -0.25);
+      const handing = i === gi && t < E.give[1] * 0.6;
+      e.animate(elapsed, false, { carry: handing || thumbing ? 'light' : 'none', act: thumbing ? 0.35 + 0.25 * Math.sin(elapsed * 6) : 0, tired: false, span: thumbing ? 0.15 : 0.4 });
+      e.root.updateMatrixWorld(true);
+    });
+    // 산타: 받아 들고 → 들여다본다 → 썰매 앞자리에 내려놓는다
+    const toSeat = ez(seg(t, [E.place[0], E.boneReveal - 0.3]));
+    // 썰매 앞자리 오른쪽(동쪽)으로 가서 내려놓는다(사진기는 왼쪽 앞에서 본다)
+    const seatSide = { x: SEAT.x + 1.9, z: SEAT.z + 1.1 };
+    const sp = { x: SANTA_SPOT.x + (seatSide.x - SANTA_SPOT.x) * toSeat, z: SANTA_SPOT.z + (seatSide.z - SANTA_SPOT.z) * toSeat };
+    const giverP = state.players[gi]!;
+    let syaw = yawTo(SANTA_SPOT, giverP);
+    if (t >= E.place[0]) syaw = yawTo(sp, { x: SEAT.x, z: SEAT.z });
+    placeSanta(sp, syaw);
+    const holding = t >= E.give[0] + 0.6 && t < E.boneReveal;
+    santa.look?.(beat === 'look' || beat.startsWith('memory') ? 0.75 : t >= E.place[0] && t < E.thumb[0] ? 0.55 : 0.2);
+    santa.animate(elapsed, toSeat > 0 && toSeat < 1, { carry: holding ? 'heavy' : 'none', act: 0, tired: false });
+    // 스노글로브: 요정 손 → 산타 두 손 → 썰매 앞자리
+    const fwd = new THREE.Vector3(Math.sin(syaw), 0, Math.cos(syaw));
+    const santaHands = new THREE.Vector3(sp.x, 2.75, sp.z).addScaledVector(fwd, 1.45);
+    const e0 = elves[gi]!;
+    const elfHands = e0.carryFrame?.(cf.pos, cf.quat) ? cf.pos.clone() : new THREE.Vector3(giverP.x, 1.1, giverP.z);
+    const kGive = ez(seg(t, E.give));
+    const gp = elfHands.clone().lerp(santaHands, kGive);
+    if (t >= E.place[0]) gp.copy(santaHands).lerp(SEAT, ez(seg(t, [E.place[0], E.boneReveal - 0.2])));
+    globe.group.visible = true;
+    globe.group.position.copy(gp);
+    globe.group.rotation.set(0, syaw, 0);
+    globe.group.scale.setScalar(ELF_SCALE * 0.95);
+    globe.update(elapsed, 0);
+    // 손을 떼는 순간 받침 위 하얀 뼈다귀가 처음 보인다
+    globe.bone.visible = t >= E.boneReveal;
+    // 유리 속 기억(화면 가운데 둥근 유리)
+    const first = E.memories[0]!.span[0];
+    const lastM = E.memories[E.memories.length - 1]!.span[1];
+    const open = ez(seg(t, [first - 0.6, first])) * (1 - ez(seg(t, [lastM, lastM + 0.9])));
+    memView?.update(t, open);
+    // 사진기
+    const gpw = globe.group.getWorldPosition(new THREE.Vector3());
+    if (beat === 'give') {
+      const mid = { x: (giverP.x + SANTA_SPOT.x) / 2, z: (giverP.z + SANTA_SPOT.z) / 2 };
+      cine.position.set(mid.x - 1.0, 2.2, mid.z + 5.2);
+      cine.lookAt(mid.x, 1.8, mid.z);
+      cine.fov = 46;
+    } else if (beat === 'look' || beat.startsWith('memory') || beat === 'settle') {
+      // 산타 앞 비스듬히: 두 손의 스노글로브와 그것을 내려다보는 산타 얼굴
+      const k = ez(seg(t, E.look));
+      const side = new THREE.Vector3(fwd.z, 0, -fwd.x);
+      const eye = gpw.clone().addScaledVector(fwd, 3.4 - 0.8 * k).addScaledVector(side, 1.3);
+      cine.position.set(eye.x, gpw.y + 0.9, eye.z);
+      cine.lookAt(gpw.x, gpw.y + 0.8, gpw.z);
+      cine.fov = 46 - 6 * k;
+    } else if (beat === 'place' || beat === 'bone') {
+      // 썰매 앞자리 가까이: 손을 떼면 받침 위 뼈다귀
+      const k = ez(seg(t, [E.boneReveal, E.bone[1]]));
+      cine.position.set(SEAT.x - 1.3 + 0.6 * k, SEAT.y + 0.8 - 0.4 * k, SEAT.z + 2.2 - 1.0 * k);
+      cine.lookAt(SEAT.x, SEAT.y + 0.2, SEAT.z);
+      cine.fov = 40 - 12 * k;
+    } else {
+      // 요정이 제 장갑을 엄지로 쓸며 웃는다
+      const p = state.players[thumbI]!;
+      cine.position.set(p.x + 0.3, 0.85, p.z + 1.7);
+      cine.lookAt(p.x, 0.95, p.z);
+      cine.fov = 40;
+    }
+    cine.aspect = aspect;
+    cine.updateProjectionMatrix();
+    snow.update(frame, sp.x, sp.z, 14);
+    renderer.render(scene, cine);
+  }
+
   if (import.meta.env.DEV || params.has('test')) {
     (window as unknown as Record<string, unknown>).__lastgift = {
+      ending: () => ({ t: cut === 'deliver' ? cutT : -1, beat: cut === 'deliver' ? endingBeat(cutT) : null, bone: globe.bone.visible, memory: memView?.mode() ?? null }),
       finale: () => JSON.parse(JSON.stringify(state)) as FinaleState,
       finaleEvents: () => events.map((e) => ({ ...e })),
       run: () => ({ ...run.state }),

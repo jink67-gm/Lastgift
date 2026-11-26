@@ -79,3 +79,19 @@ describe('6장 건네기', () => {
     expect(act(st, ['p0']).state.delivered).toBe(true);
   });
 });
+
+describe('6장 끝 시간표', () => {
+  it('건네기 → 들여다보기 → 기억 다섯(유나·수선집·콩이·트리·장갑, 겹치지 않음) → 내려놓기 → 뼈다귀(손을 뗀 뒤 처음) → 엄지', async () => {
+    const { CH6_END: E, endingBeat } = await import('../../src/core/finaleScenes');
+    expect(E.memories.map((m) => m.id)).toEqual(['yuna', 'tailor', 'kongi', 'tree', 'glove']);
+    for (let i = 1; i < E.memories.length; i++) expect(E.memories[i]!.span[0]).toBeGreaterThanOrEqual(E.memories[i - 1]!.span[1]);
+    // 뼈다귀는 기억이 다 끝나고 내려놓는 중에야 처음 보인다
+    expect(E.boneReveal).toBeGreaterThan(E.memories[E.memories.length - 1]!.span[1]);
+    expect(E.boneReveal).toBeGreaterThan(E.place[0]);
+    expect([0.5, 2, 5, 10, 15, 20, 26, 31, 33, 35, 38, 42].map(endingBeat)).toEqual([
+      'give', 'look', 'memory:yuna', 'memory:tailor', 'memory:kongi', 'memory:tree', 'memory:glove', 'settle', 'place', 'bone', 'thumb', 'done',
+    ]);
+    // 파일 이름이 영상 요청서와 같다
+    for (const m of E.memories) expect(m.file).toMatch(/^ch6-memory-\d-[a-z]+\.mp4$/);
+  });
+});

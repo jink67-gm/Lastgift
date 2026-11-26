@@ -4,6 +4,7 @@ import { expect, test, type Page } from '@playwright/test';
 test.use({ viewport: { width: 640, height: 360 } });
 
 type Hook = {
+  ending(): { t: number; beat: string | null; bone: boolean; memory: { id: string | null; source: string | null } | null };
   finale(): { chapter: number; peeked: string[]; opened: boolean; globe: { holder: string | null } | null; delivered: boolean };
   finaleEvents(): { type: string; playerId?: string }[];
   run(): { phase: string; chapterId: number; completedChapters: number[]; snowglobe: { holder: string | null } | null; outcome: string | null };
@@ -98,4 +99,41 @@ test('6장: 스노글로브를 안 든 요정은 건넬 수 없고, 든 요정�
   await page.keyboard.press('KeyE');
   await wait(page, '(h) => h.run().outcome === "win"', 5_000);
   expect((await H(page, (h) => h.run())).phase).toBe('ending');
+});
+
+test('6장 끝: 건넨 뒤 스노글로브 속 기억 다섯(영상이 없으면 손그림) → 손을 뗀 뒤에야 뼈다귀 → 다시 보기·건너뛰기는 결과를 바꾸지 않는다', async ({ page }) => {
+  test.setTimeout(60_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/?chapter=6&test&noshadow');
+  await page.waitForFunction(() => !!(window as unknown as { __lastgift?: { finale?: unknown } }).__lastgift?.finale, null, { timeout: 30_000 });
+  await page.waitForTimeout(300);
+  const sp = await H(page, (h) => h.spots());
+  const g = await page.evaluate(() => (window as unknown as { __lastgift: { finale(): { globe: { x: number; z: number } } } }).__lastgift.finale().globe);
+  await place(page, 'p0', g.x, g.z + 0.6);
+  await page.waitForTimeout(200);
+  await page.keyboard.press('KeyE');
+  await place(page, 'p0', sp.santa.x - 1.2, sp.santa.z + 0.4);
+  await page.waitForTimeout(200);
+  await page.keyboard.press('KeyE');
+  await wait(page, '(h) => h.ending().t >= 0', 5_000);
+  const seen: { beat: string; bone: boolean; memory: string | null; source: string | null }[] = [];
+  for (const t of [5, 10, 15, 20, 26, 33, 35]) {
+    await page.evaluate((t) => (window as unknown as { __lastgift: Hook }).__lastgift.seekCut(t), t);
+    await page.waitForTimeout(120);
+    const e = await H(page, (h) => h.ending());
+    seen.push({ beat: e.beat!, bone: e.bone, memory: e.memory?.id ?? null, source: e.memory?.source ?? null });
+  }
+  expect(seen.slice(0, 5).map((s) => s.memory)).toEqual(['yuna', 'tailor', 'kongi', 'tree', 'glove']);
+  expect(seen.slice(0, 5).every((s) => s.source === 'drawn' && !s.bone)).toBe(true);
+  expect(seen[5]!.bone).toBe(false); // 아직 손에
+  expect(seen[6]!.bone).toBe(true); // 내려놓고 손을 뗀 뒤
+  // 건너뛰기 → 끝, 다시 보기 → 기억부터 다시. 결과(승리)는 그대로
+  await page.locator('#ending-skip').click();
+  await wait(page, '(h) => h.ending().beat === "done"', 5_000);
+  await page.locator('#ending-replay').click();
+  await page.waitForTimeout(200);
+  expect((await H(page, (h) => h.ending())).beat).toMatch(/look|memory/);
+  expect(await H(page, (h) => h.run())).toMatchObject({ phase: 'ending', outcome: 'win' });
+  expect(errors).toEqual([]);
 });
