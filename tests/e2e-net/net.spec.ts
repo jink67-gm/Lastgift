@@ -1,6 +1,7 @@
 // 두~세 기기 시험: 브라우저 창(각자 다른 기기 역할)마다 자기 키보드로 자기 요정을 움직인다.
 // 처음 소개는 Firebase(에뮬레이터), 게임 데이터는 WebRTC로 창끼리 직접. 판정은 방장 창만 한다.
 // 실행: npm run test:net (에뮬레이터를 켜고 규칙을 올린 뒤 실행된다)
+import { CARRY_SPEED } from '../../src/core/sewing';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 
 type Slot = 'p0' | 'p1' | 'p2';
@@ -120,7 +121,8 @@ class Team {
         plan[slot] = keysFor(tgt.x - cur.x, tgt.z - cur.z);
       }
       if (need === 0) return s;
-      await this.hold(plan, Math.max(30, Math.min(120, (need / 2.2) * 700)));
+      // 두 창을 소프트웨어로 그리는 시험이라 한 번 확인할 때마다 시간이 든다: 길게 누르고 가까워지면 짧게
+      await this.hold(plan, Math.max(30, Math.min(500, (need / CARRY_SPEED) * 700)));
       await this.host.waitForTimeout(60);
     }
     throw new Error(`crate could not reach ${JSON.stringify(to)}`);

@@ -1,0 +1,25 @@
+<!doctype html><meta charset="utf-8"><title>요정 서 있는 자세 비교</title>
+<body style="margin:0;background:#223049">
+<script type="module">
+// 서 있는 동작 비교(짝다리 없이 바르게 서는 것 고르기) + 발(신발) 확대
+import * as THREE from '/@fs/home/user/lastgift/node_modules/three/build/three.module.js';
+import { Models } from '/src/scene/models.ts';
+import { createMiniElf } from '/src/scene/miniElf.ts';
+import { ELF_LOOKS } from '/src/data/elves.ts';
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(1200, 520); document.body.appendChild(r.domElement);
+const s = new THREE.Scene(); s.background = new THREE.Color('#2a3550');
+s.add(new THREE.HemisphereLight('#c8d6f0', '#98a6c2', 1.6)); const d = new THREE.DirectionalLight('#fff', 2); d.position.set(3, 6, 5); s.add(d);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 6), new THREE.MeshStandardMaterial({ color: '#f4f2ee' })); floor.rotation.x = -Math.PI / 2; s.add(floor);
+const models = await Models.load(['elf']);
+const clips = (new URLSearchParams(location.search).get('clips') ?? 'Idle,Idle_Neutral,Idle_Sword,Idle_Gun').split(',');
+const elves = clips.map((c, i) => {
+  const e = createMiniElf(models, ELF_LOOKS[i % 2], { idle: c });
+  e.root.position.x = (i - (clips.length - 1) / 2) * 1.3;
+  e.root.rotation.y = 0.35;
+  s.add(e.root);
+  return e;
+});
+const c = new THREE.OrthographicCamera(-2.8, 2.8, 1.21, -1.21, 0.1, 50); c.position.set(0, 0.9, 10); c.lookAt(0, 0.9, 0);
+for (let k = 0; k < 30; k++) for (const e of elves) e.animate(k * 0.05, false);
+r.render(s, c); window.done = true;
+</script>

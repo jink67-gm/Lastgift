@@ -68,6 +68,8 @@ export interface ElfView {
   root: THREE.Group;
   /** 걷기 동작을 갱신한다(pose 생략 = 빈손) */
   animate(timeSec: number, moving: boolean, pose?: ElfPose): void;
+  /** 두 손목의 월드 위치(손에 든 물건을 손 위에 얹는다). 손 뼈가 없는 기본 도형 요정은 false */
+  hands?(l: THREE.Vector3, r: THREE.Vector3): boolean;
 }
 
 export function createElf(look: ElfLook): ElfView {

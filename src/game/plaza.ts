@@ -29,7 +29,8 @@ export function startPlaza(models: Models): void {
   if (!host) throw new Error('#game 요소가 없습니다');
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // ?quality=low: 해상도를 절반으로 그려 저사양 기기(와 자동 시험)의 부담을 줄인다
+  renderer.setPixelRatio(new URLSearchParams(location.search).get('quality') === 'low' ? 0.5 : Math.min(window.devicePixelRatio, 2));
   host.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();

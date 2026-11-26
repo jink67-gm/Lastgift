@@ -1,4 +1,5 @@
 // 0장 선물 분류: 한 키보드를 둘이 나눠 잡고(1P WASD+E, 2P 방향키+Enter) 실제 키로 끝까지 진행한다.
+import { CARRY_SPEED } from '../../src/core/sewing';
 import { expect, test, type Page } from '@playwright/test';
 
 interface P { id: string; x: number; z: number; facing: number; holding: 0 | 1 | null }
@@ -112,7 +113,7 @@ async function carry(page: Page, to: { x: number; z: number; yaw: number }) {
       plan[pid] = keysFor(pid, tgt.x - cur.x, tgt.z - cur.z);
     }
     if (need === 0) return;
-    await hold(page, plan, Math.max(25, Math.min(800, (need / 2.2) * 600)));
+    await hold(page, plan, Math.max(25, Math.min(800, (need / CARRY_SPEED) * 600)));
   }
   throw new Error(`crate could not reach ${JSON.stringify(to)}`);
 }

@@ -1,5 +1,6 @@
 // 2장 수선집: 한 키보드를 둘이 나눠 잡고(1P WASD+E, 2P 방향키+Enter) 재봉틀을 작업대까지 옮긴다.
 // 테스트는 상태를 읽어 "어느 키를 얼마나 누를지"만 정하고, 실제 움직임은 진짜 키 입력으로 일어난다.
+import { CARRY_SPEED } from '../../src/core/sewing';
 import { expect, test, type Page } from '@playwright/test';
 import './hook';
 
@@ -84,7 +85,7 @@ async function carry(page: Page, to: { x: number; z: number; yaw: number }, opts
       plan[pid] = keysFor(pid, tgt.x - cur.x, tgt.z - cur.z);
     }
     if (need === 0) return s;
-    await hold(page, plan, Math.max(25, Math.min(120, (need / 2.2) * 700)));
+    await hold(page, plan, Math.max(25, Math.min(120, (need / CARRY_SPEED) * 700)));
   }
   throw new Error(`crate could not reach ${JSON.stringify(to)}: ${JSON.stringify((await st(page)).crate)}`);
 }

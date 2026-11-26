@@ -11,6 +11,8 @@ import type { Models } from './models';
 
 /** 모자 뺀 키(m). 1280×720 교실 화면에서도 요정이 잘 보이게 */
 const BODY_HEIGHT = 1.1;
+/** 서 있는 동작(시제품에서 비교해 고른다) */
+const IDLE_CLIP = 'Idle_Neutral'; // 'Idle'은 한쪽 다리에 무게를 싣고 다리를 꼬아 짝다리로 보였다
 
 /** 부위별 색(메시 이름 → 재질 이름 → 색). null은 숨김 */
 const PAINT: Record<string, Record<string, string | null>> = {
@@ -19,7 +21,7 @@ const PAINT: Record<string, Record<string, string | null>> = {
   Medieval_Body: { Black: '#2f8a3e', DarkBrown: '#256b31', LightBrown: '#e2b23c', Skin: '#f1c9a5', Gold: '#f2c14e', Metal: '#f7f7f7' },
   Medieval_Legs: { Black: '#c8323c' },
   // 장화: 짙은 갈색(눈 위에서 발끝 윤곽이 또렷하게)
-  Medieval_Feet: { LightBrown: '#3a2416', DarkBrown: '#24160d' },
+  Medieval_Feet: { LightBrown: '#f4f1ea', DarkBrown: '#2f7a3e' }, // 흰·초록 긴 양말(장화는 따로 신긴다)
 };
 
 function hatTexture(base: string, pattern: HatPattern, accent: string): THREE.CanvasTexture {
@@ -111,7 +113,42 @@ const inHead = (o: THREE.Object3D) => {
 };
 
 /** 모델이 없으면 null(호출하는 쪽이 기본 도형 요정을 쓴다) */
-export function createMiniElf(models: Models, look: ElfLook): ElfView | null {
+/** 요정 장화 한 짝(원점 = 바닥 위 발목 아래, 앞 = +z). 길이 약 0.2 */
+function elfBoot(): THREE.Group {
+  const g = new THREE.Group();
+  const leather = new THREE.MeshStandardMaterial({ color: '#5a3420', roughness: 0.7 });
+  const sole = new THREE.MeshStandardMaterial({ color: '#2a1a10', roughness: 0.9 });
+  const fur = new THREE.MeshStandardMaterial({ color: '#f7f4ee', roughness: 1 });
+  const gold = new THREE.MeshStandardMaterial({ color: '#e2b23c', metalness: 0.5, roughness: 0.4 });
+  const foot = new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 10), leather);
+  foot.scale.set(0.95, 0.7, 1.7);
+  foot.position.set(0, 0.045, 0.03);
+  g.add(foot);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.055, 0.1, 12), leather);
+  shaft.position.set(0, 0.09, -0.01);
+  g.add(shaft);
+  const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.018, 8, 14), fur);
+  cuff.rotation.x = Math.PI / 2;
+  cuff.position.set(0, 0.14, -0.01);
+  g.add(cuff);
+  const toe = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.09, 10), leather);
+  toe.position.set(0, 0.06, 0.13);
+  toe.rotation.x = Math.PI / 2 - 0.9; // 앞으로 나가다 위로 말린다
+  g.add(toe);
+  const bell = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), gold);
+  bell.position.set(0, 0.1, 0.165);
+  g.add(bell);
+  const sl = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.018, 0.2), sole);
+  sl.position.set(0, 0.009, 0.03);
+  g.add(sl);
+  const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.03, 0.008), gold);
+  buckle.position.set(0, 0.075, 0.075);
+  g.add(buckle);
+  g.traverse((o) => (o.castShadow = true));
+  return g;
+}
+
+export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: string } = {}): ElfView | null {
   const model = models.clone('elf');
   if (!model) return null;
   const root = new THREE.Group();
@@ -151,7 +188,7 @@ export function createMiniElf(models: Models, look: ElfLook): ElfView | null {
     const c = clips.get(n);
     return c ? mixer.clipAction(c) : null;
   };
-  const idle = action('Idle');
+  const idle = action(opts.idle ?? IDLE_CLIP);
   const run = action('Run');
   idle?.play();
   mixer.update(0.5);
@@ -200,6 +237,22 @@ export function createMiniElf(models: Models, look: ElfLook): ElfView | null {
     }
   }
 
+  // 요정 장화: 발 뼈에 붙여 걸음을 따라간다. 갈색 가죽 + 위로 말린 앞코 + 흰 털 단 + 금 버클(발끝 윤곽이 눈 위에서 또렷하게)
+  model.updateMatrixWorld(true);
+  for (const side of ['L', 'R'] as const) {
+    const foot = findBone(model, `Foot${side}`);
+    if (!foot) continue;
+    const fp = foot.getWorldPosition(new THREE.Vector3());
+    const fs = foot.getWorldScale(new THREE.Vector3()).x;
+    const fq = foot.getWorldQuaternion(new THREE.Quaternion()).invert();
+    const boot = elfBoot();
+    boot.scale.setScalar(1 / fs);
+    foot.add(boot);
+    // 발목 아래, 바닥에 닿게(서 있는 자세 기준 월드 위치로 맞춘다)
+    boot.position.copy(foot.worldToLocal(new THREE.Vector3(fp.x, 0, fp.z + 0.035)));
+    boot.quaternion.copy(fq);
+  }
+
   // 발밑 그림자(바닥 위 위치를 읽기 쉽게)
   const shadow = new THREE.Mesh(
     new THREE.CircleGeometry(0.34, 24),
@@ -222,15 +275,23 @@ export function createMiniElf(models: Models, look: ElfLook): ElfView | null {
     if (b && a !== 0) b.quaternion.multiply(tmp.setFromAxisAngle(zAxis, a));
   };
   // 자세별 팔 목표(위팔 앞으로 든 각, 아래팔 굽힘): 가슴 앞에 안기 / 손잡이 높이로 앞 / 빈손
-  const ARMS: Record<ElfPose['carry'], [number, number]> = { none: [0, 0], light: [1.15, 0.75], grip: [0.75, 0.55], heavy: [1.0, 0.7] };
+  const ARMS: Record<ElfPose['carry'], [number, number]> = { none: [0, 0], light: [0.95, 0.85], grip: [0.45, 0.25], heavy: [0.7, 0.35] };
   const walk = action('Walk');
   let last = -1;
   let gait: 'idle' | 'run' | 'walk' = 'idle';
   let up = 0;
   let low = 0;
   const actionOf = (g: typeof gait) => (g === 'run' ? run : g === 'walk' ? walk ?? run : idle);
+  const wl = findBone(model, 'WristL');
+  const wr = findBone(model, 'WristR');
   return {
     root,
+    hands(l, r) {
+      if (!wl || !wr) return false;
+      wl.getWorldPosition(l);
+      wr.getWorldPosition(r);
+      return true;
+    },
     animate(timeSec, isMoving, pose = NO_POSE) {
       const dt = last < 0 ? 0 : Math.min(0.1, Math.max(0, timeSec - last));
       last = timeSec;
