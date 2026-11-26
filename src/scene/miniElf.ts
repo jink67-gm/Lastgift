@@ -282,11 +282,11 @@ export function createMiniElf(models: Models, look: ElfLook, opts: { idle?: stri
     if (b && a !== 0) b.quaternion.multiply(tmp.setFromAxisAngle(zAxis, a));
   };
   // 자세별 팔 목표(위팔 앞으로 든 각, 아래팔 굽힘, 옆으로 벌림): 가슴 앞에 안기 / 손잡이 높이로 앞 / 빈손
-  // 가벼운 선물은 손을 가슴 아래(손목 높이 ≈ 키의 0.62)에 두고 물건 폭만큼 팔을 벌려 옆면을 감싼다
-  // (머리 위나 얼굴 앞으로 들면 물건이 얼굴을 가린다)
-  const ARMS: Record<ElfPose['carry'], [number, number, number]> = { none: [0, 0, 0], light: [0.5, 0.6, 0], grip: [0.45, 0.25, 0], heavy: [0.7, 0.35, 0] };
-  /** 벌림 각 → 두 손목 사이(요정 크기 1 기준): 벌리지 않으면 0.34 m, 1 rad마다 0.23 m 넓어진다(위 자세에서 잰 값) */
-  const spreadFor = (span: number) => Math.min(1.2, Math.max(0, (span + 0.04 - 0.34) / 0.23));
+  // 가벼운 선물은 두 팔을 앞으로 모아 가슴에 안는다(손목 ≈ 키의 0.67, 몸 앞 0.27). 물건 폭에 맞춰 조금만 벌린다
+  // (크게 벌리면 팔을 양옆으로 뻗은 것처럼 어색하다)
+  const ARMS: Record<ElfPose['carry'], [number, number, number]> = { none: [0, 0, 0], light: [0.8, 0.9, 0], grip: [0.45, 0.25, 0], heavy: [0.7, 0.35, 0] };
+  /** 벌림 각 → 두 손목 사이(요정 크기 1 기준): 벌리지 않으면 0.29 m, 1 rad마다 0.235 m 넓어진다(위 자세에서 잰 값) */
+  const spreadFor = (span: number) => Math.min(0.6, Math.max(0, (span + 0.03 - 0.29) / 0.235));
   const yAxis = new THREE.Vector3(0, 1, 0);
   const walk = action('Walk');
   let last = -1;

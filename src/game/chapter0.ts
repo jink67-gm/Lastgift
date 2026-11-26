@@ -1,8 +1,7 @@
 // 0장 · 광장에 떨어진 선물 다섯 개: 그림 이름표를 보고 네 배달지 표식 아래로 나눈다(명세서 §4 0장, §5).
 //   ?chapter=0  한 기기에서 둘이(1P WASD+E·터치, 2P 방향키+Enter). 여러 기기 연결은 STEP 07 통합 때 붙인다.
 // 프롤로그(단체사진·썰매 불시착)는 STEP 04-3에서 이 장 앞에 붙인다.
-import type { GiftKind } from '../data/gifts';
-import { holdPlace, holdShape } from '../scene/hold';
+import { giftScale, holdShape, placeHeld, placeOnGround } from '../scene/hold';
 import * as THREE from 'three';
 import { gripPos, needsSwap, type SewingInput } from '../core/sewing';
 import { createSorting, planAction, step, type SortAction, type SortEvent, type SortState } from '../core/sorting';
@@ -47,9 +46,7 @@ const PLAYERS = ['p0', 'p1'] as const;
  * 시험 모드에서만 ?elf=배율로 바꿔 비교할 수 있다. 판정(충돌 반지름·손잡이 거리)은 그대로다.
  */
 const ELF_SCALE = testParams.has('test') && testParams.get('elf') ? Number(testParams.get('elf')) : 1.2;
-/** 가벼운 선물은 가슴 앞에 두 손으로 든다(머리 위로 들면 긴 모자 위에 떠 보였다) */
-/** 선물 크기(배). 공은 실제 비율, 나머지는 요정이 품에 안았을 때 얼굴을 가리지 않는 크기 */
-const GIFT_SCALE: Partial<Record<GiftKind, number>> = { ball: 1.35, pencils: 1.3, repair: 1.35 };
+/** 가벼운 선물은 가슴에 두 손으로 안는다(머리 위로 들면 긴 모자 위에 떠 보였다, `scene/hold.ts`) */
 
 function iconOf(a: SortAction): ActionIcon {
   if (a.kind === 'pick') return 'pick';
@@ -181,8 +178,8 @@ export function startChapter0(models: Models): void {
   const gifts = new Map(
     SORT_GIFTS.map((g) => {
       const v = createGift(g.kind);
-      // 사람 아이의 물건(축구공 지름 ≈ 요정 키 × 0.5)은 실제 크기에 맞추고, 나머지는 요정이 품에 안을 수 있는 크기
-      v.scale.setScalar(GIFT_SCALE[g.kind] ?? 1.6);
+      // 요정이 두 팔을 모아 가슴에 안을 수 있는 크기
+      v.scale.setScalar(giftScale(g.kind, ELF_SCALE));
       setShadows(v, true);
       scene.add(v);
       const size = new THREE.Box3().setFromObject(v).getSize(new THREE.Vector3());
@@ -194,6 +191,8 @@ export function startChapter0(models: Models): void {
     }),
   );
 
+  /** 품에 안은 선물의 자리(시험 훅용) */
+  const heldAt = new Map<string, { ahead: number; bottom: number; top: number }>();
   const fader = createOcclusionFader(scene, camera);
   /** 요정별 마지막 손 동작(집기·놓기·잡기) 시각 */
   const actAt = new Map<string, number>();
@@ -328,16 +327,12 @@ export function startChapter0(models: Models): void {
         const e = elves[idx]!;
         const ps = shown.get(sw.players[idx]!.id)!;
         const fx = Math.sin(ps.yaw), fz = Math.cos(ps.yaw);
-        const hs = holdShape(g.kind, g.size);
         const hands = e.hands?.(hl, hr) ? { y: (hl.y + hr.y) / 2, fwd: ((hl.x + hr.x) / 2 - ps.x) * fx + ((hl.z + hr.z) / 2 - ps.z) * fz } : null;
-        const { ahead, bottom } = holdPlace(hs, hands, ELF_SCALE);
-        g.v.position.set(ps.x + fx * ahead, bottom, ps.z + fz * ahead);
-        g.v.rotation.y = ps.yaw + (hs.turn ? Math.PI / 2 : 0);
+        heldAt.set(it.id, placeHeld(g.v, holdShape(g.kind, g.size), ps, hands, ELF_SCALE));
         // 이름표: 요정 머리 위
         g.tag.position.set(ps.x, 1.9 * ELF_SCALE, ps.z);
       } else {
-        g.v.position.set(it.x, 0, it.z);
-        g.v.rotation.y = 0;
+        placeOnGround(g.v, it.x, it.z);
         g.tag.position.set(it.x, 0.95, it.z);
       }
     }
@@ -473,7 +468,7 @@ export function startChapter0(models: Models): void {
             id,
             hands: ok ? { y: (l.y + r.y) / 2, fwd: fwd((l.x + r.x) / 2, (l.z + r.z) / 2), apart: l.distanceTo(r) } : null,
             chin,
-            gift: gv && it ? { id: it.id, bottom: gv.v.position.y, top: gv.v.position.y + gv.size.y, ahead: fwd(gv.v.position.x, gv.v.position.z) } : null,
+            gift: gv && it && heldAt.has(it.id) ? { id: it.id, ...heldAt.get(it.id)! } : null,
           };
         }),
       /** 화면 확인용(시험 모드만): 요정 체력을 정한다 */

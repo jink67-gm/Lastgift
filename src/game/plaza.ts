@@ -11,7 +11,7 @@ import { mergeIntents } from '../input/merge';
 import { createElfAvatar } from '../scene/elfAvatar';
 import type { Models } from '../scene/models';
 import { createGift, createTargetRing } from '../scene/gifts';
-import { holdPlace, holdShape } from '../scene/hold';
+import { giftScale, holdShape, placeHeld, placeOnGround } from '../scene/hold';
 import { createPlaza } from '../scene/plaza';
 import { browserStorage, CheckpointStore } from '../save/store';
 import { LocalRun } from '../session/localRun';
@@ -68,11 +68,11 @@ export function startPlaza(models: Models): void {
 
   const elf = createElfAvatar(models, ELF_LOOKS[0]!);
   scene.add(elf.root);
-  // 가벼운 선물은 실제 비율보다 크게 그려 1280×720에서도 무엇인지 알아보게 한다.
+  // 가벼운 선물은 요정이 가슴에 안을 수 있는 크기(0장과 같은 비율)
   const giftViews = new Map(
     PLAZA_GIFTS.map((g) => {
       const v = createGift(g.kind);
-      if (g.light) v.scale.setScalar(1.6);
+      if (g.light) v.scale.setScalar(giftScale(g.kind, 1));
       return [g.id, { v, shape: holdShape(g.kind, new THREE.Box3().setFromObject(v).getSize(new THREE.Vector3())) }] as const;
     }),
   );
@@ -127,14 +127,12 @@ export function startPlaza(models: Models): void {
     for (const it of items) {
       const { v, shape } = giftViews.get(it.id)!;
       if (it.carriedBy === ME) {
-        // 가슴 아래에 두 손으로 품고 간다(얼굴을 가리지 않게, 손이 옆면을 잡게)
+        // 두 팔을 모아 가슴에 안고 간다(얼굴을 가리지 않게, 손이 옆면을 감싸게)
         const fx = Math.sin(player.facing), fz = Math.cos(player.facing);
         const hands = elf.hands?.(hl, hr) ? { y: (hl.y + hr.y) / 2, fwd: ((hl.x + hr.x) / 2 - player.x) * fx + ((hl.z + hr.z) / 2 - player.z) * fz } : null;
-        const { ahead, bottom } = holdPlace(shape, hands, 1);
-        v.position.set(player.x + fx * ahead, bottom, player.z + fz * ahead);
-        v.rotation.y = player.facing + (shape.turn ? Math.PI / 2 : 0);
+        placeHeld(v, shape, { x: player.x, z: player.z, yaw: player.facing }, hands, 1);
       } else {
-        v.position.set(it.x, 0, it.z);
+        placeOnGround(v, it.x, it.z);
       }
     }
     const target = items.some((i) => i.carriedBy === ME) ? null : chooseTarget(player, items);
