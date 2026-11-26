@@ -1,7 +1,7 @@
 // 행동 그림(직접 제작 SVG). 글 대신 그림으로 "지금 누르면 무슨 일이 일어나는지" 보여 준다.
 import type { Action } from '../core/carry';
 
-export type ActionIcon = 'pick' | 'drop' | 'tooHeavy' | 'blocked' | 'swap' | 'latch' | 'door' | 'map' | 'mapClose' | 'signal' | 'throw' | 'none';
+export type ActionIcon = 'pick' | 'drop' | 'tooHeavy' | 'blocked' | 'swap' | 'latch' | 'door' | 'map' | 'mapClose' | 'signal' | 'throw' | 'plug' | 'crank' | 'switch' | 'none';
 
 const HAND =
   '<path d="M20 44c-5-5-9-11-9-15 0-2 2-3 4-2l5 5V13a3 3 0 0 1 6 0v12V9a3 3 0 0 1 6 0v16V11a3 3 0 0 1 6 0v14-9a3 3 0 0 1 6 0v18c0 7-4 12-10 13h-6c-4 0-6-1-8-3z" fill="#fff" stroke="#1b2433" stroke-width="2.5" stroke-linejoin="round"/>';
@@ -29,6 +29,12 @@ const SVG: Record<ActionIcon, string> = {
   signal: `<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="27" fill="#2f9a4a" stroke="#fff" stroke-width="3"/><g transform="translate(8 6) scale(0.75)">${HAND}</g></svg>`,
   // 던지기: 공 + 포물선 화살표(손 든 친구에게)
   throw: `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M14 46C20 14 44 10 54 30" fill="none" stroke="#ffd84a" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 7"/><path d="M47 28l7 3 2-8" fill="none" stroke="#ffd84a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14" cy="46" r="10" fill="#fff" stroke="#1b2433" stroke-width="2.5"/><path d="M14 36v20M5 43h18" stroke="#d23a3a" stroke-width="3"/></svg>`,
+  // 전선 끼우기: 꽂는 머리 + 아래 화살표 + 구멍
+  plug: `<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="22" y="8" width="20" height="22" rx="4" fill="#fff" stroke="#1b2433" stroke-width="2.5"/><path d="M28 30v8M36 30v8" stroke="#1b2433" stroke-width="3"/><path d="M50 14v18m-6-6 6 6 6-6" fill="none" stroke="#ffd84a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><rect x="18" y="44" width="28" height="12" rx="3" fill="#3b3f4a"/><path d="M28 46v6M36 46v6" stroke="#fff" stroke-width="3"/></svg>`,
+  // 발전기 돌리기(길게 누르기): 손잡이 + 도는 화살표
+  crank: `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 10a22 22 0 1 1-20 13" fill="none" stroke="#ffd84a" stroke-width="5" stroke-linecap="round"/><path d="M6 16l6 8 8-6" fill="none" stroke="#ffd84a" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="32" cy="32" r="6" fill="#fff" stroke="#1b2433" stroke-width="2.5"/><path d="M32 32l12-10" stroke="#fff" stroke-width="5" stroke-linecap="round"/><circle cx="45" cy="21" r="5" fill="#d23a3a" stroke="#1b2433" stroke-width="2"/></svg>`,
+  // 스위치 누르기: 둥근 빨간 버튼 + 누르는 손가락
+  switch: `<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="12" y="30" width="40" height="26" rx="6" fill="#f2efe6" stroke="#1b2433" stroke-width="2.5"/><circle cx="32" cy="43" r="8" fill="#d23a3a" stroke="#1b2433" stroke-width="2.5"/><path d="M32 6v18m-6-6 6 6 6-6" fill="none" stroke="#ffd84a" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   // 빈 손: 할 일이 없다
   none: `<svg viewBox="0 0 64 64" aria-hidden="true" opacity="0.55">${HAND}</svg>`,
 };
