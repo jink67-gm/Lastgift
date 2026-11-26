@@ -1,0 +1,19 @@
+<!doctype html><meta charset="utf-8"><title>Tiny Treats 집 확인</title>
+<body style="margin:0;background:#223049">
+<script type="module">
+// Tiny Treats Homely House(CC0) 집·울타리·우편함 크기와 지붕 모양 확인용. 요정 키(1.1 m) 막대와 Kenney 문 높이(1.6 m) 막대를 옆에 둔다.
+import * as THREE from '/@fs/home/user/lastgift/node_modules/three/build/three.module.js';
+import { GLTFLoader } from '/@fs/home/user/lastgift/node_modules/three/examples/jsm/loaders/GLTFLoader.js';
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(1200, 600); document.body.appendChild(r.domElement);
+const s = new THREE.Scene(); s.background = new THREE.Color('#223049');
+s.add(new THREE.HemisphereLight('#c4d4f0', '#7c8aa8', 1.5)); const d = new THREE.DirectionalLight('#fff0db', 2.5); d.position.set(-5, 10, 7); s.add(d);
+const L = new GLTFLoader(); const base = '/models/tinytreats/';
+const k = Number(new URLSearchParams(location.search).get('k') ?? 0.64);
+const yaw = Number(new URLSearchParams(location.search).get('yaw') ?? 0.785);
+for (const [f, x, sc] of [['house', 0, k], ['fence_straight_long', 4, 0.6], ['fence_post', 5.2, 0.6], ['mailbox', 6.5, 0.7]]) {
+  const g = await L.loadAsync(base + f + '.gltf'); g.scene.scale.setScalar(sc); g.scene.position.x = x; s.add(g.scene);
+}
+for (const [h, x, c] of [[1.1, -3, '#2f8a3e'], [1.6, -3.4, '#c8323c']]) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.15, h, 0.15), new THREE.MeshBasicMaterial({ color: c })); m.position.set(x, h / 2, 1.5); s.add(m); }
+const c = new THREE.OrthographicCamera(-6, 6, 3, -3, 0.1, 100); c.position.set(1.5 + Math.sin(yaw) * 20, 9, Math.cos(yaw) * 20); c.lookAt(1.5, 1.2, 0);
+r.render(s, c); window.done = true;
+</script>

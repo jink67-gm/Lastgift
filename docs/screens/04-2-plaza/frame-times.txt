@@ -1,0 +1,6 @@
+before {"laptop":{"frames":171,"avgMs":181.8,"fps":5.5,"p95Ms":216.7},"tablet":{"frames":228,"avgMs":131.9,"fps":7.6,"p95Ms":166.6}}
+after {"laptop":{"frames":99,"avgMs":325.8,"fps":3.1,"p95Ms":366.7},"tablet":{"frames":116,"avgMs":269.2,"fps":3.7,"p95Ms":316.7}}
+after-low {"laptop":{"frames":193,"avgMs":158.3,"fps":6.3,"p95Ms":200},"tablet":{"frames":230,"avgMs":139,"fps":7.2,"p95Ms":183.3}}
+after2 {"laptop":{"frames":100,"avgMs":319.7,"fps":3.1,"p95Ms":350},"tablet":{"frames":137,"avgMs":233.7,"fps":4.3,"p95Ms":266.6}}
+after-noshadow {"laptop":{"frames":140,"avgMs":228.8,"fps":4.4,"p95Ms":266.7},"tablet":{"frames":177,"avgMs":175.1,"fps":5.7,"p95Ms":200}}
+final {"laptop":{"frames":110,"avgMs":280.3,"fps":3.6,"p95Ms":316.7},"tablet":{"frames":164,"avgMs":190.3,"fps":5.3,"p95Ms":216.7}}

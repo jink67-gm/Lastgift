@@ -52,7 +52,7 @@ export function createWinterLight(scene: THREE.Scene, renderer: THREE.WebGLRende
 export function setShadows(root: THREE.Object3D, cast: boolean, receive = true): void {
   root.traverse((o) => {
     if ((o as THREE.Mesh).isMesh) {
-      o.castShadow = cast && !o.userData.flat;
+      o.castShadow = cast && !o.userData.flat && !o.userData.noCast;
       o.receiveShadow = receive;
     }
   });

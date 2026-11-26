@@ -24,6 +24,11 @@ export const MODEL_FILES = {
   snowPile: 'kenney-holiday/snow-pile.glb',
   rocks: 'kenney-holiday/rocks-medium.glb',
   lights: 'kenney-holiday/lights-colored.glb',
+  // Tiny Treats · Homely House (CC0, Isa Lousberg). 텍스처 하나(tiny_treats_texture_1.png)를 같이 쓴다
+  ttHouse: 'tinytreats/house.gltf',
+  ttFence: 'tinytreats/fence_straight_long.gltf',
+  ttFencePost: 'tinytreats/fence_post.gltf',
+  ttMailbox: 'tinytreats/mailbox.gltf',
 } as const;
 
 export type ModelName = keyof typeof MODEL_FILES;

@@ -1,0 +1,5 @@
+# source: https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/<id>/ (snow_02, cobblestone_floor_001), downloaded 2026-11-26
+893d3e7b4506c5935cbc6aca5b914d637bd4464484bcaa5d69e2ee205bb9ae9c  cobblestone_floor_001_diff_1k.jpg
+f5c92ea5f9d09c35fee6f75884f4496a61a08ac0a1fe427d5a1ae7d1e15c4280  cobblestone_floor_001_nor_gl_1k.jpg
+523a4e69c90b96d787dd69b897f29a2b3761a017024405c60aa630d1e8e9009a  snow_02_diff_1k.jpg
+9495ec680616b8340e2cbecbd151bff84c690cfad4209e90cc98d2d0ba81f810  snow_02_nor_gl_1k.jpg

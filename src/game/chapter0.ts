@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { gripPos, needsSwap, type SewingInput } from '../core/sewing';
 import { createSorting, planAction, step, type SortAction, type SortEvent, type SortState } from '../core/sorting';
 import { baseViewH, deadZone, frameFor, type Pt } from '../core/framing';
-import { PLAZA_BOUNDS, PLAZA_PROPS } from '../data/plaza';
+import { PLAZA_BOUNDS, PLAZA_DRESSING, PLAZA_PROPS } from '../data/plaza';
 import { CH0, markerOf, SORT_GIFTS } from '../data/chapter0';
 import { ELF_LOOKS } from '../data/elves';
 import { attachKeyboard, KeyState, KEYMAP_P1, KEYMAP_P2 } from '../input/keyboard';
@@ -25,9 +25,12 @@ import { createHud } from '../ui/hud';
 import { toSewingInput } from './chapter2';
 
 const CAMERA_YAW = Math.PI / 4;
-const CAMERA_PITCH = Math.atan(1 / Math.SQRT2);
+// 내려다보는 각(땅 기준). 광장 너머 골목·지붕이 보이게 35.3°에서 낮췄다(비교 촬영: docs/screens/04-2-plaza).
+// 시험 모드에서만 ?pitch=도(°)로 바꿔 비교할 수 있다. 좌우 축(yaw)은 그대로라 같은 키 = 같은 화면 방향.
+const testParams = new URLSearchParams(location.search);
+const CAMERA_PITCH = (testParams.has('test') && testParams.get('pitch') ? Number(testParams.get('pitch')) : 30) * (Math.PI / 180);
 /** 처음 몇 초 광장 전체를 넓게 보여 주는 구도(배달지 네 곳과 썰매가 한 화면에) */
-const ESTABLISH = { x: 0, z: 0, viewH: 21, sec: 2.6 };
+const ESTABLISH = { x: -2, z: -4, viewH: 22, sec: 3.2 }; // 썰매 뒤 골목과 두 집까지 들어오게 북쪽으로 조금
 const SIM_DT = 1 / 60;
 const PLAYERS = ['p0', 'p1'] as const;
 const CARRY_Y = 1.55;
@@ -49,8 +52,10 @@ export function startChapter0(models: Models): void {
   // 실제 그림자: 터치 기기(태블릿·폰)는 작은 그림자 지도, ?noshadow면 끈다(발밑 원형 그림자는 남는다)
   const params = new URLSearchParams(location.search);
   const touchDevice = window.matchMedia?.('(pointer: coarse)').matches ?? false;
-  const light = createWinterLight(scene, renderer, { shadows: !params.has('noshadow'), mapSize: touchDevice ? 1024 : 2048 });
-  const plaza = createPlaza(models);
+  // ?quality=low: 실시간 그림자·눈결·노멀맵을 뺀다(길·표식·골목은 색으로 그대로 보인다)
+  const low = params.get('quality') === 'low';
+  const light = createWinterLight(scene, renderer, { shadows: !low && !params.has('noshadow'), mapSize: touchDevice ? 1024 : 2048 });
+  const plaza = createPlaza(models, low ? 'low' : 'normal');
   setShadows(plaza, true);
   scene.add(plaza);
   const markers = createMarkers();
@@ -228,8 +233,9 @@ export function startChapter0(models: Models): void {
       const held = deadZone(camTarget, want);
       want = { ...want, x: held.x, z: held.z };
     }
-    const tx = Math.max(PLAZA_BOUNDS.minX + 5, Math.min(PLAZA_BOUNDS.maxX - 5, want.x));
-    const tz = Math.max(PLAZA_BOUNDS.minZ + 3, Math.min(PLAZA_BOUNDS.maxZ - 3, want.z));
+    // 광장 밖도 눈밭·울타리·골목·먼 마을이 채우므로 가장자리 가까이까지 따라간다
+    const tx = Math.max(PLAZA_BOUNDS.minX + 2, Math.min(PLAZA_BOUNDS.maxX - 2, want.x));
+    const tz = Math.max(PLAZA_BOUNDS.minZ, Math.min(PLAZA_BOUNDS.maxZ - 2, want.z));
     const k = snapCamera ? 1 : 1 - Math.exp(-frame * 3);
     // 넓히기는 빨리(친구가 화면 밖으로 나가지 않게), 좁히기는 천천히
     const kz = snapCamera ? 1 : 1 - Math.exp(-frame * (want.viewH > viewH ? 4 : 1.2));
@@ -249,10 +255,15 @@ export function startChapter0(models: Models): void {
 
   /** 지금 들고 가는 짐의 목적지(없으면 null) */
   function goalOf(): Pt | null {
+    // 정리가 끝나면 다음 골목(우편함이 보이는 곳) 쪽을 조금 보여 준다
+    if (sort.complete) return PLAZA_DRESSING.alleyMouth;
+    const near = (p: Pt) => Math.hypot(p.x - PLAZA_DRESSING.alleyMouth.x, p.z - PLAZA_DRESSING.alleyMouth.z) < 12;
     const held = sort.items.find((i) => i.carriedBy !== null);
     if (held) return markerOf(held.dest);
     // 재봉틀 손잡이를 하나라도 잡으면 수선집 쪽을 미리 보여 준다
     if (!sort.crateSorted && sort.sewing.handles.some((h) => h !== null)) return markerOf('tailor');
+    // 빈손으로 골목 가까이 오면 골목 안쪽(우편함)을 미리 보여 준다
+    if (sort.sewing.players.some((p) => p.connected && near(p))) return PLAZA_DRESSING.alleyMouth;
     return null;
   }
 
@@ -263,6 +274,8 @@ export function startChapter0(models: Models): void {
       run: () => ({ ...run.state }),
       runEffects: () => run.log.map((e) => e.type),
       savedCheckpoint: () => localStorage.getItem('lastgift.cp.v1.dev-ch0'),
+      /** 화면 비교 촬영용: 지금 카메라(바라보는 땅 위 점, 화면 높이 m, 각도) */
+      camera: () => ({ target: { x: camTarget.x, z: camTarget.z }, viewH, aspect, yawDeg: (CAMERA_YAW * 180) / Math.PI, pitchDeg: (CAMERA_PITCH * 180) / Math.PI }),
       /** 화면 비교 촬영용(시험 모드에서만): 요정을 그 자리에 세우고 카메라를 바로 맞춘다 */
       debugPlace: (id: string, x: number, z: number, facing = 0) => {
         sort = { ...sort, sewing: { ...sort.sewing, players: sort.sewing.players.map((p) => (p.id === id ? { ...p, x, z, facing } : p)) } };
