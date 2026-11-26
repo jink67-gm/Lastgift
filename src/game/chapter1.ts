@@ -85,10 +85,10 @@ export function startChapter1(models: Models): void {
   scene.add(createBackdrop(models, { center: W(25, 0), forest: [16, 95], trees: 460, keepOut: (p) => { const l = toLane(p); return l.s > -48 && l.s < 70 && Math.abs(l.t) < 20; } }));
   addHaze(scene);
 
-  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 300);
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 700);
   camera.layers.enable(FROST_LAYER); // 큰 화면은 창 성에가 보인다(유나가 어디를 보는지 모른다)
   // 망보는 자리에서 창을 들여다보는 작은 화면(성에 층을 빼고 그린다)
-  const peekCam = new THREE.PerspectiveCamera(34, 4 / 3, 0.1, 120);
+  const peekCam = new THREE.PerspectiveCamera(34, 4 / 3, 0.1, 700);
   const peekFrame = document.createElement('div');
   peekFrame.id = 'peek';
   peekFrame.style.cssText =
@@ -179,7 +179,7 @@ export function startChapter1(models: Models): void {
   let caughtAt = -9;
   /** 끝 장면 시각(초). -1이면 아직 */
   let ending = -1;
-  const endCam = new THREE.PerspectiveCamera(40, 16 / 9, 0.1, 200);
+  const endCam = new THREE.PerspectiveCamera(40, 16 / 9, 0.1, 700);
   // 유나의 새 스케치북(펼친 두 쪽): 오른쪽 쪽에 고래가 꼬리까지 그려진다
   const bookCanvas = document.createElement('canvas');
   bookCanvas.width = 512;

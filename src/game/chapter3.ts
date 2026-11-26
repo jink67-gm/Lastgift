@@ -129,7 +129,7 @@ export function startChapter3(models: Models): void {
   scene.add(createBackdrop(models, { center: W(20, 0), forest: [16, 95], trees: 460, keepOut: (p) => { const l = toLane(p); return l.s > -40 && l.s < 56 && Math.abs(l.t) < 12; } }));
   addHaze(scene);
 
-  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 300);
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 700);
   const camOffset = new THREE.Vector3(Math.sin(CAMERA_YAW) * Math.cos(CAMERA_PITCH), Math.sin(CAMERA_PITCH), Math.cos(CAMERA_YAW) * Math.cos(CAMERA_PITCH)).multiplyScalar(60);
   const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   const camTarget = new THREE.Vector3(ESTABLISH.x, 0, ESTABLISH.z);
@@ -302,7 +302,7 @@ export function startChapter3(models: Models): void {
   let bittenAt = -9;
   /** 끝 장면 시각(초). -1이면 아직 */
   let ending = -1;
-  const endCam = new THREE.PerspectiveCamera(42, 16 / 9, 0.1, 200);
+  const endCam = new THREE.PerspectiveCamera(42, 16 / 9, 0.1, 700);
   /** 끝 장면 시작 때 기억한 것(요정 자리·공 자리·장갑을 내밀 요정) */
   let scene0: { elves: { s: number; t: number }[]; ball: { s: number; t: number }; glove: number; from: THREE.Vector3 } | null = null;
   // 민재네 식구(인물 에셋이 오기 전까지 임시 모형): 문 안쪽에 숨어 있다가 나온다

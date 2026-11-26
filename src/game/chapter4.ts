@@ -102,7 +102,7 @@ export function startChapter4(models: Models): void {
   scene.add(createBackdrop(models, { center: W(20, 0), forest: [16, 95], trees: 460, keepOut: (p) => { const l = toLane(p); return l.s > -38 && l.s < 50 && Math.abs(l.t) < 15; } }));
   addHaze(scene);
 
-  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 300);
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 700);
   const camOffset = new THREE.Vector3(Math.sin(CAMERA_YAW) * Math.cos(CAMERA_PITCH), Math.sin(CAMERA_PITCH), Math.cos(CAMERA_YAW) * Math.cos(CAMERA_PITCH)).multiplyScalar(60);
   const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   const start = solo ? REVEAL : ESTABLISH;
@@ -277,7 +277,7 @@ export function startChapter4(models: Models): void {
   let elapsed = 0;
   /** 끝 장면 시각(초). -1이면 아직 */
   let ending = -1;
-  const endCam = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 200);
+  const endCam = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 700);
   let endFrom: THREE.Vector3 | null = null;
 
   // ── 사람(임시 모형: 인물 에셋을 받으면 createPerson 안만 바꾼다) ──
@@ -316,7 +316,7 @@ export function startChapter4(models: Models): void {
   };
 
   // ── 할머니 사진기 구도(봉투 속 두 사진, 마지막 사진이 같은 구도) ──
-  const photoCam = new THREE.PerspectiveCamera(66, 4 / 3, 0.1, 200);
+  const photoCam = new THREE.PerspectiveCamera(66, 4 / 3, 0.1, 700);
   {
     const tw = W(TREE.s, TREE.t);
     const dir = new THREE.Vector3(tw.x - space.tripod.x, 0, tw.z - space.tripod.z).normalize();
@@ -402,7 +402,7 @@ export function startChapter4(models: Models): void {
   /** 봉투 뒤 3D 장면 시각(-1: 아직 봉투) */
   let introT = wantIntro ? -1 : -2;
   let introSkip: HTMLButtonElement | null = null;
-  const introCam = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 200);
+  const introCam = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 700);
   const endIntro = () => {
     envelope?.dispose();
     envelope = null;
