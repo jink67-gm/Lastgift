@@ -45,7 +45,18 @@ function keysFor(gx: number, gz: number): string[] {
   return out;
 }
 
+/** 누른 키 조합이 땅에서 가리키는 단위 방향(keysFor의 반대) */
+function groundOf(keys: string[]): { x: number; z: number } {
+  const sx = (keys.includes(KEYS.right) ? 1 : 0) - (keys.includes(KEYS.left) ? 1 : 0);
+  const sy = (keys.includes(KEYS.up) ? 1 : 0) - (keys.includes(KEYS.down) ? 1 : 0);
+  const gx = (sx - sy) / Math.SQRT2, gz = (-sx - sy) / Math.SQRT2;
+  const l = Math.hypot(gx, gz) || 1;
+  return { x: gx / l, z: gz / l };
+}
+
 class Team {
+  /** 키를 누르고 떼는 사이의 지연(브라우저·전송) 추정값(ms) */
+  private lag = 120;
   constructor(
     readonly host: Page,
     public pages: Record<Slot, Page | undefined>,
@@ -77,10 +88,19 @@ class Team {
       if (until?.(p, s)) return;
       const d = Math.hypot(to.x - p.x, to.z - p.z);
       if (d < tol) return;
-      await this.hold({ [slot]: keysFor(to.x - p.x, to.z - p.z) }, Math.max(30, Math.min(120, (d / 3.6) * 800)));
+      // 8방향 키라서: 고른 방향으로 남은 거리의 투영만큼만, 잰 지연을 빼고 누른다(짧은 거리에서 오가며 진동하지 않게)
+      const keys = keysFor(to.x - p.x, to.z - p.z);
+      const g = groundOf(keys);
+      const proj = g.x * (to.x - p.x) + g.z * (to.z - p.z);
+      const ms = Math.max(8, Math.min(800, (proj / 3.6) * 1000 * 0.85 - this.lag));
+      await this.hold({ [slot]: keys }, ms);
       await this.host.waitForTimeout(60); // 마지막 입력이 방장에 반영되도록
+      const q = (await this.st()).players.find((r) => r.id === slot)!;
+      const moved = g.x * (q.x - p.x) + g.z * (q.z - p.z);
+      if (moved > 0.05) this.lag = Math.max(0, Math.min(400, 0.6 * this.lag + 0.4 * ((moved / 3.6) * 1000 - ms)));
     }
-    throw new Error(`${slot} could not reach ${JSON.stringify(to)}`);
+    const last = await this.st();
+    throw new Error(`${slot} could not reach ${JSON.stringify(to)} players=${JSON.stringify(last.players.map((q) => [q.id, +q.x.toFixed(2), +q.z.toFixed(2), q.holding]))} crate=${JSON.stringify(last.crate)}`);
   }
   async carry(to: { x: number; z: number; yaw: number }, opts: { tol?: number; until?: (s: S) => boolean } = {}) {
     const tol = opts.tol ?? 0.22;
