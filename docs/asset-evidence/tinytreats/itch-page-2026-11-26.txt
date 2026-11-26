@@ -1,0 +1,9 @@
+# https://tinytreats.itch.io/homely-house — 2026-11-26 에 이 환경에서 직접 받아 본문 글자만 뽑은 기록(HTTP 200)
+제목: Tiny Treats - Homely House set by Tiny Treats
+제작자(Author): Tiny Treats  ("We (Kay and I) are a husband and wife team")
+본문: "Free for personal and commercial use, no attribution required. (CC0 Licensed)"
+정보 칸 Asset license: "Creative Commons Zero v1.0 Universal"
+Content: "No generative AI was used"
+다운로드: "Name your own price" — Free 3.1 MB / Source 3.6 MB "if you pay $3.95 USD or more"
+유료 Source = ".blend" 원본 파일. 게임에는 무료 파일(gltf)만 사용.
+대조: 제작자 GitHub 저장소 LICENSE.txt "License: (Creative Commons Zero, CC0)"와 일치.
