@@ -3,6 +3,10 @@
 // 시험 조립 화면으로 확인한 배치를 그대로 쓴다. 모델이 없으면 null을 돌려준다(기본 도형으로 대신).
 import * as THREE from 'three';
 import { KENNEY_SCALE, type ModelName, type Models } from './models';
+import { warmPool } from './winterLight';
+
+/** 창·문 안쪽의 살구색 불빛(빛을 받지 않는 재질 = 밤에도 밝게 보인다) */
+const WARM = new THREE.MeshBasicMaterial({ color: '#ffc47e' });
 
 const R = { pz: 0, px: Math.PI / 2, nz: Math.PI, nx: -Math.PI / 2 };
 
@@ -53,6 +57,17 @@ export function buildCabin(models: Models, opt: CabinOptions): THREE.Group | nul
     put('cabinRoof', 0.5, 1, z, 0);
     put('cabinRoof', -0.5, 1, z, Math.PI);
   }
+  // 사람이 사는 집: 창과 문 안쪽에 따뜻한 불빛, 문 앞 눈 위에 빛 웅덩이(연출 가이드 §6)
+  const edge = front + 0.5;
+  const pane = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.36), WARM);
+  pane.position.set(0.5, 0.5, edge - 0.09);
+  g.add(pane);
+  const door = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.78), WARM);
+  door.position.set(-0.5, 0.39, edge - 0.14);
+  g.add(door);
+  const pool = warmPool(0.75);
+  pool.position.set(-0.3, 0.004, edge + 0.55);
+  g.add(pool);
   g.scale.setScalar(KENNEY_SCALE);
   return g;
 }

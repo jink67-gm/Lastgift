@@ -8,7 +8,8 @@
 // - 팀원(연결 중)과 재봉틀이 모두 통로 끝을 넘으면 작업실을 한 번만 확정한다(체크포인트는 그대로).
 import { moveCircle, obbCorners, obbOverlaps, overlaps, type Collider, type ObbCollider } from './collision';
 import { screenToGround } from './screenSpace';
-import { BENCH_COLLIDER, CH2, DOOR_CLOSED, WAIT_WALL, type SpaceId } from '../data/chapter2';
+import type { SpaceId } from '../data/chapter2';
+import { SEWING_LAYOUTS, type SewingLayout, type SewingLayoutId } from '../data/sewingLayouts';
 
 export const ELF_R = 0.35;
 export const FREE_SPEED = 3.6; // m/s
@@ -51,6 +52,8 @@ export interface Crate {
 }
 
 export interface SewingState {
+  /** 어느 장의 배치인지(벽·문·목적지) */
+  layout: SewingLayoutId;
   players: CarryPlayer[];
   crate: Crate;
   handles: [string | null, string | null];
@@ -105,21 +108,28 @@ export function crateObb(c: { x: number; z: number; yaw: number }): ObbCollider 
 
 const dist = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - b.x, a.z - b.z);
 
+/** 이 상태의 배치 */
+export function layoutOf(s: { layout: SewingLayoutId }): SewingLayout {
+  return SEWING_LAYOUTS[s.layout];
+}
+
 // ── 생성 ────────────────────────────────────────────────
 
-export function createSewing(playerIds: readonly string[]): SewingState {
+export function createSewing(playerIds: readonly string[], layout: SewingLayoutId = 'ch2'): SewingState {
   const ids = [...playerIds].sort();
+  const L = SEWING_LAYOUTS[layout];
   return {
+    layout,
     players: ids.map((id, i) => ({
       id,
-      ...CH2.spawns[i % CH2.spawns.length]!,
+      ...L.spawns[i % L.spawns.length]!,
       facing: Math.PI,
       moving: false,
       stamina: STAMINA_MAX,
       holding: null,
       connected: true,
     })),
-    crate: { ...CH2.crateStart, lifted: false, place: 'ground' },
+    crate: { ...L.crateStart, lifted: false, place: 'ground' },
     handles: [null, null],
     door: { latched: false, openTimer: 0, held: false, open: false },
     space: 'yard',
@@ -131,9 +141,10 @@ export function createSewing(playerIds: readonly string[]): SewingState {
 // ── 공간별 충돌체 ───────────────────────────────────────
 
 function worldColliders(s: SewingState): Collider[] {
-  const out: Collider[] = [...CH2.walls];
-  if (!s.door.open) out.push(DOOR_CLOSED);
-  if (s.space === 'yard') out.push(WAIT_WALL);
+  const L = layoutOf(s);
+  const out: Collider[] = [...L.walls];
+  if (L.door && !s.door.open) out.push(L.door.closed);
+  if (L.spaces && s.space === 'yard') out.push(L.spaces.waitWall);
   return out;
 }
 
@@ -150,10 +161,11 @@ export function planAction(s: SewingState, playerId: string): SewingAction {
     if (s.handles[h] === null) options.push({ d, a: { kind: 'grab', handle: h } });
     else options.push({ d: d + 0.01, a: { kind: 'handover', handle: h } });
   }
-  if (!s.door.latched) {
-    const dl = dist(p, CH2.latch);
-    if (dl <= CH2.latch.range) options.push({ d: dl, a: { kind: 'latch' } });
-    const dd = dist(p, CH2.door);
+  const L = layoutOf(s);
+  if (L.door && L.latch && !s.door.latched) {
+    const dl = dist(p, L.latch);
+    if (dl <= L.latch.range) options.push({ d: dl, a: { kind: 'latch' } });
+    const dd = dist(p, L.door);
     if (dd <= DOOR_RANGE) options.push({ d: dd + 0.05, a: { kind: 'door' } });
   }
   options.sort((a, b) => a.d - b.d);
@@ -170,9 +182,10 @@ function angleDiffMod(a: number, b: number, period: number): number {
 
 function placeFor(s: SewingState): CratePlace {
   const c = s.crate;
-  const b = CH2.bench;
-  if (s.space === 'workshop' && dist(c, b) <= b.zone && angleDiffMod(c.yaw, b.yaw, Math.PI) <= b.yawTolerance) return 'bench';
-  if (dist(c, CH2.stand) <= CH2.stand.zone) return 'stand';
+  const L = layoutOf(s);
+  const b = L.bench;
+  if ((!L.spaces || s.space === 'workshop') && dist(c, b) <= b.zone && angleDiffMod(c.yaw, b.yaw, Math.PI) <= b.yawTolerance) return 'bench';
+  if (L.stand && dist(c, L.stand) <= L.stand.zone) return 'stand';
   return 'ground';
 }
 
@@ -190,7 +203,8 @@ function releaseHolder(s: SewingState, p: CarryPlayer, fx: SewingEvent[]): Sewin
     // 작업대에 바르게 올렸다: 다른 운반자도 손을 뗀다
     players = players.map((q) => ({ ...q, holding: null }));
     handles[0] = handles[1] = null;
-    crate = { ...crate, x: CH2.bench.x, z: CH2.bench.z, yaw: CH2.bench.yaw };
+    const b = layoutOf(s).bench;
+    crate = { ...crate, x: b.x, z: b.z, yaw: b.yawTolerance >= Math.PI ? crate.yaw : b.yaw };
     delivered = true;
     fx.push({ type: 'delivered' });
   }
@@ -205,7 +219,7 @@ function crateFits(s: SewingState, c: { x: number; z: number; yaw: number }, car
   if (world.some((w) => obbOverlaps(obb, w))) return false;
   const free = s.players.filter((q) => q.connected && q.holding === null);
   if (free.some((q) => obbOverlaps(obb, { kind: 'circle', x: q.x, z: q.z, r: ELF_R }))) return false;
-  const b = CH2.bounds;
+  const b = layoutOf(s).bounds;
   for (const corner of obbCorners(obb)) if (corner.x < b.minX || corner.x > b.maxX || corner.z < b.minZ || corner.z > b.maxZ) return false;
   for (const h of [0, 1] as const) {
     if (!carriers[h]) continue;
@@ -360,7 +374,8 @@ export function step(state: SewingState, inputs: Record<string, SewingInput>, dt
   // 4) 맨몸 요정 이동(상자·운반자·작업대·닫힌 문에 막힌다)
   const world = worldColliders(s);
   const carriers = s.players.filter((p) => p.holding !== null);
-  const freeBlockers: Collider[] = [...world, BENCH_COLLIDER, crateObb(s.crate), ...carriers.map((c) => ({ kind: 'circle', x: c.x, z: c.z, r: ELF_R }) as Collider)];
+  const L = layoutOf(s);
+  const freeBlockers: Collider[] = [...world, ...(L.benchCollider ? [L.benchCollider] : []), crateObb(s.crate), ...carriers.map((c) => ({ kind: 'circle', x: c.x, z: c.z, r: ELF_R }) as Collider)];
   s = {
     ...s,
     players: s.players.map((p) => {
@@ -368,7 +383,7 @@ export function step(state: SewingState, inputs: Record<string, SewingInput>, dt
       const g = screenToGround(inputs[p.id]?.move ?? { x: 0, y: 0 }, Math.PI / 4);
       const sp = Math.hypot(g.x, g.z);
       if (sp === 0) return p.moving ? { ...p, moving: false } : p;
-      const next = moveCircle(p, { x: g.x * FREE_SPEED * dt, z: g.z * FREE_SPEED * dt }, ELF_R, freeBlockers, CH2.bounds);
+      const next = moveCircle(p, { x: g.x * FREE_SPEED * dt, z: g.z * FREE_SPEED * dt }, ELF_R, freeBlockers, L.bounds);
       return { ...p, x: next.x, z: next.z, facing: Math.atan2(g.x, g.z), moving: true };
     }),
   };
@@ -398,10 +413,12 @@ export function step(state: SewingState, inputs: Record<string, SewingInput>, dt
 }
 
 function updateDoor(s: SewingState, inputs: Record<string, SewingInput>, dt: number, fx: SewingEvent[]): SewingState {
-  const held = s.players.some((p) => p.connected && p.holding === null && inputs[p.id]?.actionHeld && dist(p, CH2.door) <= DOOR_RANGE);
+  const door = layoutOf(s).door;
+  if (!door) return s;
+  const held = s.players.some((p) => p.connected && p.holding === null && inputs[p.id]?.actionHeld && dist(p, door) <= DOOR_RANGE);
   const openTimer = Math.max(0, s.door.openTimer - dt);
   // 문틀(문이 닫히며 지나갈 자리)에 누가 있거나 상자가 걸쳐 있으면 닫지 않는다
-  const frame: Collider = { kind: 'box', x: CH2.door.x, z: CH2.door.z, hx: CH2.door.halfGap + 0.2, hz: 0.7 };
+  const frame: Collider = { kind: 'box', x: door.x, z: door.z, hx: door.halfGap + 0.2, hz: 0.7 };
   const occupied =
     s.players.some((p) => p.connected && overlaps(p, ELF_R, frame)) || obbOverlaps(crateObb(s.crate), frame);
   const open = s.door.latched || held || openTimer > 0 || (s.door.open && occupied);
@@ -411,7 +428,9 @@ function updateDoor(s: SewingState, inputs: Record<string, SewingInput>, dt: num
 
 /** 연결 중인 팀원 전원과 재봉틀이 통로 끝을 넘었는가 */
 export function allPassed(s: SewingState): boolean {
-  const z = CH2.boundaryZ;
+  const spaces = layoutOf(s).spaces;
+  if (!spaces) return false;
+  const z = spaces.boundaryZ;
   const people = s.players.filter((p) => p.connected);
   if (people.length === 0) return false;
   if (people.some((p) => p.z >= z)) return false;
@@ -459,6 +478,7 @@ export function playerRejoined(s: SewingState, playerId: string): SewingState {
   const p = s.players[i]!;
   if (p.connected) return s;
   let pos = { x: p.x, z: p.z };
-  if (s.space === 'workshop' && p.z >= CH2.boundaryZ) pos = WORKSHOP_SAFE[i % WORKSHOP_SAFE.length]!;
+  const spaces = layoutOf(s).spaces;
+  if (spaces && s.space === 'workshop' && p.z >= spaces.boundaryZ) pos = WORKSHOP_SAFE[i % WORKSHOP_SAFE.length]!;
   return { ...s, players: s.players.map((q) => (q.id === playerId ? { ...q, ...pos, connected: true, holding: null, moving: false } : q)) };
 }

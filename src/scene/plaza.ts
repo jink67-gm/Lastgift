@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { PLAZA_BOUNDS, PLAZA_PROPS, type Prop } from '../data/plaza';
 import { buildCabin, kenneyProp } from './kenney';
 import { Models } from './models';
+import { warmPool } from './winterLight';
 
 const mat = (color: string, extra: THREE.MeshStandardMaterialParameters = {}) =>
   new THREE.MeshStandardMaterial({ color, roughness: 0.85, ...extra });
@@ -105,7 +106,7 @@ function lamp(): THREE.Group {
   const g = new THREE.Group();
   g.add(mesh(new THREE.CylinderGeometry(0.06, 0.09, 2.6, 8), mat('#2f3340'), 0, 1.3, 0));
   g.add(mesh(new THREE.SphereGeometry(0.2, 12, 10), mat('#fff1c2', { emissive: '#ffd98a', emissiveIntensity: 1.2 }), 0, 2.75, 0));
-  const light = new THREE.PointLight('#ffd98a', 6, 6, 1.6);
+  const light = new THREE.PointLight('#ffd98a', 2.5, 5, 1.6);
   light.position.y = 2.6;
   g.add(light);
   return g;
@@ -165,8 +166,11 @@ function build(p: Prop, models: Models, lampLights: { n: number }): THREE.Object
       const k = kenneyProp(models, 'lantern', 1.5); // 높이 약 2.6 m
       if (!k) return lamp();
       // 빛은 세 개까지만(저사양 기기)
+      const pool = warmPool(1.1 / 1.5);
+      pool.position.y = 0.003;
+      (k as THREE.Object3D).add(pool);
       if (lampLights.n++ < 3) {
-        const light = new THREE.PointLight('#ffd98a', 6, 6, 1.6);
+        const light = new THREE.PointLight('#ffd98a', 2.5, 5, 1.6);
         light.position.y = 1.6; // 랜턴 안(1.5배 안쪽 좌표)
         (k as THREE.Object3D).add(light);
       }
@@ -180,11 +184,18 @@ export function createPlaza(models: Models = Models.none()): THREE.Group {
   const w = PLAZA_BOUNDS.maxX - PLAZA_BOUNDS.minX;
   const d = PLAZA_BOUNDS.maxZ - PLAZA_BOUNDS.minZ;
 
-  const ground = mesh(new THREE.BoxGeometry(w, 0.4, d), mat('#eef3fb', { roughness: 0.95 }), 0, -0.2, 0);
+  // 다져진 광장 바닥(밝은 크림빛 눈)과 그 바깥의 푹 쌓인 눈밭(조금 더 푸르다): 화면 끝에 빈 공간이 보이지 않게
+  const ground = mesh(new THREE.BoxGeometry(w, 0.4, d), mat('#f6f5f1', { roughness: 0.95 }), 0, -0.2, 0);
+  ground.userData.flat = true;
   root.add(ground);
+  const apron = mesh(new THREE.PlaneGeometry(w + 80, d + 80), mat('#dfe7f3', { roughness: 1 }), 0, 0.001, 0);
+  apron.rotation.x = -Math.PI / 2;
+  apron.position.y = -0.02;
+  apron.userData.flat = true;
+  root.add(apron);
 
   // 광장 가장자리 낮은 눈둑(경계가 화면에서 보이게)
-  const rim = mat('#dfe7f4', { roughness: 1 });
+  const rim = mat('#e6edf7', { roughness: 1 });
   root.add(mesh(new THREE.BoxGeometry(w, 0.3, 0.4), rim, 0, 0.15, PLAZA_BOUNDS.minZ));
   root.add(mesh(new THREE.BoxGeometry(w, 0.3, 0.4), rim, 0, 0.15, PLAZA_BOUNDS.maxZ));
   root.add(mesh(new THREE.BoxGeometry(0.4, 0.3, d), rim, PLAZA_BOUNDS.minX, 0.15, 0));
