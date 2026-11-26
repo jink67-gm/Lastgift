@@ -1,0 +1,26 @@
+<!-- 시제품(게임 코드 아님): 받은 산타 에셋(custom/santa.glb)을 앞·옆·뒤·게임 시점과 동작별로 보는 화면.
+     npx vite --port 5199 → http://localhost:5199/tools/prototypes/santa-asset.html?clip=Idle&t=1 -->
+<!doctype html><html><body style="margin:0;background:#dfe7f4"><canvas id=c></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+const q = new URLSearchParams(location.search);
+const r = new THREE.WebGLRenderer({ canvas: c, antialias: true }); r.setSize(1600, 500); r.setPixelRatio(1); r.setScissorTest(true);
+r.outputColorSpace = THREE.SRGBColorSpace;
+const s = new THREE.Scene(); s.background = new THREE.Color('#dfe7f4');
+s.add(new THREE.HemisphereLight('#fff', '#8a93a8', 2.2)); const d = new THREE.DirectionalLight('#fff4e0', 1.6); d.position.set(-3, 8, 7); s.add(d);
+const g = await new GLTFLoader().loadAsync('/models/custom/santa.glb');
+s.add(g.scene);
+const mixer = new THREE.AnimationMixer(g.scene);
+const clip = q.get('clip');
+if (clip) mixer.clipAction(THREE.AnimationClip.findByName(g.animations, clip)).play();
+mixer.update(Number(q.get('t') || 0));
+const box = new THREE.Box3().setFromObject(g.scene); console.log(JSON.stringify(box));
+const views = [[0, 0.2], [Math.PI / 2, 0.2], [Math.PI, 0.2], [Math.PI / 4, Math.PI / 6]];
+views.forEach(([yaw, pitch], i) => {
+  const cam = new THREE.OrthographicCamera(-1.25, 1.25, 1.25 * 500 / 400 * 0.8, -1.25 * 500 / 400 * 0.8, 0.1, 50);
+  cam.position.set(Math.sin(yaw) * Math.cos(pitch) * 10, 1 + Math.sin(pitch) * 10, Math.cos(yaw) * Math.cos(pitch) * 10); cam.lookAt(0, 1, 0);
+  r.setViewport(i * 400, 0, 400, 500); r.setScissor(i * 400, 0, 400, 500); r.render(s, cam);
+});
+window.__ready = true;
+</script></body></html>

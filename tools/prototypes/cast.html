@@ -17,7 +17,7 @@ const cam = new THREE.OrthographicCamera(-H * 16 / 18, H * 16 / 18, H / 2, -H / 
 if (view === 'front') { cam.position.set(fx, fy, 40); cam.lookAt(fx, fy, 0); }
 else { const yaw = Math.PI / 4, pitch = Math.PI / 6; cam.position.set(Math.sin(yaw) * Math.cos(pitch) * 40, 2 + Math.sin(pitch) * 40, Math.cos(yaw) * Math.cos(pitch) * 40); cam.lookAt(0, 2, 0); }
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 20), new THREE.MeshStandardMaterial({ color: '#eef3fb' })); ground.rotation.x = -Math.PI / 2; s.add(ground);
-const models = await Models.load(['elf', 'dog'], '/');
+const models = await Models.load(['elf', 'dog', 'santa'], '/');
 const santa = createSanta(models); santa.root.position.set(-1.2, 0, 0); s.add(santa.root);
 const doto = createDoto(models); doto.root.position.set(1.6, 0, 0); doto.root.scale.setScalar(1.2); s.add(doto.root);
 const e0 = createElfAvatar(models, ELF_LOOKS[0]); e0.root.position.set(-3.6, 0, 0); e0.root.scale.setScalar(1.2); s.add(e0.root);
@@ -26,7 +26,8 @@ const dog = createKongi(models); dog.root.position.set(4.9, 0, 0); dog.root.rota
 const clip = q.get('clip'); const look = Number(q.get('look') || 0);
 for (const v of [santa, doto, e0, e1]) { if (clip) v.act?.(clip); v.look?.(look); }
 let t = 0;
-for (let i = 0; i < 40; i++) { t += 1 / 30; for (const v of [santa, doto, e0, e1]) v.animate(t, false); dog.update(1 / 30); }
+const walk = q.has('walk'); const carry = q.get('carry') || 'none'; const steps = Number(q.get('n') || 40);
+for (let i = 0; i < steps; i++) { t += 1 / 30; for (const v of [santa, doto, e0, e1]) v.animate(t, walk, { carry, act: 0, tired: false }); dog.update(1 / 30); }
 r.render(s, cam);
 window.__ready = true;
 </script></body></html>

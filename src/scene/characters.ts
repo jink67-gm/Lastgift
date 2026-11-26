@@ -1,10 +1,12 @@
 // 프롤로그·0장에 나오는 인물: 산타, 도토(썰매 정비공 요정), 콩이(유기견).
-// 산타·도토는 요정과 같은 뼈대 모델(Quaternius Hooded Adventurer, CC0)을 비율·색·소품만 바꿔 쓴다(같은 그림체, 같은 동작 이름).
+// 산타는 사용자가 준 에셋(scene/santa.ts)을 쓰고, 없으면 요정 뼈대로 만든 산타로 대신한다.
+// 도토는 요정과 같은 뼈대 모델(Quaternius Hooded Adventurer, CC0)을 비율·색·소품만 바꿔 쓴다(같은 그림체, 같은 동작 이름).
 // 콩이는 Quaternius Shiba Inu(CC0)를 다시 칠하고 줄였다. 모델이 없으면 기본 도형으로 대신한다. 판정과 무관.
 import * as THREE from 'three';
 import { createElf, type ElfView } from './elf';
 import { createRigged, elfBuild, pointyHat, type RigBuild, type RigCtx } from './miniElf';
 import type { Models } from './models';
+import { createSantaAsset } from './santa';
 import { ELF_LOOKS } from '../data/elves';
 
 const std = (color: string, extra: THREE.MeshStandardMaterialParameters = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, ...extra });
@@ -83,8 +85,9 @@ function plainSanta(): ElfView {
   return { root, animate() {} };
 }
 
+/** 산타: 사용자 에셋이 있으면 그것을, 없으면 요정 뼈대 산타, 그것도 없으면 기본 도형 */
 export function createSanta(models: Models): ElfView {
-  return createRigged(models, SANTA_BUILD, { idle: 'Idle_Neutral' }) ?? plainSanta();
+  return createSantaAsset(models, SANTA_HEIGHT) ?? createRigged(models, SANTA_BUILD, { idle: 'Idle_Neutral' }) ?? plainSanta();
 }
 
 // ── 도토: 썰매를 고치는 나이 든 정비공 요정 ───────────────

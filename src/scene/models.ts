@@ -11,6 +11,8 @@ export const MODEL_FILES = {
   elf: 'quaternius/hooded-adventurer.glb',
   // 콩이(유기견): Quaternius Shiba Inu(CC0). 다시 칠하고 줄여 쓴다
   dog: 'quaternius/shiba-inu.glb',
+  // 산타: 사용자가 준 에셋(Idle·ReceiveGift 동작 포함)
+  santa: 'custom/santa.glb',
   cabinWall: 'kenney-holiday/cabin-wall.glb',
   cabinCorner: 'kenney-holiday/cabin-corner.glb',
   cabinDoorway: 'kenney-holiday/cabin-doorway.glb',
