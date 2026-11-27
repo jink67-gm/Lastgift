@@ -44,6 +44,8 @@ const HOST_LOST_MS = 3000;
 /** 이보다 긴 화면 하나 = 이 기기가 멈췄다 돌아왔다(장 장면 만들기·탭 전환). 1초로 두면 초당 1화면 기기는 늘 '멈춤'이라 끊김을 영영 못 알아챘다 */
 const LONG_FRAME_MS = 2500;
 const REJOIN_EVERY_MS = 4000;
+/** 연결을 맺는 데 이만큼까지는 기다린다(소프트웨어로 그리는 기기 넷이 한꺼번에 장을 읽을 때) */
+const LINK_SETUP_MS = 20000;
 const IDLE: SewingInput = { move: { x: 0, y: 0 }, actionDown: false, actionHeld: false };
 
 export type TeamRole = 'host' | 'guest';
@@ -427,6 +429,8 @@ class TeamGuest implements TeamNet, MirrorLink {
   /** 장 코드가 마지막으로 입력을 넘긴 시각: 오래되면(연출 중 등) 빈 입력을 보낸다(눌린 채 남지 않게) */
   private intentTick = -9;
   private ticks = 0;
+  /** 방장이 새 연결을 제안한 때. 연결을 맺는 중에는 다시 접속을 요청하지 않는다(요청마다 방장이 처음부터 다시 맺어, 무거운 4기기에서 영영 못 붙었다) */
+  private linkMadeAt = -Infinity;
   private lastTick = 0;
   private lobbyKey = '';
   private hud: Hud | null = null;
@@ -471,6 +475,7 @@ class TeamGuest implements TeamNet, MirrorLink {
   }
 
   private makeLink(id: string): PeerLink {
+    this.linkMadeAt = performance.now();
     const l = new PeerLink(id, (kind, data) => void this.sig.send(this.hostUid, kind, id, data).catch(() => {}), this.iceServers);
     this.lastN = -1;
     this.lastEv = 0;
@@ -557,7 +562,8 @@ class TeamGuest implements TeamNet, MirrorLink {
     }
     this.lastTick = now;
     const connected = this.connected;
-    if (!this.fatal && !this.refused && !connected && now - this.lastJoin > REJOIN_EVERY_MS) {
+    const handshaking = !!this.link && !this.link.isOpen && now - this.linkMadeAt < LINK_SETUP_MS;
+    if (!this.fatal && !this.refused && !connected && !handshaking && now - this.lastJoin > REJOIN_EVERY_MS) {
       if (this.link && now - this.snapAt >= HOST_LOST_MS && this.snapAt > 0) this.link.close();
       void this.join();
     }

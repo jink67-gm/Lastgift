@@ -167,7 +167,12 @@ for (const n of [2, 3, 4]) test(`이야기 모드 ${n}기기: 0장부터 6장 �
   };
   let runId = '';
   for (let ch = 0; ch <= 4; ch++) {
-    for (const d of all) await onPage(d.page, ch);
+    for (const [i, d] of all.entries())
+      await onPage(d.page, ch).catch(async (e) => {
+        const info = await Promise.all(all.map((x) => x.page.evaluate(() => { const w = window as any; const n = w.__lastgiftNet; return { role: n?.role?.(), page: n?.page?.(), conn: n?.connected?.(), ch: w.__lastgift?.run?.().chapterId, dbg: !!w.__lastgift?.debugWin, log: n?.netLog?.() }; }).catch((er) => String(er))));
+        console.log('DBG stuck', i, ch, JSON.stringify(info));
+        throw e;
+      });
     const r = await runOf(host);
     if (ch === 0) runId = r.runId;
     expect(r).toMatchObject({ chapterId: ch, roomId: `net-${host.code}`, runId });
