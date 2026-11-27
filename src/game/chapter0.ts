@@ -31,6 +31,7 @@ import { createPlaza, townBench, townLamp } from '../scene/plaza';
 import { TOWN } from '../data/townScale';
 import { LocalRun } from '../session/localRun';
 import { createPlayMeter } from '../session/playMeter';
+import { sfxEvent } from '../audio/sfx';
 import type { TeamRun } from '../session/mirrorRun';
 import { playerBack, playerGone } from '../core/presence';
 import { IDLE_INTENT } from '../input/intent';
@@ -359,6 +360,7 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
   });
 
   function onEvent(e: SortEvent): void {
+    sfxEvent(e);
     events.push(e);
     // 집기·놓기·잡기·놓기·들어올리기: 그 요정의 손 뻗는 동작을 시작한다
     if (e.type === 'pick' || e.type === 'drop') actAt.set(e.playerId, elapsed);

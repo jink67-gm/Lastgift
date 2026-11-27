@@ -11,7 +11,8 @@ import { remainingAt, type ClientMeta, type RunState } from '../core/run';
 import type { SewingInput } from '../core/sewing';
 import { ELF_LOOKS } from '../data/elves';
 import { IDLE_INTENT, type Intent } from '../input/intent';
-import { browserStorage } from '../save/store';
+import { browserStorage, loadSettings } from '../save/store';
+import { attachSfx, playSfx, setSfxMuted } from '../audio/sfx';
 import { MirrorRun, type MirrorLink, type TeamRun } from '../session/mirrorRun';
 import { RESUME_DELAY_MS, type LocalRun } from '../session/localRun';
 import type { Hud } from '../ui/hud';
@@ -236,6 +237,7 @@ class TeamHost implements TeamNet, MirrorLink {
         this.lastHeard.set(uid, performance.now());
         this.graceUntil.set(uid, performance.now() + GUEST_LOADING_MS);
         this.netLog.push({ t: 'joined', slot, at: Math.round(performance.now()) });
+        playSfx('join'); // 대기실·놀이 중 누가 들어오면 방장 기기에서 작은 종소리
         link.send('mission', { t: 'welcome', slot, runId: this.run?.state.runId ?? '-' });
         this.setPresence(slot, true);
         this.sendSnap(performance.now());
@@ -582,6 +584,8 @@ class TeamGuest implements TeamNet, MirrorLink {
 
 /** 방 만들기(방장): 대기실에서 둘 이상 모이면 「시작」. 예전 방이 이미 시작했으면 바로 이어 간다 */
 export async function hostTeam(o: TeamOptions): Promise<TeamStart | null> {
+  attachSfx(document);
+  setSfxMuted(loadSettings(browserStorage()).muted);
   const lobby = createLobby(document);
   lobby.showMessage('방을 만드는 중…');
   let sig: FirebaseSignaling;

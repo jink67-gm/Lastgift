@@ -30,6 +30,7 @@ import { createSnowfall } from '../scene/snowfall';
 import { createWinterLight, setShadows } from '../scene/winterLight';
 import { LocalRun } from '../session/localRun';
 import { createPlayMeter } from '../session/playMeter';
+import { sfxEvent } from '../audio/sfx';
 import type { TeamRun } from '../session/mirrorRun';
 import { playerBack, playerGone } from '../core/presence';
 import { IDLE_INTENT } from '../input/intent';
@@ -374,6 +375,7 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
   });
 
   function onEvent(e: FinaleEvent): void {
+    sfxEvent(e);
     events.push(e);
     if (e.type === 'peek') {
       peekAt.set(e.playerId, elapsed);

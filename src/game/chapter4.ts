@@ -30,6 +30,7 @@ import { createSnowfall } from '../scene/snowfall';
 import { createWinterLight, setShadows } from '../scene/winterLight';
 import { LocalRun } from '../session/localRun';
 import { createPlayMeter } from '../session/playMeter';
+import { playSfx, sfxEvent } from '../audio/sfx';
 import type { TeamRun } from '../session/mirrorRun';
 import { playerBack, playerGone } from '../core/presence';
 import { IDLE_INTENT } from '../input/intent';
@@ -604,6 +605,7 @@ export function startChapter4(models: Models, opts?: StoryOptions): void {
   });
 
   function onEvent(e: Ch4Event): void {
+    sfxEvent(e);
     events.push(e);
     if (e.type === 'pick' || e.type === 'drop') actAt.set(e.playerId, elapsed);
     if (e.type === 'plugged') flashAt[e.color] = elapsed;
@@ -630,6 +632,7 @@ export function startChapter4(models: Models, opts?: StoryOptions): void {
       const since = elapsed - (actAt.get(p.id) ?? -9);
       const cranking = state.cranking === p.id;
       e.animate(elapsed, p.moving, { carry: held ? 'light' : 'none', act: since >= 0 && since < 0.35 ? since / 0.35 : 0, tired: false, span: held ? things.get(held.id)!.span : undefined });
+      if (cranking) playSfx('crank'); // 손잡이 돌리는 딸깍 소리(0.12초마다)
       if (cranking) e.act?.('Interact', { speed: 1.6 });
       else e.act?.(null);
       e.root.updateMatrixWorld(true);
@@ -827,6 +830,7 @@ export function startChapter4(models: Models, opts?: StoryOptions): void {
     space.setTimerLamp(tl);
     // 찰칵: 지금 장면을 할머니 사진기 구도로 찍어 화면을 채운다 → 작년 사진이 같은 구도로 포개진다
     if (t >= E.shutter && !stack) {
+      playSfx('shutter');
       capture('final', finalPhoto, 1);
       stack = createPhotoStack(document, finalPhoto, photos.lastYear, E.overlay[0] - E.shutter, E.overlay[1] - E.overlay[0]);
     }

@@ -4,6 +4,7 @@ import type { QualitySetting } from '../core/quality';
 import type { Settings } from '../save/store';
 import { formatLog } from '../core/playLog';
 import { clearPlayLog, readPlayLog } from '../session/playMeter';
+import { attachSfx, setSfxMuted } from '../audio/sfx';
 
 const CSS = `
 #settings-btn { position: fixed; z-index: 26; top: calc(env(safe-area-inset-top) + 10px); right: calc(env(safe-area-inset-right) + 12px);
@@ -74,6 +75,8 @@ export function createSettingsUi(doc: Document, initial: Settings): SettingsUi {
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-label', '설정');
   panel.innerHTML = `<div class="box">
+    <div class="row"><span>소리</span><div class="seg" data-k="muted">
+      <button type="button" data-v="false">켬</button><button type="button" data-v="true">끔</button></div></div>
     <div class="row"><span>그래픽</span><div class="seg" data-k="quality">
       <button type="button" data-v="auto">자동</button><button type="button" data-v="low">낮음</button><button type="button" data-v="normal">보통</button></div>
       <span class="note">자동: 느린 기기면 낮음으로 바꿔요</span></div>
@@ -96,12 +99,14 @@ export function createSettingsUi(doc: Document, initial: Settings): SettingsUi {
 
   const sync = () => {
     panel.querySelectorAll<HTMLElement>('.seg:not(.logbar)').forEach((seg) => {
-      const k = seg.dataset.k as 'quality' | 'reducedSnow' | 'showFps' | 'noShake' | 'largeText';
+      const k = seg.dataset.k as 'quality' | 'reducedSnow' | 'showFps' | 'noShake' | 'largeText' | 'muted';
       seg.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.setAttribute('aria-pressed', String(String(value[k]) === b.dataset.v)));
     });
     fps.classList.toggle('on', value.showFps);
     doc.body.classList.toggle('large-text', value.largeText);
+    setSfxMuted(value.muted);
   };
+  attachSfx(doc);
   sync();
   const open = (on: boolean) => {
     panel.classList.toggle('on', on);

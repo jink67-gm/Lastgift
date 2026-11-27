@@ -24,6 +24,7 @@ import type { Models } from '../scene/models';
 import { storyFor, type StoryOptions } from './story';
 import { createClipView, type ClipView } from '../ui/memories';
 import { createPlayMeter } from '../session/playMeter';
+import { sfxEvent } from '../audio/sfx';
 import { AutoQuality, effectiveQuality, type Quality } from '../core/quality';
 import { loadSettings, saveSettings } from '../save/store';
 import { createSettingsUi } from '../ui/settings';
@@ -184,6 +185,7 @@ function startLocal(models: Models, opts?: StoryOptions): void {
   });
 
   function onEvent(e: SewingEvent): void {
+    sfxEvent(e);
     events.push(e);
     // 작업대에 바르게 내려놓으면 2장 완료(기억 2). 문·공간 이동은 체크포인트를 건드리지 않는다.
     if (e.type === 'delivered' && deliveredAt < 0) {

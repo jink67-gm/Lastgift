@@ -30,6 +30,7 @@ import { createSnowfall } from '../scene/snowfall';
 import { createWinterLight, setShadows } from '../scene/winterLight';
 import { LocalRun } from '../session/localRun';
 import { createPlayMeter } from '../session/playMeter';
+import { sfxEvent } from '../audio/sfx';
 import type { TeamRun } from '../session/mirrorRun';
 import { playerBack, playerGone } from '../core/presence';
 import type { ActionIcon } from '../ui/actionIcons';
@@ -391,6 +392,7 @@ export function startChapter3(models: Models, opts?: StoryOptions): void {
   });
 
   function onEvent(e: Ch3Event): void {
+    sfxEvent(e);
     events.push(e);
     if (e.type === 'pick' || e.type === 'drop' || e.type === 'throw') actAt.set(e.playerId, elapsed);
     if (e.type === 'catch') actAt.set(e.playerId, elapsed);

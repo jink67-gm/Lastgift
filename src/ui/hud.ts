@@ -1,5 +1,6 @@
 // 화면 상단 HUD: 팀 시간, 일시중지·재개 카운트다운, 저장 실패 표시, 시간 초과 화면.
 // 만화 대사는 띄우지 않는다. 숫자와 그림, 기능 버튼의 짧은 한국어만 쓴다.
+import { playSfx } from '../audio/sfx';
 
 const CSS = `
 #hud { position: fixed; top: calc(env(safe-area-inset-top) + 10px); left: calc(env(safe-area-inset-left) + 12px);
@@ -105,6 +106,8 @@ export function createHud(doc: Document): Hud {
       const key = v.kind === 'countdown' ? `c${v.secondsLeft}` : v.kind;
       if (key === lastKey) return;
       lastKey = key;
+      if (v.kind === 'timeout') playSfx('timeout');
+      if (v.kind === 'countdown') playSfx('tick');
       overlay.classList.toggle('on', v.kind !== 'none');
       overlay.dataset.kind = v.kind;
       if (v.kind === 'paused') overlay.innerHTML = `<div class="box">${PAUSE}</div>`;

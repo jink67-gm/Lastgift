@@ -1,6 +1,7 @@
 // 프롤로그 화면 위 장치(DOM): 사진기 뷰파인더(예약 셔터 깜박임) · 찰칵 번쩍임 · 사진 카드(앞: 찍힌 사진, 뒤: 손글씨 한 줄) ·
 // 장면 넘김 어둡게 하기 · 건너뛰기 버튼. 대사·자막 없음. 글자는 사진 뒷면 한 줄(소품)과 기능 버튼 이름뿐.
 // 연출이 도는 동안 몸에 'cutscene' 표시를 달아 조작 버튼·대상 표시를 숨긴다.
+import { playSfx } from '../audio/sfx';
 
 const CSS = `
 body.cutscene #controls, body.cutscene .offscreen-mark { display: none !important; }
@@ -79,12 +80,16 @@ export function createPrologueUi(doc: Document): PrologueUi {
   };
   doc.addEventListener('keydown', onKey);
 
+  let lastFlash = 0;
   return {
     finder(on, r) {
       finder.classList.toggle('on', on);
       rec.classList.toggle('on', r);
     },
     flash(k) {
+      // 사진 찰칵(번쩍이 0.9를 넘는 순간). 불시착 번쩍(0.55 이하)은 소리 없음
+      if (k > 0.9 && lastFlash <= 0.9) playSfx('shutter');
+      lastFlash = k;
       flash.style.opacity = String(Math.max(0, Math.min(1, k)));
     },
     dim(k) {
