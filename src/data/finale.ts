@@ -9,8 +9,8 @@ const SLEIGH_FRONT = SLEIGH.z + 1.4;
 
 /** 산타 얼굴이 수놓인 빨간 양말: 썰매 앞면 왼쪽에 기대어 있다 */
 export const STOCKING = { x: SLEIGH.x - 1.5, z: SLEIGH_FRONT + 0.35, r: 0.3 };
-/** 요정들의 배달 가방(양말 왼쪽 눈 위) */
-export const BAG = { x: SLEIGH.x - 3.7, z: SLEIGH_FRONT + 1.3, r: 0.35 };
+/** 요정들의 배달 가방(양말과 산타 사이 앞쪽 눈 위). 서쪽에 두면 가운데 트리 화단에 붙어 연출 사진기가 트리 가지 속에 들어간다 */
+export const BAG = { x: SLEIGH.x + 0.4, z: SLEIGH_FRONT + 2.4, r: 0.35 };
 /** 산타(사진을 나눠 준 뒤 썰매 앞 오른쪽에 선다) */
 export const SANTA_SPOT = { x: SLEIGH.x + 2.2, z: SLEIGH_FRONT + 1.0, facing: -0.55 };
 /** 스노글로브가 남는 안전 지점(들고 있던 요정이 나가면) */

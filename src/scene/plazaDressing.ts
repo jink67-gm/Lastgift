@@ -568,6 +568,90 @@ function ringBerm(): THREE.Group {
   return g;
 }
 
+/** 돌 포장 무늬: 트리를 둘러싼 동심원 줄눈(눈 사이로 살짝 보이는 회색 돌 테) */
+function pavingRings(): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: '#d6d2ca', roughness: 1, transparent: true, opacity: 0.55, depthWrite: false });
+  for (const r of [4.4, 8.8, 12.4]) {
+    const m = new THREE.Mesh(new THREE.RingGeometry(r - 0.09, r + 0.09, 96), mat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.y = 0.004;
+    m.userData.flat = true;
+    g.add(m);
+  }
+  // 바퀴살 줄눈(8방향, 안쪽 고리 ~ 바깥 고리)
+  for (let k = 0; k < 16; k++) {
+    const a = (k / 16) * Math.PI * 2 + Math.PI / 16;
+    const len = 12.4 - 4.4;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.14, len), mat);
+    m.rotation.x = -Math.PI / 2;
+    m.rotation.z = -a + Math.PI / 2;
+    const r = (12.4 + 4.4) / 2;
+    m.position.set(Math.cos(a) * r, 0.004, Math.sin(a) * r);
+    m.userData.flat = true;
+    g.add(m);
+  }
+  return g;
+}
+
+/** 카메라 쪽(남동) 둘레의 낮은 돌담: 눈둑 위 무릎 높이(요정을 가리지 않는다). 골목 입구는 비운다 */
+function cameraSideWall(): THREE.Group {
+  const g = new THREE.Group();
+  const stone = new THREE.MeshStandardMaterial({ color: '#9c968c', roughness: 0.95 });
+  const snow = new THREE.MeshStandardMaterial({ color: '#f6f8fc', roughness: 1 });
+  const R = PLAZA_DRESSING.ring.r + 0.9;
+  const alleys = PLAZA_DRESSING.ring.alleys;
+  for (let deg = 26; deg <= 118; deg += 3.2) {
+    if (alleys.some((a) => Math.abs(deg - a.deg) < 13)) continue;
+    const a = (deg * Math.PI) / 180;
+    const len = ((Math.PI * 2 * R) / 360) * 3.2 * 0.96;
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.55, len), stone);
+    b.position.set(Math.cos(a) * R, 0.27, Math.sin(a) * R);
+    b.rotation.y = -a;
+    b.castShadow = true;
+    g.add(b);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.12, len), snow);
+    cap.position.set(Math.cos(a) * R, 0.6, Math.sin(a) * R);
+    cap.rotation.y = -a;
+    g.add(cap);
+  }
+  g.traverse((o) => (o.userData.noCast = true));
+  return g;
+}
+
+/** 닫힌 크리스마스 노점(밤이라 덧문이 내려와 있다): 서쪽 둘레 안쪽, 낮게 */
+function marketStall(): THREE.Group {
+  const g = new THREE.Group();
+  const p = PLAZA_DRESSING.stall;
+  const wood = new THREE.MeshStandardMaterial({ color: '#8a5a3a', roughness: 0.9 });
+  const shutter = new THREE.MeshStandardMaterial({ color: '#2f7a3e', roughness: 0.9 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.0, 1.2), wood);
+  body.position.y = 0.5;
+  g.add(body);
+  const shut = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.7, 0.05), shutter);
+  shut.position.set(0, 1.35, 0.6);
+  g.add(shut);
+  for (const sx of [-1.1, 1.1]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.9, 0.1), wood);
+    post.position.set(sx, 0.95, 0.55);
+    g.add(post);
+  }
+  // 빨강·흰 줄무늬 차양
+  for (let i = 0; i < 6; i++) {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.06, 1.5), new THREE.MeshStandardMaterial({ color: i % 2 ? '#ffffff' : '#d23a3a', roughness: 0.9 }));
+    s.position.set(-1.05 + i * 0.42, 1.92, 0.15);
+    s.rotation.x = 0.18;
+    g.add(s);
+  }
+  const roofSnow = new THREE.Mesh(new THREE.BoxGeometry(2.55, 0.08, 1.4), new THREE.MeshStandardMaterial({ color: '#f6f8fc', roughness: 1 }));
+  roofSnow.position.set(0, 2.0, 0.1);
+  roofSnow.rotation.x = 0.18;
+  g.add(roofSnow);
+  g.position.set(p.x, 0, p.z);
+  g.rotation.y = p.rotY;
+  return g;
+}
+
 // ─── 먼 마을 ──────────────────────────────────────────────────────────
 
 /** 화면 위쪽(광장 너머)으로 겹겹이 이어지는 지붕 실루엣 세 줄. 창은 아주 약한 살구색 점 */
@@ -648,6 +732,9 @@ export function createPlazaDressing(models: Models, base: string, detail: Detail
   for (const f of PLAZA_DRESSING.laneFences) root.add(edgeFence(models, f.from, f.to, 1.0));
   root.add(fishMailbox(models));
   root.add(ringBerm());
+  root.add(pavingRings());
+  root.add(cameraSideWall());
+  root.add(marketStall());
   const town = farTown();
   town.traverse((o) => (o.userData.noCast = true)); // 그림자 범위 밖
   root.add(town);

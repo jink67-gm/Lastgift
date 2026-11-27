@@ -210,8 +210,10 @@ export function createPrologue(cast: PrologueCast): Prologue {
 
   // 인물 자리
   const santaSeat = new THREE.Vector3(end.x - 1.5, 0.85, end.z);
-  const santaHop = new THREE.Vector3(5.7, 0, -8.3); // 썰매 북동쪽(울타리 끝 옆)
-  const dotoPop = new THREE.Vector3(6.6, 0, -4.9); // 눈더미 남동쪽(썰매 앞머리와 떨어져 사진기에 잘 보이게)
+  // 산타는 썰매 남쪽으로 내려선다(받치는 자리 바로 옆, 북쪽은 유나네 골목 표식 쪽이라 비운다)
+  const santaHop = new THREE.Vector3(end.x + 1.0, 0, end.z + 2.4);
+  // 도토는 썰매 꼬리 남쪽 눈 속에서 튀어나온다(산타와 떨어지고, 사진기가 가운데 트리 가지 속에 들어가지 않게)
+  const dotoPop = new THREE.Vector3(end.x - 1.4, 0, end.z + 3.4);
   const dotoFix = new THREE.Vector3(cast.dotoFix.x, 0, cast.dotoFix.z);
 
   let t = 0;
@@ -588,8 +590,8 @@ export function createPrologue(cast: PrologueCast): Prologue {
       blend: 0.8,
       get: () => {
         const d = cast.doto.root.position;
-        // 남쪽 조금 높은 데서(썰매가 앞을 가리지 않게)
-        return { p: V(d.x - 1.3, 3.0, d.z + 5.0), q: V(d.x - 0.2, 0.8, d.z), fov: 40 };
+        // 남동쪽 조금 높은 데서(썰매가 앞을 가리지 않고, 가운데 트리 가지에 들어가지 않게)
+        return { p: V(d.x + 1.2, 2.4, d.z + 4.0), q: V(d.x - 0.1, 0.8, d.z), fov: 40 };
       },
     },
     // 산타가 썰매를 받치는 동안 물러나며 흩어진 선물(이름표)을 훑고 광장 전체로

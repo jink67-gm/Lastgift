@@ -106,7 +106,8 @@ export interface PhotoSetup {
 }
 
 /** 사진 찍는 자리: 썰매 앞(남쪽) 눈길. 산타가 가운데, 요정들은 산타 앞 양옆으로 번갈아 선다 */
-export const PHOTO_SPOT = { x: 2.7, z: -3.2 };
+/** 단체사진 자리: 가운데 큰 트리 바로 남쪽(배경에 트리), 사진기는 남쪽(docs/PLAZA_PLAN.md) */
+export const PHOTO_SPOT = { x: 0, z: 4.6 };
 
 /**
  * 참가 요정 자리 번호(모자)로 단체사진 구도를 정한다. 같은 참가자면 언제나 같은 구도(5장 재현).

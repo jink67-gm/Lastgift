@@ -77,8 +77,9 @@ test('건너뛰기: 버튼 한 번에 같은 끝 모습(산타·도토 제자리
   expect(await hook<unknown>(page, 'photo')).not.toBeNull();
   const a = await hook<Record<string, Actor>>(page, 'actors');
   expect(a.santa!.visible && a.doto!.visible).toBe(true);
-  expect(Math.hypot(a.santa!.x - 6.4, a.santa!.z + 8.2)).toBeLessThan(0.05);
-  expect(Math.hypot(a.doto!.x - 3.6, a.doto!.z + 4.45)).toBeLessThan(0.05);
+  // 썰매(3.6, -6.6) 기준: 산타는 앞코 남쪽에서 받치고, 도토는 썰매 날 남쪽 뒤
+  expect(Math.hypot(a.santa!.x - 6.2, a.santa!.z + 4.3)).toBeLessThan(0.05);
+  expect(Math.hypot(a.doto!.x - 2.2, a.doto!.z + 4.75)).toBeLessThan(0.05);
   // 건너뛴 뒤 바로 움직일 수 있다
   const before = (await hook<{ sewing: { players: { x: number; z: number }[] } }>(page, 'sorting')).sewing.players[0]!;
   await page.waitForTimeout(600);

@@ -207,6 +207,8 @@ export const PLAZA_DRESSING = {
   alleyMouth: alleyMouthOf('yuna'),
   /** 썰매가 들어온 방향(썰매 날 자국이 시작하는 쪽 끝)과 날 간격(썰매 1.8배) */
   sleighEntry: { length: 2.6, gauge: 2.0 },
+  /** 닫힌 노점(서쪽 둘레 안쪽, 앞면이 광장 가운데를 본다 → 사진기에서 줄무늬 차양이 보인다). 판정은 PLAZA_COLLIDERS 끝의 원 */
+  stall: { x: -12.6, z: 3.6, rotY: Math.atan2(12.6, -3.6) },
   /** 둥근 둘레(눈 둑·돌담을 그린다) */
   ring: { r: PLAZA_R, alleys: ALLEYS },
   /** 카메라 쪽 골목(수선집·민재네) 양옆 낮은 울타리(사람 집 대신, 광장을 가리지 않게) */
@@ -232,4 +234,6 @@ export const PLAZA_COLLIDERS: readonly Collider[] = [
   ...PLAZA_PROPS.flatMap((p) => (p.collider ? [p.collider] : [])),
   ...PLAZA_DRESSING.laneFences.flatMap((f) => fenceColliders(f.from, f.to)),
   ...ringWall(),
+  // 닫힌 노점(꾸밈 PLAZA_DRESSING.stall과 같은 자리)
+  { kind: 'circle', x: -12.6, z: 3.6, r: 1.3 },
 ];
