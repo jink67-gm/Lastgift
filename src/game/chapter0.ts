@@ -3,6 +3,7 @@
 // 새 시도면 먼저 프롤로그(단체사진·썰매 불시착, game/prologue.ts)를 튼다. 시험 모드(?test)는 &prologue가 있을 때만 튼다.
 import { createHoldTween, giftScale, holdSpan, placeOnGround, placeOnHands } from '../scene/hold';
 import * as THREE from 'three';
+import { isAdmin } from '../ui/admin';
 import { addHaze, createBackdrop } from '../scene/backdrop';
 import { gripPos, needsSwap, type SewingInput } from '../core/sewing';
 import { createSorting, planAction, step, type SortAction, type SortEvent, type SortState } from '../core/sorting';
@@ -637,7 +638,7 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
     return null;
   }
 
-  if (import.meta.env.DEV || new URLSearchParams(location.search).has('test')) {
+  if (import.meta.env.DEV || new URLSearchParams(location.search).has('test') || isAdmin()) {
     (window as unknown as Record<string, unknown>).__lastgift = {
       sorting: () => JSON.parse(JSON.stringify(sort)) as SortState,
       /** 시험(여러 기기 이어 붙이기): 방장이 이 장을 바로 마친 것으로(사건을 참가자에게도 보낸다) */

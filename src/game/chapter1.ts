@@ -4,6 +4,7 @@
 //   유나네 앞마당(낮은 담 안)에 들어서면 "찾았다". 망보기·현관 배달·유나 장면은 04-4b.
 //   사람(유나·지우)은 사용자가 줄 에셋으로 넣는다(지금은 창가에 실루엣 자리).
 import * as THREE from 'three';
+import { isAdmin } from '../ui/admin';
 import { addHaze, createBackdrop } from '../scene/backdrop';
 import { baseViewH, deadZone, frameFor, type Pt } from '../core/framing';
 import { createChapter1, gazeAt, lookoutAt, planAction, step, CAMERA_YAW, type Ch1Action, type Ch1Event, type Ch1State } from '../core/chapter1';
@@ -605,7 +606,7 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     return far > 20 ? W(YARD.front - 2, 4) : null;
   }
 
-  if (import.meta.env.DEV || params.has('test')) {
+  if (import.meta.env.DEV || params.has('test') || isAdmin()) {
     (window as unknown as Record<string, unknown>).__lastgift = {
       ch1: () => JSON.parse(JSON.stringify(state)) as Ch1State,
       story: () => (story ? story.t : null),

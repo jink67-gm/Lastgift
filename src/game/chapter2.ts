@@ -5,6 +5,7 @@
 //   ?chapter=2&join=CODE  초대 링크로 참가
 //   &emu                  Firebase 에뮬레이터 사용(개발·자동 시험)
 import { createSewing, step, type SewingEvent, type SewingInput, type SewingState } from '../core/sewing';
+import { isAdmin } from '../ui/admin';
 import { chapter } from '../data/chapters';
 import { attachKeyboard, KeyState, KEYMAP_P1, KEYMAP_P2 } from '../input/keyboard';
 import type { Intent } from '../input/intent';
@@ -195,7 +196,7 @@ function startLocal(models: Models, opts?: StoryOptions): void {
   }
 
   // 자동 검사용 창구(?test)
-  if (import.meta.env.DEV || new URLSearchParams(location.search).has('test')) {
+  if (import.meta.env.DEV || new URLSearchParams(location.search).has('test') || isAdmin()) {
     (window as unknown as Record<string, unknown>).__lastgift = {
       sewing: () => JSON.parse(JSON.stringify(sewing)) as SewingState,
       sewingEvents: () => events.map((e) => ({ ...e })),

@@ -4,6 +4,7 @@
 //   ?chapter=6  6장부터(스노글로브는 안전 지점에, 가까이에서 E로 든다)
 //   한 기기에서 둘이(1P WASD+E·터치, 2P 방향키+Enter). 6장 끝(스노글로브 속 네 기억·뼈다귀)은 06b.
 import * as THREE from 'three';
+import { isAdmin } from '../ui/admin';
 import { addHaze, createBackdrop } from '../scene/backdrop';
 import { baseViewH, deadZone, frameFor, type Pt } from '../core/framing';
 import { createFinale, planAction, step, stockingChecked, CAMERA_YAW, type FinaleAction, type FinaleEvent, type FinaleState } from '../core/finale';
@@ -846,7 +847,7 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
     renderer.render(scene, cine);
   }
 
-  if (import.meta.env.DEV || params.has('test')) {
+  if (import.meta.env.DEV || params.has('test') || isAdmin()) {
     (window as unknown as Record<string, unknown>).__lastgift = {
       ending: () => ({ t: cut === 'deliver' ? cutT : -1, beat: cut === 'deliver' ? endingBeat(cutT) : null, bone: globe.bone.visible, memory: memView?.mode() ?? null }),
       finale: () => JSON.parse(JSON.stringify(state)) as FinaleState,

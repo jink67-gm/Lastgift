@@ -5,6 +5,7 @@
 //   트리 양쪽 스위치를 시간 안에 하나씩. 완료하면 아래 가지부터 꼭대기 별까지 불이 켜진다(기억 4).
 //   할머니·아이들·사진 장면은 05d(사람은 임시 모형, 인물 에셋을 받으면 교체).
 import * as THREE from 'three';
+import { isAdmin } from '../ui/admin';
 import { addHaze, createBackdrop } from '../scene/backdrop';
 import { baseViewH, deadZone, frameFor, type Pt } from '../core/framing';
 import { createChapter4, createPractice, planAction, progressOf, step, timerLeft, CAMERA_YAW, type Ch4Action, type Ch4Event, type Ch4State } from '../core/chapter4';
@@ -855,7 +856,7 @@ export function startChapter4(models: Models, opts?: StoryOptions): void {
     return W(TREE.s - 2, TREE.t);
   }
 
-  if (import.meta.env.DEV || params.has('test')) {
+  if (import.meta.env.DEV || params.has('test') || isAdmin()) {
     (window as unknown as Record<string, unknown>).__lastgift = {
       ch4: () => JSON.parse(JSON.stringify(state)) as Ch4State,
       ch4Events: () => events.map((e) => ({ ...e })),

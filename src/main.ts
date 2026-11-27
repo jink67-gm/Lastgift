@@ -10,8 +10,10 @@
 //   ?host       여러 기기 이야기 모드: 방 만들기(이 기기가 방장). ?chapter=N&host는 그 장만(개발용, 2장 제외)
 //   ?join=CODE  여러 기기: 초대 링크로 참가(방장이 연 장을 따라간다)
 //   &emu        Firebase 에뮬레이터(개발·자동 시험)
+//   &admin      관리자 점검 모드(왼쪽 위 「관리」: 장 고르기·바로 끝내기·연출 건너뛰기, ui/admin.ts). 이 탭에서는 계속 켜져 있다
 import { Models } from './scene/models';
 import { browserStorage, CheckpointStore } from './save/store';
+import { createAdminPanel, isAdmin } from './ui/admin';
 
 const q = new URLSearchParams(location.search);
 const chapter = q.get('chapter');
@@ -19,6 +21,9 @@ const chapter = q.get('chapter');
 const storyMode = chapter === null && (!q.has('test') || q.has('play'));
 /** 여러 기기(2장 개발 주소는 따로: game/chapter2Net) */
 const teamMode = (q.has('host') || q.has('join')) && chapter !== '2';
+
+// 관리자 점검 모드: 「관리」 단추(장 고르기·바로 끝내기 등). 학생 화면에는 없다
+if (isAdmin() && !teamMode) createAdminPanel(document, chapter === null ? null : Number(chapter));
 
 // 모델을 먼저 불러온다. 실패한 모델은 기본 도형으로 대신하고 게임은 그대로 시작한다.
 const loading = document.createElement('div');

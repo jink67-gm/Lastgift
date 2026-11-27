@@ -4,6 +4,7 @@
 //   쪽문은 두 손으로 빗장을 들어야 열려 공을 든 요정은 지나가지 못한다. 콩이는 리본을 따라 울타리 밑으로 쫓아온다.
 //   대문 안쪽 자리에 공을 내려놓으면 3장 완료(기억 3). 민재·식구의 입양 장면은 05b(사람은 사용자 에셋).
 import * as THREE from 'three';
+import { isAdmin } from '../ui/admin';
 import { addHaze, createBackdrop } from '../scene/backdrop';
 import { baseViewH, deadZone, frameFor, type Pt } from '../core/framing';
 import { createChapter3, planAction, step, CAMERA_YAW, type Ch3Action, type Ch3Event, type Ch3State } from '../core/chapter3';
@@ -930,7 +931,7 @@ export function startChapter3(models: Models, opts?: StoryOptions): void {
     return far > 24 ? W(BALL_SPOT.s, BALL_SPOT.t) : null;
   }
 
-  if (import.meta.env.DEV || params.has('test')) {
+  if (import.meta.env.DEV || params.has('test') || isAdmin()) {
     (window as unknown as Record<string, unknown>).__lastgift = {
       ch3: () => JSON.parse(JSON.stringify(state)) as Ch3State,
       ch3Events: () => events.map((e) => ({ ...e })),
