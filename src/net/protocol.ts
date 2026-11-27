@@ -1,6 +1,7 @@
 // 방장 ↔ 참가자 메시지. 받은 쪽은 반드시 parse*로 모양을 검사한 뒤 쓴다(모르는 값은 버린다).
 // 미션 이벤트에는 runId·epoch·playerId·eventId를 싣는다(명세서 §8). 방장은 playerId를 믿지 않고
 // "이 연결에 배정한 자리"로 다시 확인한다.
+import type { RunState } from '../core/run';
 import type { SewingState } from '../core/sewing';
 
 export type Slot = 'p0' | 'p1' | 'p2' | 'p3';
@@ -82,7 +83,26 @@ export interface SnapMsg {
   team: TeamEntry[];
 }
 
-export type HostMsg = WelcomeMsg | RefuseMsg | SnapMsg;
+/** state 채널(모든 장 공통): 방장의 장 상태 + 팀 시도 상태(10~15Hz). 참가자는 이것만 그린다 */
+export interface TeamSnapMsg {
+  t: 'tsnap';
+  n: number;
+  /** 방장 화면이 지금 연 장(5·6장은 한 화면) */
+  page: number;
+  state: unknown;
+  run: RunView & { full: Omit<RunState, 'seen'> };
+  team: TeamEntry[];
+}
+
+/** mission 채널(순서·신뢰 보장): 방장 판정에서 나온 장 사건(소리·연출 시작용). n은 1부터 빠짐없이 */
+export interface EventsMsg {
+  t: 'ev';
+  n: number;
+  runId: string;
+  events: unknown[];
+}
+
+export type HostMsg = WelcomeMsg | RefuseMsg | SnapMsg | TeamSnapMsg | EventsMsg;
 
 // ── 검사 ────────────────────────────────────────────────
 
@@ -91,7 +111,7 @@ const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
 const str = (v: unknown, max = 64) => typeof v === 'string' && v.length > 0 && v.length <= max;
 
 function json(data: string): unknown {
-  if (data.length > 64_000) return null;
+  if (data.length > 200_000) return null;
   try {
     return JSON.parse(data) as unknown;
   } catch {
@@ -121,6 +141,8 @@ export function parseHostMsg(data: string): HostMsg | null {
   if (v.t === 'welcome' && SLOTS.includes(v.slot as Slot) && str(v.runId)) return v as unknown as WelcomeMsg;
   if (v.t === 'refuse' && (v.reason === 'full' || v.reason === 'started')) return v as unknown as RefuseMsg;
   if (v.t === 'snap' && num(v.n) && isObj(v.run) && Array.isArray(v.team)) return v as unknown as SnapMsg;
+  if (v.t === 'tsnap' && num(v.n) && num(v.page) && isObj(v.run) && isObj(v.run.full) && Array.isArray(v.team)) return v as unknown as TeamSnapMsg;
+  if (v.t === 'ev' && num(v.n) && str(v.runId) && Array.isArray(v.events)) return v as unknown as EventsMsg;
   return null;
 }
 

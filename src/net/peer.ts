@@ -14,6 +14,8 @@ export class PeerLink {
   private pendingIce: RTCIceCandidateInit[] = [];
   private remoteSet = false;
   private closed = false;
+  /** 왜 닫혔는지(점검용) */
+  closeWhy = '';
   onMessage: (ch: Channel, data: string) => void = () => {};
   onOpen: () => void = () => {};
   onClose: () => void = () => {};
@@ -29,7 +31,7 @@ export class PeerLink {
     };
     this.pc.onconnectionstatechange = () => {
       const st = this.pc.connectionState;
-      if (st === 'failed' || st === 'closed') this.close();
+      if (st === 'failed' || st === 'closed') this.close(`pc-${st}`);
     };
     this.pc.ondatachannel = (e) => this.adopt(e.channel);
   }
@@ -44,7 +46,7 @@ export class PeerLink {
     ch.onopen = () => {
       if (this.isOpen) this.onOpen();
     };
-    ch.onclose = () => this.close();
+    ch.onclose = () => this.close(`ch-${name}`);
   }
 
   get isOpen(): boolean {
@@ -89,9 +91,10 @@ export class PeerLink {
     if (c?.readyState === 'open') c.send(JSON.stringify(msg));
   }
 
-  close(): void {
+  close(why = 'local'): void {
     if (this.closed) return;
     this.closed = true;
+    this.closeWhy = why;
     for (const c of Object.values(this.channels)) c?.close();
     this.pc.close();
     this.onClose();

@@ -29,6 +29,9 @@ import { createPlaza } from '../scene/plaza';
 import { createSnowfall } from '../scene/snowfall';
 import { createWinterLight, setShadows } from '../scene/winterLight';
 import { LocalRun } from '../session/localRun';
+import type { TeamRun } from '../session/mirrorRun';
+import { playerBack, playerGone } from '../core/presence';
+import { IDLE_INTENT } from '../input/intent';
 import type { ActionIcon } from '../ui/actionIcons';
 import { createControls } from '../ui/controls';
 import { createHud } from '../ui/hud';
@@ -43,7 +46,6 @@ const testParams = new URLSearchParams(location.search);
 const CAMERA_PITCH = (testParams.has('test') && testParams.get('pitch') ? Number(testParams.get('pitch')) : 30) * (Math.PI / 180);
 const ELF_SCALE = 1.2;
 const SIM_DT = 1 / 60;
-const PLAYERS = ['p0', 'p1'] as const;
 const LIGHT_KINDS: GiftLightKind[] = ['sketchbook', 'sewing', 'ball', 'tree'];
 
 export function finaleCheckpoint(roomId: string, chapterId: 5 | 6) {
@@ -67,6 +69,12 @@ function iconOf(a: FinaleAction): ActionIcon {
 
 export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOptions): void {
   const sto = storyFor(opts, startChapter === 5 ? 'dev-ch5' : 'dev-ch6');
+  const net = opts?.net;
+  const guest = net?.role === 'guest';
+  /** 이 시도의 요정들(한 기기 둘, 여러 기기는 방장이 시작할 때 정한 2~4명) */
+  const PLAYERS: readonly string[] = net ? net.slots : ['p0', 'p1'];
+  /** 이 기기가 움직이는 요정 */
+  const ME = net?.me ?? 'p0';
   const host = document.getElementById('game')!;
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -141,7 +149,8 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
   const roomId = sto.roomId;
   const store = new CheckpointStore(browserStorage());
   const hadSave = store.load(roomId) !== null;
-  const run = new LocalRun(store, hud, roomId, 'p0', sto.story ? undefined : finaleCheckpoint(roomId, startChapter));
+  const makeRun = () => new LocalRun(store, hud, roomId, 'p0', sto.story ? undefined : finaleCheckpoint(roomId, startChapter));
+  const run: TeamRun = net ? net.bindRun(hud, makeRun) : makeRun();
   run.attachVisibility(document);
   const begin = () => {
     run.dispatch({ type: 'start', at: performance.now() });
@@ -220,6 +229,8 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
   let cutT = 0;
   let ui: PrologueUi | null = null;
   let opener = 'p0';
+  /** 가방 연출은 한 번만(참가자가 사건과 상태로 두 번 알아도) */
+  let lightsShown = false;
   let shot = false;
   const photoCam = new THREE.PerspectiveCamera(photo.camera.fov, 4 / 3, 0.1, 700);
   photoCam.position.set(photo.camera.x, photo.camera.y, photo.camera.z);
@@ -239,6 +250,12 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
     // 6장부터: 스노글로브는 안전 지점에(팀 시계도 holder: null)
     if (startChapter === 6) state = createFinale(6, playersAt(), null);
   }
+
+  // 여러 기기: 끊긴 요정은 멈추고 스노글로브를 그 자리에 놓는다 / 참가자는 방장 사건으로 연출을 시작한다
+  net?.onPresence((id, on) => (state = on ? playerBack(state, id) : playerGone(state, id)));
+  net?.onEvents((evs) => {
+    for (const e of evs as FinaleEvent[]) onEvent(e);
+  });
 
   const idle: SewingInput = { move: { x: 0, y: 0 }, actionDown: false, actionHeld: false };
   const shown = new Map<string, { x: number; z: number; yaw: number }>();
@@ -277,6 +294,10 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
     const frame = Math.min(raw, 0.25);
     run.frame(now);
     elapsed += frame;
+    if (cut !== null) {
+      if (guest) net!.sendIntent(IDLE_INTENT);
+      else net?.publish(startChapter, state);
+    }
     if (cut === 'photo') {
       cutT += frame;
       drawPhotoScene(frame);
@@ -298,6 +319,8 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
     }
     if (cut === 'lights') {
       cutT += frame;
+      // 참가자: 방장이 이미 6장을 열었으면(방장 연출이 끝났다) 따라 끝낸다(느린 기기가 뒤처지지 않게)
+      if (guest && net!.remote<FinaleState>()?.chapter === 6) cutT = Math.max(cutT, CH5_LIGHTS.end);
       drawLights(frame);
       if (cutT >= CH5_LIGHTS.end) {
         cut = null;
@@ -305,7 +328,10 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
         // 6장: 스노글로브는 연 요정의 손에. 건네기는 직접
         // 연출에서 산타 쪽으로 걸어간 자리 그대로 6장을 시작한다
         const pl = state.players.map((p, i) => ({ id: p.id, ...(approachEnd[i] ?? { x: p.x, z: p.z }), facing: yawTo(approachEnd[i] ?? p, SANTA_SPOT) }));
+        // 끊겨 있던 요정은 그대로 빠진 채로(방장만 판정, 참가자는 방장 상태를 받는다)
+        const away = state.players.filter((p) => !p.connected).map((p) => p.id);
         state = createFinale(6, pl, opener);
+        for (const id of away) state = playerGone(state, id);
         if (run.state.phase === 'cutscene') run.dispatch({ type: 'cutsceneDone', at: performance.now() });
         snapCamera = true;
       }
@@ -314,40 +340,60 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
     acc += frame;
     const live = run.canPlay && cut === null;
     const i1 = mergeIntents(k1.sample(), controls.touch.sample());
-    const i2 = k2.sample();
-    let inputs: Record<string, SewingInput> = live ? { p0: toSewingInput(i1), p1: toSewingInput(i2) } : { p0: idle, p1: idle };
+    if (guest) {
+      // 참가자: 입력만 보내고 방장 상태를 그린다(연출 중이 아닐 때)
+      net!.sendIntent(live ? i1 : IDLE_INTENT);
+      state = net!.remote<FinaleState>() ?? state;
+      // 사건을 놓쳤어도(잠깐 끊김) 방장 상태로 연출을 시작한다(가방은 5장에서만, 건네기는 6장)
+      const holder = run.state.snowglobe?.holder ?? state.players[0]!.id;
+      if (state.chapter === 5 && state.opened) onEvent({ type: 'opened', playerId: holder } as FinaleEvent);
+      else if (state.delivered) onEvent({ type: 'deliver', playerId: holder } as FinaleEvent);
+      acc = 0;
+      drawPlay(frame);
+      return;
+    }
+    let inputs: Record<string, SewingInput> = net
+      ? net.inputs(i1, live)
+      : live
+        ? { p0: toSewingInput(i1), p1: toSewingInput(k2.sample()) }
+        : { p0: idle, p1: idle };
     while (acc >= SIM_DT) {
       const r = step(state, inputs, SIM_DT);
       state = r.state;
-      for (const e of r.events) {
-        events.push(e);
-        if (e.type === 'peek') {
-          peekAt.set(e.playerId, elapsed);
-          elves[PLAYERS.indexOf(e.playerId as (typeof PLAYERS)[number])]?.act?.('Interact', { once: true });
-        }
-        if (e.type === 'stockingChecked') checkedAt = elapsed;
-        if (e.type === 'opened') {
-          opener = e.playerId;
-          run.dispatch({ type: 'openBag', at: performance.now(), ...metaFor(e.playerId) });
-          cut = 'lights';
-          cutT = 0;
-          document.body.classList.add('cutscene');
-        }
-        if (e.type === 'take') run.dispatch({ type: 'takeSnowglobe', at: performance.now(), ...metaFor(e.playerId) });
-        if (e.type === 'deliver') {
-          run.dispatch({ type: 'deliver', at: performance.now(), ...metaFor(e.playerId) });
-          cut = 'deliver';
-          cutT = 0;
-          giver = e.playerId;
-          startEnding();
-          document.body.classList.add('cutscene');
-        }
-      }
+      for (const e of r.events) onEvent(e);
+      net?.emit(r.events);
       inputs = Object.fromEntries(Object.entries(inputs).map(([k, v]) => [k, { ...v, actionDown: false }]));
       acc -= SIM_DT;
     }
+    net?.publish(startChapter, state);
     drawPlay(frame);
   });
+
+  function onEvent(e: FinaleEvent): void {
+    events.push(e);
+    if (e.type === 'peek') {
+      peekAt.set(e.playerId, elapsed);
+      elves[PLAYERS.indexOf(e.playerId)]?.act?.('Interact', { once: true });
+    }
+    if (e.type === 'stockingChecked') checkedAt = elapsed;
+    if (e.type === 'opened' && !lightsShown) {
+      lightsShown = true;
+      opener = e.playerId;
+      run.dispatch({ type: 'openBag', at: performance.now(), ...metaFor(e.playerId) });
+      cut = 'lights';
+      cutT = 0;
+      document.body.classList.add('cutscene');
+    }
+    if (e.type === 'take') run.dispatch({ type: 'takeSnowglobe', at: performance.now(), ...metaFor(e.playerId) });
+    if (e.type === 'deliver' && cut !== 'deliver') {
+      run.dispatch({ type: 'deliver', at: performance.now(), ...metaFor(e.playerId) });
+      cut = 'deliver';
+      cutT = 0;
+      giver = e.playerId;
+      startEnding();
+      document.body.classList.add('cutscene');
+    }
+  }
 
   // ── 놀이 화면 ──
   function drawPlay(frame: number): void {
@@ -361,8 +407,9 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
       const e = elves[i]!;
       let yaw = p.facing;
       // 빈 양말을 둘 다 들여다본 순간: 두 요정의 눈이 마주친다
-      if (elapsed - checkedAt < 1.4 && state.players.length > 1) {
-        const o = state.players[1 - i]!;
+      const pair = state.peeked.slice(0, 2);
+      if (elapsed - checkedAt < 1.4 && pair.length === 2 && pair.includes(p.id)) {
+        const o = state.players.find((q) => q.id === pair.find((id) => id !== p.id))!;
         yaw = yawTo(p, o);
       }
       const ps = follow(p.id, p.x, p.z, yaw, kf);
@@ -376,7 +423,7 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
         placeOnHands(globe.group, e.carryFrame?.(cf.pos, cf.quat) ? cf : null, ps, ELF_SCALE);
       }
       const a = run.canPlay ? planAction(state, p.id) : ({ kind: 'none' } as const);
-      if (i === 0) mine = a;
+      if (p.id === ME) mine = a;
       const ring = rings[i]!;
       const tgt = a.kind === 'peek' ? STOCKING : a.kind === 'openBag' ? BAG : a.kind === 'deliver' ? SANTA_SPOT : a.kind === 'take' && state.globe ? state.globe : null;
       ring.visible = !!tgt;
@@ -556,8 +603,9 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
     const L = CH5_LIGHTS;
     for (const r of rings) r.visible = false;
     controls.update('none');
-    const oi = Math.max(0, PLAYERS.indexOf(opener as (typeof PLAYERS)[number]));
-    const pi = 1 - oi;
+    const oi = Math.max(0, PLAYERS.indexOf(opener));
+    /** 연 요정 다음에 친구들(2~4인) */
+    const order = [oi, ...PLAYERS.map((_, i) => i).filter((i) => i !== oi)];
     // 연 요정은 가방 앞, 친구는 그 옆에서 산타 쪽을 살핀다
     const openerSpot = { x: BAG.x + 0.1, z: BAG.z + 0.75 };
     const friendSpot = { x: BAG.x + 1.25, z: BAG.z + 0.6 };
@@ -569,10 +617,12 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
     };
     const handsY = 0.95 * ELF_SCALE;
     const mid = { x: (openerSpot.x + friendSpot.x) / 2, z: (openerSpot.z + friendSpot.z) / 2 };
-    [oi, pi].forEach((idx, role) => {
+    order.forEach((idx, rank) => {
       const e = elves[idx];
       if (!e) return;
-      const base = role === 0 ? openerSpot : friendSpot;
+      const role = Math.min(rank, 1);
+      // 셋째·넷째 요정은 친구 옆에 한 줄로
+      const base = rank === 0 ? openerSpot : { x: friendSpot.x + (rank - 1) * 0.95, z: friendSpot.z + (rank - 1) * 0.35 };
       const p = toward(base, 2.4 * approach);
       approachEnd[idx] = toward(base, 2.4);
       let yaw = role === 0 ? yawTo(base, BAG) : yawTo(base, SANTA_SPOT);
@@ -582,14 +632,14 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
       e.root.position.set(p.x, 0, p.z);
       e.root.rotation.set(0, yaw, 0);
       e.look?.(t < L.globe[0] ? -0.2 : 0.3);
-      const carrying = (role === 0 && t >= L.globe[0]) || (role === 1 && t >= L.stocking[0]);
+      const carrying = (role === 0 && t >= L.globe[0]) || (rank === 1 && t >= L.stocking[0]);
       e.animate(elapsed, approach > 0 && approach < 1, { carry: carrying ? 'light' : 'none', act: role === 0 && t < L.open[1] ? 0.7 : 0, tired: false, span: role === 0 ? 0.4 : 0.5 });
       e.root.updateMatrixWorld(true);
       if (role === 0 && t >= L.globe[0]) {
         globe.group.visible = true;
         placeOnHands(globe.group, e.carryFrame?.(cf.pos, cf.quat) ? cf : null, { x: p.x, z: p.z, yaw }, ELF_SCALE);
       }
-      if (role === 1 && t >= L.stocking[0]) {
+      if (rank === 1 && t >= L.stocking[0]) {
         // 빨간 양말을 살짝 들어 보인다
         placeOnHands(stocking.group, e.carryFrame?.(cf.pos, cf.quat) ? cf : null, { x: p.x, z: p.z, yaw }, ELF_SCALE);
         stocking.group.scale.setScalar(0.55);
@@ -680,7 +730,7 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
     btn('ending-replay', '다시 보기 ↺', () => (cutT = CH6_END.look[0]));
     btn('ending-skip', '건너뛰기 ▶▶', () => (cutT = Math.max(cutT, CH6_END.end)));
     // 이야기 모드: 새 시도(저장 칸을 비우고 0장 프롤로그부터)
-    if (sto.story)
+    if (sto.story && !guest)
       btn('ending-restart', '처음부터 ↺', () => {
         store.clear(roomId);
         location.reload();
@@ -700,7 +750,7 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
     (endUi?.querySelector('#ending-skip') as HTMLElement | null)?.style.setProperty('display', t < E.end ? 'block' : 'none');
     (endUi?.querySelector('#ending-restart') as HTMLElement | null)?.style.setProperty('display', t >= E.end ? 'block' : 'none');
     // 요정들: 그 자리에서 산타를 본다. 장갑 요정(첫 요정)은 끝에 제 장갑을 내려다본다
-    const gi = Math.max(0, PLAYERS.indexOf(giver as (typeof PLAYERS)[number]));
+    const gi = Math.max(0, PLAYERS.indexOf(giver));
     const thumbI = 0;
     state.players.forEach((p, i) => {
       const e = elves[i]!;
@@ -783,6 +833,12 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
       ending: () => ({ t: cut === 'deliver' ? cutT : -1, beat: cut === 'deliver' ? endingBeat(cutT) : null, bone: globe.bone.visible, memory: memView?.mode() ?? null }),
       finale: () => JSON.parse(JSON.stringify(state)) as FinaleState,
       finaleEvents: () => events.map((e) => ({ ...e })),
+      /** 시험(여러 기기 이어 붙이기): 방장이 가방 열기·건네기 사건을 바로 낸다(참가자에게도) */
+      debugWin: (type: 'opened' | 'take' | 'deliver', playerId: string) => {
+        const e = { type, playerId } as FinaleEvent;
+        onEvent(e);
+        net?.emit([e]);
+      },
       run: () => ({ ...run.state }),
       cut: () => ({ cut, t: cutT, beat: cut === 'lights' ? lightsBeat(cutT) : null }),
       seekCut: (t: number) => {

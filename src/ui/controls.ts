@@ -27,6 +27,8 @@ const CSS = `
   font: 700 20px/36px system-ui, sans-serif; text-align: center; box-shadow: 0 3px 0 #9aa6bb; }
 #key-hint .pic { width: 44px; height: 44px; }
 #key-hint.hidden { display: none; }
+/* 좁은 화면(여러 기기 4인이면 위쪽 팀 칩이 길다): 행동 안내를 팀 칩 아래로 */
+@media (max-width: 820px) { #key-hint { top: 64px; } }
 body.touch-on #stick-base { display: block; }
 body.touch-on #action-btn { display: block; }
 body.touch-on #key-hint { display: none; }

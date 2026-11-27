@@ -5,6 +5,7 @@ import {
   fromCheckpoint,
   reduce,
   remainingAt,
+  toCheckpoint,
   type Checkpoint,
   type ClientMeta,
   type RunCommand,
@@ -51,6 +52,11 @@ export class LocalRun {
         ? fromCheckpoint(firstCheckpoint(runId, seed))
         : createRun(runId, roomId, seed);
     hud.onRetry(() => this.retry(performance.now()));
+  }
+
+  /** 저장된 기록이 없으면 지금 상태를 저장한다(여러 기기 방장: 방장 창을 다시 열어도 같은 시도로 이어지게) */
+  ensureSaved(): void {
+    if (this.store.load(this.roomId) === null) this.hud.setSaveError(!this.store.save(toCheckpoint(this.state)).ok);
   }
 
   /** 리듀서가 낸 효과(저장·재시도·장 완료 등)를 받는다 */

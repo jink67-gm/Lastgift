@@ -25,6 +25,9 @@ import { createOutline } from '../scene/outline';
 import { createSnowfall } from '../scene/snowfall';
 import { createWinterLight, setShadows } from '../scene/winterLight';
 import { LocalRun } from '../session/localRun';
+import type { TeamRun } from '../session/mirrorRun';
+import { playerBack, playerGone } from '../core/presence';
+import { IDLE_INTENT } from '../input/intent';
 import type { ActionIcon } from '../ui/actionIcons';
 import { createControls } from '../ui/controls';
 import { createHud } from '../ui/hud';
@@ -41,7 +44,6 @@ const ELF_SCALE = 1.2;
 /** 1장 화면 넓이 배율(광장 기준 구도 대비) */
 const VIEW_K = 1.3;
 const SIM_DT = 1 / 60;
-const PLAYERS = ['p0', 'p1'] as const;
 /** 처음 몇 초: 아치에서 골목 끝 유나네까지 한 화면(아치 사이로 물고기 우편함) */
 const ESTABLISH = { ...W(20, 1.5), viewH: 36, sec: 3.4 };
 
@@ -71,6 +73,12 @@ function iconOf(a: Ch1Action): ActionIcon {
 
 export function startChapter1(models: Models, opts?: StoryOptions): void {
   const sto = storyFor(opts, 'dev-ch1');
+  const net = opts?.net;
+  const guest = net?.role === 'guest';
+  /** 이 시도의 요정들(한 기기 둘, 여러 기기는 방장이 시작할 때 정한 2~4명) */
+  const PLAYERS: readonly string[] = net ? net.slots : ['p0', 'p1'];
+  /** 이 기기가 움직이는 요정 */
+  const ME = net?.me ?? 'p0';
   const host = document.getElementById('game')!;
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -239,7 +247,8 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
 
   // 처음 들어온 1장이면 지우 카드 그림책 먼저(시계는 그림책이 끝난 뒤 흐른다). 시험 모드는 &story일 때만
   const hadSave = new CheckpointStore(browserStorage()).load(sto.roomId) !== null;
-  const run = new LocalRun(new CheckpointStore(browserStorage()), hud, sto.roomId, 'p0', sto.story ? undefined : chapter1Checkpoint(sto.roomId));
+  const makeRun = () => new LocalRun(new CheckpointStore(browserStorage()), hud, sto.roomId, 'p0', sto.story ? undefined : chapter1Checkpoint(sto.roomId));
+  const run: TeamRun = net ? net.bindRun(hud, makeRun) : makeRun();
   run.attachVisibility(document);
   run.onEffect((e) => {
     if (e.type === 'retry') state = createChapter1(PLAYERS, run.state.seed);
@@ -254,6 +263,11 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
   };
   if (!story) begin();
   state = createChapter1(PLAYERS, run.state.seed);
+  // 여러 기기: 끊긴 요정은 멈추고 선물을 그 자리에 놓는다 / 참가자는 방장 사건으로 소리·연출을 시작한다
+  net?.onPresence((id, on) => (state = on ? playerBack(state, id) : playerGone(state, id)));
+  net?.onEvents((evs) => {
+    for (const e of evs as Ch1Event[]) onEvent(e);
+  });
   for (const h of hands) scene.add(h);
   scene.add(bang);
   space.yunaPlaceholder.parent?.add(book);
@@ -332,6 +346,10 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     const frame = Math.min(raw, 0.25);
     if (story) {
       run.frame(now);
+      if (guest) {
+        net!.sendIntent(IDLE_INTENT);
+        state = net!.remote<Ch1State>() ?? state;
+      }
       if (story.update(frame)) {
         story.dispose();
         story = null;
@@ -346,33 +364,51 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     run.frame(now);
     const live = run.canPlay;
     const i1 = mergeIntents(k1.sample(), controls.touch.sample());
-    const i2 = k2.sample();
-    let inputs: Record<string, SewingInput> = live ? { p0: toSewingInput(i1), p1: toSewingInput(i2) } : { p0: idle, p1: idle };
+    if (guest) {
+      // 참가자: 입력만 보내고 방장 상태를 그린다
+      net!.sendIntent(live ? i1 : IDLE_INTENT);
+      state = net!.remote<Ch1State>() ?? state;
+      // 사건을 놓쳤어도(잠깐 끊김) 방장 상태로 끝 장면을 시작한다
+      if (state.complete && ending < 0) onEvent({ type: 'complete' } as Ch1Event);
+      elapsed += frame;
+      acc = 0;
+      draw(frame);
+      return;
+    }
+    let inputs: Record<string, SewingInput> = net
+      ? net.inputs(i1, live)
+      : live
+        ? { p0: toSewingInput(i1), p1: toSewingInput(k2.sample()) }
+        : { p0: idle, p1: idle };
     while (acc >= SIM_DT) {
       const r = step(state, inputs, SIM_DT);
       state = r.state;
-      for (const e of r.events) {
-        events.push(e);
-        if (e.type === 'pick' || e.type === 'drop') actAt.set(e.playerId, elapsed);
-        if (e.type === 'found') foundAt = elapsed;
-        if (e.type === 'complete' && ending < 0) {
-          run.dispatch({ type: 'completeChapter', at: performance.now(), chapterId: 1 });
-          ending = 0;
-        }
-        if (e.type === 'caught') {
-          caughtAt = elapsed;
-          const i = PLAYERS.indexOf(e.playerId as (typeof PLAYERS)[number]);
-          caughtWho = i;
-          elves[i]?.act?.('HitRecieve', { once: true });
-          shown.delete(e.playerId); // 마지막 엄폐물 뒤로 바로
-        }
-      }
+      for (const e of r.events) onEvent(e);
+      net?.emit(r.events);
       inputs = Object.fromEntries(Object.entries(inputs).map(([k, v]) => [k, { ...v, actionDown: false }]));
       acc -= SIM_DT;
       elapsed += SIM_DT;
     }
+    net?.publish(1, state);
     draw(frame);
   });
+
+  function onEvent(e: Ch1Event): void {
+    events.push(e);
+    if (e.type === 'pick' || e.type === 'drop') actAt.set(e.playerId, elapsed);
+    if (e.type === 'found') foundAt = elapsed;
+    if (e.type === 'complete' && ending < 0) {
+      run.dispatch({ type: 'completeChapter', at: performance.now(), chapterId: 1 });
+      ending = 0;
+    }
+    if (e.type === 'caught') {
+      caughtAt = elapsed;
+      const i = PLAYERS.indexOf(e.playerId);
+      caughtWho = i;
+      elves[i]?.act?.('HitRecieve', { once: true });
+      shown.delete(e.playerId); // 마지막 엄폐물 뒤로 바로
+    }
+  }
 
   function draw(frame: number): void {
     const kf = 1 - Math.exp(-frame * 22);
@@ -398,7 +434,7 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
         placeOnHands(pm, e.carryFrame?.(cf.pos, cf.quat) ? cf : null, ps, ELF_SCALE);
         pm.rotateX(-0.6);
       }
-      maps.set(i, p.mapOpen, ELF_LOOKS[i]!.hat);
+      maps.set(i, p.mapOpen && (!net || p.id === ME), ELF_LOOKS[i]!.hat); // 여러 기기: 내 지도만 내 화면에
       // 손 신호: 망보는 요정이 손을 흔들어 든다 + 머리 위 초록 손
       const hs = hands[i]!;
       hs.visible = p.handUp;
@@ -406,7 +442,7 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
       if (p.handUp) e.act?.('Wave');
       else if (elapsed - caughtAt > 0.7 || i !== caughtWho) e.act?.(null);
       const a = run.canPlay ? planAction(state, p.id) : ({ kind: 'none' } as const);
-      if (i === 0) mine = a;
+      if (p.id === ME) mine = a;
       const ring = rings[i]!;
       const tgt = a.kind === 'pick' ? state.items.find((q) => q.id === a.itemId)! : null;
       ring.visible = tgt !== null;
@@ -568,6 +604,16 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
       story: () => (story ? story.t : null),
       skipStory: () => story?.skip(),
       ending: () => ending,
+      seekEnding: (t: number) => {
+        if (ending >= 0) ending = t;
+      },
+      /** 시험(여러 기기 이어 붙이기): 방장이 이 장을 바로 마친 것으로(사건을 참가자에게도 보낸다) */
+      debugWin: () => {
+        const e = { type: 'complete' } as Ch1Event;
+        state = { ...state, complete: true };
+        onEvent(e);
+        net?.emit([e]);
+      },
       gaze: () => gazeAt(state.time, state.seed),
       peek: () => peekFrame.style.display === 'block',
       peekInfo: () => ({ window: space.windowCenter.toArray(), lane: toLane({ x: space.windowCenter.x, z: space.windowCenter.z }), cam: peekCam.position.toArray() }),

@@ -30,6 +30,9 @@ import { createOffscreenMarks } from '../ui/offscreen';
 import { createPlaza, townBench, townLamp } from '../scene/plaza';
 import { TOWN } from '../data/townScale';
 import { LocalRun } from '../session/localRun';
+import type { TeamRun } from '../session/mirrorRun';
+import { playerBack, playerGone } from '../core/presence';
+import { IDLE_INTENT } from '../input/intent';
 import { sewingIcon, type ActionIcon } from '../ui/actionIcons';
 import { createControls } from '../ui/controls';
 import { createHud } from '../ui/hud';
@@ -44,7 +47,6 @@ const CAMERA_PITCH = (testParams.has('test') && testParams.get('pitch') ? Number
 /** 처음 몇 초 광장 전체를 넓게 보여 주는 구도(배달지 네 곳과 썰매가 한 화면에) */
 const ESTABLISH = { x: -2, z: -4, viewH: 22, sec: 3.2 }; // 썰매 뒤 골목과 두 집까지 들어오게 북쪽으로 조금
 const SIM_DT = 1 / 60;
-const PLAYERS = ['p0', 'p1'] as const;
 /**
  * 요정 크기: 0장 화면에서 1.2배(모자 제외 키 약 1.32). 문(2.8)·벤치 좌판(1.0)·재봉틀 상자(0.6)와 견줘 정했다.
  * 시험 모드에서만 ?elf=배율로 바꿔 비교할 수 있다. 판정(충돌 반지름·손잡이 거리)은 그대로다.
@@ -66,6 +68,12 @@ function iconOf(a: SortAction): ActionIcon {
 
 export function startChapter0(models: Models, opts?: StoryOptions): void {
   const sto = storyFor(opts, 'dev-ch0');
+  const net = opts?.net;
+  const guest = net?.role === 'guest';
+  /** 이 시도의 요정들(한 기기 둘, 여러 기기는 방장이 시작할 때 정한 2~4명) */
+  const PLAYERS: readonly string[] = net ? net.slots : ['p0', 'p1'];
+  /** 이 기기가 움직이는 요정 */
+  const ME = net?.me ?? 'p0';
   const host = document.getElementById('game')!;
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // 품질 설정에서 다시 정한다(applyQuality)
@@ -146,7 +154,8 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
   const marks = createOffscreenMarks(document, PLAYERS.length);
 
   // 새 시도(0장): 프롤로그 연출 → 플레이. 이어 하기(체크포인트)·시간 초과 재시도면 프롤로그 없이 바로 플레이
-  const run = new LocalRun(new CheckpointStore(browserStorage()), hud, sto.roomId, 'p0');
+  const makeRun = () => new LocalRun(new CheckpointStore(browserStorage()), hud, sto.roomId, 'p0');
+  const run: TeamRun = net ? net.bindRun(hud, makeRun) : makeRun();
   run.attachVisibility(document);
   run.onEffect((e) => {
     if (e.type === 'retry') sort = createSorting(PLAYERS);
@@ -157,6 +166,11 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
     run.dispatch({ type: 'savePhoto', at: performance.now(), photo: photoLineup(PLAYERS.map((_, i) => i)) });
     run.dispatch({ type: 'cutsceneDone', at: performance.now() });
   }
+  // 여러 기기: 끊긴 요정은 멈추고 손잡이·선물을 그 자리에 놓는다 / 참가자는 방장 사건으로 소리·연출을 시작한다
+  net?.onPresence((id, on) => (sort = on ? playerBack(sort, id) : playerGone(sort, id)));
+  net?.onEvents((evs) => {
+    for (const e of evs as SortEvent[]) onEvent(e);
+  });
 
   // 모델
   const elves = PLAYERS.map((_, i) => {
@@ -308,30 +322,28 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
     run.frame(now);
     const live = run.canPlay && !sort.complete;
     const i1 = mergeIntents(k1.sample(), controls.touch.sample());
-    const i2 = k2.sample();
-    let inputs: Record<string, SewingInput> = live ? { p0: toSewingInput(i1), p1: toSewingInput(i2) } : { p0: idle, p1: idle };
+    if (guest) {
+      // 참가자: 입력만 보내고 방장 상태를 그린다
+      net!.sendIntent(live ? i1 : IDLE_INTENT);
+      sort = net!.remote<SortState>() ?? sort;
+      elapsed += frame;
+      acc = 0;
+    }
+    let inputs: Record<string, SewingInput> = net
+      ? net.inputs(i1, live)
+      : live
+        ? { p0: toSewingInput(i1), p1: toSewingInput(k2.sample()) }
+        : { p0: idle, p1: idle };
     while (acc >= SIM_DT) {
       const r = step(sort, inputs, SIM_DT);
       sort = r.state;
-      for (const e of r.events) {
-        events.push(e);
-        // 집기·놓기·잡기·놓기·들어올리기: 그 요정의 손 뻗는 동작을 시작한다
-        if (e.type === 'pick' || e.type === 'drop') actAt.set(e.playerId, elapsed);
-        if (e.type === 'sewing' && (e.event.type === 'grab' || e.event.type === 'release')) actAt.set(e.event.playerId, elapsed);
-        if (e.type === 'sewing' && e.event.type === 'lift') for (const q of sort.sewing.players) if (q.holding !== null) actAt.set(q.id, elapsed);
-        if (e.type === 'sorted') markers.flash(e.dest, true);
-        if (e.type === 'wrong') markers.flash(e.dest, false);
-        // 다섯 물건이 모두 제자리 → 0장 완료(1장 최초 체크포인트 저장)
-        if (e.type === 'complete') {
-          run.dispatch({ type: 'completeChapter', at: now, chapterId: 0 });
-          // 이야기 모드: 잠깐 뒤 1장으로
-          if (sto.story) window.setTimeout(() => sto.next(), 1800);
-        }
-      }
+      for (const e of r.events) onEvent(e);
+      net?.emit(r.events);
       inputs = Object.fromEntries(Object.entries(inputs).map(([k, v]) => [k, { ...v, actionDown: false }]));
       acc -= SIM_DT;
       elapsed += SIM_DT;
     }
+    if (!guest) net?.publish(0, sort);
     if (prologue && !prologue.done) {
       prologue.update(frame, aspect);
       if (prologue.done) startPlay();
@@ -349,6 +361,22 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
     }
     draw(frame);
   });
+
+  function onEvent(e: SortEvent): void {
+    events.push(e);
+    // 집기·놓기·잡기·놓기·들어올리기: 그 요정의 손 뻗는 동작을 시작한다
+    if (e.type === 'pick' || e.type === 'drop') actAt.set(e.playerId, elapsed);
+    if (e.type === 'sewing' && (e.event.type === 'grab' || e.event.type === 'release')) actAt.set(e.event.playerId, elapsed);
+    if (e.type === 'sewing' && e.event.type === 'lift') for (const q of sort.sewing.players) if (q.holding !== null) actAt.set(q.id, elapsed);
+    if (e.type === 'sorted') markers.flash(e.dest, true);
+    if (e.type === 'wrong') markers.flash(e.dest, false);
+    // 다섯 물건이 모두 제자리 → 0장 완료(1장 최초 체크포인트 저장)
+    if (e.type === 'complete') {
+      run.dispatch({ type: 'completeChapter', at: performance.now(), chapterId: 0 });
+      // 이야기 모드: 잠깐 뒤 1장으로
+      if (sto.story) window.setTimeout(() => sto.next(), 1800);
+    }
+  }
 
   /** 프롤로그가 끝났다(또는 건너뛰었다): 산타·도토는 제자리, 팀 시계가 흐르고 광장 전체 구도부터 */
   function startPlay(): void {
@@ -418,7 +446,7 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
         swaps[i]!.position.set(g.x, 1.5 * ELF_SCALE, g.z); // 꼬리 끝이 손잡이 위(요정 어깨 옆)
       }
       const a = run.canPlay ? planAction(sort, p.id) : ({ kind: 'none' } as const);
-      if (i === 0) mine = a;
+      if (p.id === ME) mine = a;
       const ring = rings[i]!;
       let at: { x: number; z: number } | null = null;
       if (a.kind === 'pick') at = sort.items.find((q) => q.id === a.itemId)!;
@@ -539,6 +567,13 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
   if (import.meta.env.DEV || new URLSearchParams(location.search).has('test')) {
     (window as unknown as Record<string, unknown>).__lastgift = {
       sorting: () => JSON.parse(JSON.stringify(sort)) as SortState,
+      /** 시험(여러 기기 이어 붙이기): 방장이 이 장을 바로 마친 것으로(사건을 참가자에게도 보낸다) */
+      debugWin: () => {
+        const e: SortEvent = { type: 'complete' };
+        sort = { ...sort, complete: true };
+        onEvent(e);
+        net?.emit([e]);
+      },
       sortEvents: () => events.map((e) => JSON.parse(JSON.stringify(e))),
       run: () => ({ ...run.state }),
       runEffects: () => run.log.map((e) => e.type),

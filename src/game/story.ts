@@ -4,12 +4,16 @@
 // (장마다 장면·모델 메모리를 비우고 새로 시작해 교실 기기에 부담이 적다).
 // 장 첫 연출(1장 그림책·4장 봉투·5장 단체사진)은 이 시도에서 처음 들어갈 때만 본다(시간 초과 재시도 때 반복하지 않는다).
 
+import type { TeamNet } from '../net/team';
+
 export const STORY_ROOM = 'story';
 
 export interface StoryOptions {
   /** 이야기 모드 저장 칸. 없으면 장마다의 개발용 칸 */
   roomId?: string;
   story?: boolean;
+  /** 여러 기기(방장·참가자). 없으면 한 기기 */
+  net?: TeamNet;
 }
 
 export interface Story {
@@ -46,7 +50,8 @@ export function storyFor(opts: StoryOptions | undefined, devRoom: string): Story
       }
     },
     next() {
-      if (!story || going) return;
+      // 참가자는 스스로 넘기지 않는다(방장이 다음 장을 열면 따라 다시 연다)
+      if (!story || going || opts?.net?.role === 'guest') return;
       going = true;
       const veil = document.createElement('div');
       veil.id = 'chapter-veil';

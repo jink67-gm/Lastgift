@@ -14,6 +14,7 @@ import { chapter } from '../data/chapters';
 import { BALL_SPOT, CH3_BOUNDS, W, nearGate, toLane, GATES } from '../data/chapter3';
 import { ELF_LOOKS } from '../data/elves';
 import { attachKeyboard, KeyState, KEYMAP_P1, KEYMAP_P2 } from '../input/keyboard';
+import { IDLE_INTENT } from '../input/intent';
 import { mergeIntents } from '../input/merge';
 import { browserStorage, CheckpointStore, loadSettings, saveSettings } from '../save/store';
 import { createChapter3Scene } from '../scene/chapter3';
@@ -28,6 +29,8 @@ import { createOcclusionFader } from '../scene/occlusionFade';
 import { createSnowfall } from '../scene/snowfall';
 import { createWinterLight, setShadows } from '../scene/winterLight';
 import { LocalRun } from '../session/localRun';
+import type { TeamRun } from '../session/mirrorRun';
+import { playerBack, playerGone } from '../core/presence';
 import type { ActionIcon } from '../ui/actionIcons';
 import { createControls } from '../ui/controls';
 import { createHud } from '../ui/hud';
@@ -42,7 +45,6 @@ const ELF_SCALE = 1.2;
 /** 3장 화면 넓이 배율: 울타리 양쪽(던질 사람과 받을 사람)이 한 화면에 들어오게 */
 const VIEW_K = 1.15;
 const SIM_DT = 1 / 60;
-const PLAYERS = ['p0', 'p1'] as const;
 /** 처음 몇 초: 공방 옆문에서 민재네 대문까지 한 화면 */
 const ESTABLISH = { ...W(17, 0), viewH: 34, sec: 3.2 };
 /** 던진 공의 높이: 손 높이에서 출발해 거리에 비례해 솟는다 */
@@ -115,6 +117,12 @@ function handGlyph(g: CanvasRenderingContext2D, x = 0, y = 0, k = 1): void {
 
 export function startChapter3(models: Models, opts?: StoryOptions): void {
   const sto = storyFor(opts, 'dev-ch3');
+  const net = opts?.net;
+  const guest = net?.role === 'guest';
+  /** 이 시도의 요정들(한 기기 둘, 여러 기기는 방장이 시작할 때 정한 2~4명) */
+  const PLAYERS: readonly string[] = net ? net.slots : ['p0', 'p1'];
+  /** 이 기기가 움직이는 요정 */
+  const ME = net?.me ?? 'p0';
   const host = document.getElementById('game')!;
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -232,7 +240,8 @@ export function startChapter3(models: Models, opts?: StoryOptions): void {
   });
   const marks = createOffscreenMarks(document, PLAYERS.length);
 
-  const run = new LocalRun(new CheckpointStore(browserStorage()), hud, sto.roomId, 'p0', sto.story ? undefined : chapter3Checkpoint(sto.roomId));
+  const makeRun = () => new LocalRun(new CheckpointStore(browserStorage()), hud, sto.roomId, 'p0', sto.story ? undefined : chapter3Checkpoint(sto.roomId));
+  const run: TeamRun = net ? net.bindRun(hud, makeRun) : makeRun();
   run.attachVisibility(document);
   run.onEffect((e) => {
     if (e.type === 'retry') state = createChapter3(PLAYERS, run.state.seed);
@@ -240,6 +249,11 @@ export function startChapter3(models: Models, opts?: StoryOptions): void {
   run.dispatch({ type: 'start', at: performance.now() });
   if (run.state.phase === 'cutscene') run.dispatch({ type: 'cutsceneDone', at: performance.now() });
   state = createChapter3(PLAYERS, run.state.seed);
+  // 여러 기기: 끊긴 요정은 멈추고 공을 그 자리에 놓는다 / 참가자는 방장 사건으로 소리·연출을 시작한다
+  net?.onPresence((id, on) => (state = on ? playerBack(state, id) : playerGone(state, id)));
+  net?.onEvents((evs) => {
+    for (const e of evs as Ch3Event[]) onEvent(e);
+  });
 
   // 요정·공·콩이
   const elves = PLAYERS.map((_, i) => {
@@ -342,32 +356,49 @@ export function startChapter3(models: Models, opts?: StoryOptions): void {
     run.frame(now);
     const live = run.canPlay;
     const i1 = mergeIntents(k1.sample(), controls.touch.sample());
-    const i2 = k2.sample();
-    let inputs: Record<string, SewingInput> = live ? { p0: toSewingInput(i1), p1: toSewingInput(i2) } : { p0: idle, p1: idle };
+    if (guest) {
+      // 참가자: 입력만 보내고 방장 상태를 그린다
+      net!.sendIntent(live ? i1 : IDLE_INTENT);
+      state = net!.remote<Ch3State>() ?? state;
+      // 사건을 놓쳤어도(잠깐 끊김) 방장 상태로 끝 장면을 시작한다
+      if (state.complete && ending < 0) onEvent({ type: 'complete' } as Ch3Event);
+      elapsed += frame;
+      acc = 0;
+      draw(frame);
+      return;
+    }
+    let inputs: Record<string, SewingInput> = net
+      ? net.inputs(i1, live)
+      : live
+        ? { p0: toSewingInput(i1), p1: toSewingInput(k2.sample()) }
+        : { p0: idle, p1: idle };
     while (acc >= SIM_DT) {
       const r = step(state, inputs, SIM_DT);
       state = r.state;
-      for (const e of r.events) {
-        events.push(e);
-        if (e.type === 'pick' || e.type === 'drop' || e.type === 'throw') actAt.set(e.playerId, elapsed);
-        if (e.type === 'catch') actAt.set(e.playerId, elapsed);
-        if (e.type === 'wake') wokeAt = elapsed;
-        if (e.type === 'bite') {
-          bittenAt = elapsed;
-          const i = PLAYERS.indexOf(e.playerId as (typeof PLAYERS)[number]);
-          elves[i]?.act?.('HitRecieve', { once: true });
-        }
-        if (e.type === 'complete' && ending < 0) {
-          run.dispatch({ type: 'completeChapter', at: performance.now(), chapterId: 3 });
-          ending = 0;
-        }
-      }
+      for (const e of r.events) onEvent(e);
+      net?.emit(r.events);
       inputs = Object.fromEntries(Object.entries(inputs).map(([k, v]) => [k, { ...v, actionDown: false }]));
       acc -= SIM_DT;
       elapsed += SIM_DT;
     }
+    net?.publish(3, state);
     draw(frame);
   });
+
+  function onEvent(e: Ch3Event): void {
+    events.push(e);
+    if (e.type === 'pick' || e.type === 'drop' || e.type === 'throw') actAt.set(e.playerId, elapsed);
+    if (e.type === 'catch') actAt.set(e.playerId, elapsed);
+    if (e.type === 'wake') wokeAt = elapsed;
+    if (e.type === 'bite') {
+      bittenAt = elapsed;
+      elves[PLAYERS.indexOf(e.playerId)]?.act?.('HitRecieve', { once: true });
+    }
+    if (e.type === 'complete' && ending < 0) {
+      run.dispatch({ type: 'completeChapter', at: performance.now(), chapterId: 3 });
+      ending = 0;
+    }
+  }
 
   function draw(frame: number): void {
     if (ending >= 0) {
@@ -395,7 +426,7 @@ export function startChapter3(models: Models, opts?: StoryOptions): void {
       if (p.handUp) e.act?.('Wave');
       else if (elapsed - bittenAt > 0.7 || state.kongi.biting !== p.id) e.act?.(null);
       const a = run.canPlay ? planAction(state, p.id) : ({ kind: 'none' } as const);
-      if (i === 0) mine = a;
+      if (p.id === ME) mine = a;
       const pr = pickRings[i]!;
       pr.visible = a.kind === 'pick';
       if (pr.visible) pr.position.set(state.ball.x, 0.03 + i * 0.005, state.ball.z);
@@ -540,7 +571,7 @@ export function startChapter3(models: Models, opts?: StoryOptions): void {
       scene0 = {
         elves: state.players.map((p) => ({ ...toLane(shown.get(p.id) ?? p) })),
         ball: toLane(state.ball),
-        glove: Math.max(0, PLAYERS.indexOf((placer && 'playerId' in placer ? placer.playerId : 'p0') as (typeof PLAYERS)[number])),
+        glove: Math.max(0, PLAYERS.indexOf(placer && 'playerId' in placer ? placer.playerId : PLAYERS[0]!)),
         from: camera.position.clone(),
       };
     }
@@ -575,10 +606,10 @@ export function startChapter3(models: Models, opts?: StoryOptions): void {
     const momAt = L(B0.s - 1.2, B0.t + 1.45);
     const dadEnd = L(D.s - 1.2, D.t + 3.0);
     const momEnd = L(D.s - 0.9, D.t + 1.3);
-    const E = [L(32.3, 2.0), L(32.1, 3.6)]; // 요정이 물러선 자리(열린 대문 바로 밖: 떠나려는 참)
+    const E = [L(32.3, 2.0), L(32.1, 3.6), L(31.2, 1.1), L(31.0, 4.5)]; // 요정이 물러선 자리(열린 대문 바로 밖: 떠나려는 참)
     const gi = S0.glove;
     const glove = E[gi]!;
-    const kongiAtElf = L(glove.s + 1.02, glove.t + (gi === 0 ? 0.15 : -0.15));
+    const kongiAtElf = L(glove.s + 1.02, glove.t + (gi % 2 === 0 ? 0.15 : -0.15));
 
     // ── 요정: 대문 쪽으로 물러섰다가, 콩이가 공을 밀어 넣으면 떠나려고 돌아선다 ──
     elves.forEach((e, i) => {
@@ -809,11 +840,11 @@ export function startChapter3(models: Models, opts?: StoryOptions): void {
       kYaw = yawTo(kongiAtElf, glove) + (inSpan(A.rub) ? 0.22 * Math.sin(at(t, A.rub) * Math.PI) : 0);
       if (inSpan(A.rub)) {
         const r = Math.sin(at(t, A.rub) * Math.PI);
-        side = (gi === 0 ? 1 : -1) * 0.9 * r;
+        side = (gi % 2 === 0 ? 1 : -1) * 0.9 * r;
         hd = -0.4 * r;
         pitch = 0.08 * r;
       } else {
-        side = (gi === 0 ? -1 : 1) * 0.55;
+        side = (gi % 2 === 0 ? -1 : 1) * 0.55;
         hd = -0.2;
       }
       wag = 1;
@@ -862,7 +893,7 @@ export function startChapter3(models: Models, opts?: StoryOptions): void {
     // 공이 문 안으로
     { at: ADOPTION.ballIn[0], get: (c) => ({ p: V3(c.D.s - 7.6, c.D.t - 0.6, 4.0), q: V3(c.D.s - 1.0, c.D.t + 0.4, 0.9), fov: 46 }) },
     // 장갑에 볼 비비기: 요정 눈높이에서 가까이
-    { at: ADOPTION.toElf[0] + 0.2, get: (c) => ({ p: V3(c.glove.s - 0.6, c.glove.t + (c.gi === 0 ? 2.9 : -2.9), 1.1), q: V3(c.glove.s + 0.55, c.glove.t, 0.6), fov: 42 }) },
+    { at: ADOPTION.toElf[0] + 0.2, get: (c) => ({ p: V3(c.glove.s - 0.6, c.glove.t + (c.gi % 2 === 0 ? 2.9 : -2.9), 1.1), q: V3(c.glove.s + 0.55, c.glove.t, 0.6), fov: 42 }) },
     // 요정들 뒤에서: 콩이를 안고 손을 흔드는 민재
     { at: ADOPTION.toMinjae[0], get: (c) => ({ p: V3(29.9, 2.8, 1.7), q: V3(c.nearDoor.s - 0.4, c.nearDoor.t + 0.3, 1.8), fov: 40 }) },
   ];
@@ -889,6 +920,13 @@ export function startChapter3(models: Models, opts?: StoryOptions): void {
       ch3Events: () => events.map((e) => ({ ...e })),
       run: () => ({ ...run.state }),
       ending: () => ending,
+      /** 시험(여러 기기 이어 붙이기): 방장이 이 장을 바로 마친 것으로(사건을 참가자에게도 보낸다) */
+      debugWin: () => {
+        const e = { type: 'complete' } as Ch3Event;
+        state = { ...state, complete: true };
+        onEvent(e);
+        net?.emit([e]);
+      },
       adoption: () => ({ t: ending, beat: ending >= 0 ? adoptionBeat(ending) : null }),
       seekEnding: (t: number) => {
         if (ending >= 0) ending = t;

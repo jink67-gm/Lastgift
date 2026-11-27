@@ -12,6 +12,9 @@ import { mergeIntents } from '../input/merge';
 import { normalizeRoomCode } from '../net/signaling';
 import { browserStorage, CheckpointStore } from '../save/store';
 import { LocalRun } from '../session/localRun';
+import type { TeamRun } from '../session/mirrorRun';
+import { playerBack, playerGone } from '../core/presence';
+import { IDLE_INTENT } from '../input/intent';
 import { sewingIcon } from '../ui/actionIcons';
 import { createControls } from '../ui/controls';
 import { createHud } from '../ui/hud';
@@ -48,7 +51,7 @@ export function startChapter2(models: Models, opts?: StoryOptions): void {
   const q = new URLSearchParams(location.search);
   const emu = q.has('emu');
   // 이야기 모드(한 기기)·?chapter=2&local
-  if (opts?.story || q.has('local')) return startLocal(models, opts);
+  if (opts?.story || opts?.net || q.has('local')) return startLocal(models, opts);
   if (q.has('host')) {
     void import('./chapter2Net').then((m) => m.startHost(emu, models));
     return;
@@ -72,12 +75,15 @@ export function startChapter2(models: Models, opts?: StoryOptions): void {
   });
 }
 
-/** 한 기기에서 둘이(로컬 2인) */
+/** 한 기기에서 둘이(로컬 2인) · 이야기 모드 여러 기기(opts.net: 방장 판정, 참가자는 그리기만) */
 function startLocal(models: Models, opts?: StoryOptions): void {
   const sto = storyFor(opts, 'dev-ch2');
+  const net = opts?.net;
+  const guest = net?.role === 'guest';
+  const PLAYERS: readonly string[] = net ? net.slots : LOCAL_PLAYERS;
   const host = document.getElementById('game')!;
   const screen = createChapter2Screen(host, models);
-  let sewing: SewingState = createSewing(LOCAL_PLAYERS);
+  let sewing: SewingState = createSewing(PLAYERS);
   const events: SewingEvent[] = [];
 
   const k1 = new KeyState(KEYMAP_P1);
@@ -88,13 +94,19 @@ function startLocal(models: Models, opts?: StoryOptions): void {
   const hud = createHud(document);
 
   // 방이 따로라 0장 기록과 섞이지 않는다
-  const run = new LocalRun(new CheckpointStore(browserStorage()), hud, sto.roomId, 'p0', sto.story ? undefined : chapter2Checkpoint(sto.roomId));
+  const makeRun = () => new LocalRun(new CheckpointStore(browserStorage()), hud, sto.roomId, 'p0', sto.story ? undefined : chapter2Checkpoint(sto.roomId));
+  const run: TeamRun = net ? net.bindRun(hud, makeRun) : makeRun();
   run.attachVisibility(document);
   // 0초 → 재시도: 이 장의 임시 진행(상자 위치·문·공간)을 처음으로
   run.onEffect((e) => {
-    if (e.type === 'retry') sewing = createSewing(LOCAL_PLAYERS);
+    if (e.type === 'retry') sewing = createSewing(PLAYERS);
   });
   run.dispatch({ type: 'start', at: performance.now() });
+  // 여러 기기: 끊긴 요정은 손잡이를 놓는다 / 참가자는 방장 사건으로 끝 장면을 시작한다
+  net?.onPresence((id, on) => (sewing = on ? playerBack(sewing, id) : playerGone(sewing, id)));
+  net?.onEvents((evs) => {
+    for (const e of evs as SewingEvent[]) onEvent(e);
+  });
 
   const idle: SewingInput = { move: { x: 0, y: 0 }, actionDown: false, actionHeld: false };
   let last = performance.now();
@@ -111,24 +123,31 @@ function startLocal(models: Models, opts?: StoryOptions): void {
     run.frame(now);
     const live = run.canPlay && !sewing.delivered;
     const i1 = mergeIntents(k1.sample(), controls.touch.sample());
-    const i2 = k2.sample();
-    let inputs: Record<string, SewingInput> = live ? { p0: toSewingInput(i1), p1: toSewingInput(i2) } : { p0: idle, p1: idle };
+    if (guest) {
+      // 참가자: 입력만 보내고 방장 상태를 그린다
+      net!.sendIntent(live ? i1 : IDLE_INTENT);
+      sewing = net!.remote<SewingState>() ?? sewing;
+      // 사건을 놓쳤어도(잠깐 끊김) 방장 상태로 끝 장면을 시작한다
+      if (sewing.delivered && deliveredAt < 0) onEvent({ type: 'delivered' } as SewingEvent);
+      elapsed += frame;
+      acc = 0;
+    }
+    let inputs: Record<string, SewingInput> = net
+      ? net.inputs(i1, live)
+      : live
+        ? { p0: toSewingInput(i1), p1: toSewingInput(k2.sample()) }
+        : { p0: idle, p1: idle };
     while (acc >= SIM_DT) {
       const r = step(sewing, inputs, SIM_DT);
       sewing = r.state;
-      for (const e of r.events) {
-        events.push(e);
-        // 작업대에 바르게 내려놓으면 2장 완료(기억 2). 문·공간 이동은 체크포인트를 건드리지 않는다.
-        if (e.type === 'delivered') {
-          run.dispatch({ type: 'completeChapter', at: now, chapterId: 2 });
-          deliveredAt = elapsed;
-        }
-      }
+      for (const e of r.events) onEvent(e);
+      net?.emit(r.events);
       // 행동은 첫 틱에서만 쓴다(같은 입력을 두 번 쓰지 않는다)
       inputs = Object.fromEntries(Object.entries(inputs).map(([k, v]) => [k, { ...v, actionDown: false }]));
       acc -= SIM_DT;
       elapsed += SIM_DT;
     }
+    if (!guest) net?.publish(2, sewing);
     // 끝: 재봉틀을 내려놓고 잠깐 뒤 → 빨간 코트 장면(영상 또는 손그림) → 이야기 모드면 3장으로
     if (deliveredAt >= 0 && !clip && !clipDone && elapsed - deliveredAt > 1.8) clip = createClipView(document, { file: 'ch2-red-coat.mp4', base: import.meta.env.BASE_URL, duration: 7 });
     if (clip && clip.update(frame)) {
@@ -137,9 +156,18 @@ function startLocal(models: Models, opts?: StoryOptions): void {
       clipDone = true;
       sto.next();
     }
-    const mine = screen.draw(sewing, { frame, elapsed, previewFor: LOCAL_PLAYERS, canPlay: run.canPlay });
+    const mine = screen.draw(sewing, { frame, elapsed, previewFor: net ? [net.me] : LOCAL_PLAYERS, canPlay: run.canPlay, smooth: guest });
     controls.update(sewingIcon(mine.kind));
   });
+
+  function onEvent(e: SewingEvent): void {
+    events.push(e);
+    // 작업대에 바르게 내려놓으면 2장 완료(기억 2). 문·공간 이동은 체크포인트를 건드리지 않는다.
+    if (e.type === 'delivered' && deliveredAt < 0) {
+      run.dispatch({ type: 'completeChapter', at: performance.now(), chapterId: 2 });
+      deliveredAt = elapsed;
+    }
+  }
 
   // 자동 검사용 창구(?test)
   if (import.meta.env.DEV || new URLSearchParams(location.search).has('test')) {
@@ -148,6 +176,13 @@ function startLocal(models: Models, opts?: StoryOptions): void {
       sewingEvents: () => events.map((e) => ({ ...e })),
       clip: () => (clip ? { t: clip.t, mode: clip.mode() } : clipDone ? 'done' : null),
       skipClip: () => clip?.skip(),
+      /** 시험(여러 기기 이어 붙이기): 방장이 이 장을 바로 마친 것으로(사건을 참가자에게도 보낸다) */
+      debugWin: () => {
+        const e = { type: 'delivered' } as SewingEvent;
+        sewing = { ...sewing, delivered: true };
+        onEvent(e);
+        net?.emit([e]);
+      },
       run: () => ({ ...run.state }),
       runEffects: () => run.log.map((e) => e.type),
       savedCheckpoint: () => localStorage.getItem('lastgift.cp.v1.dev-ch2'),

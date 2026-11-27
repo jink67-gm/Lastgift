@@ -29,6 +29,9 @@ import { createOcclusionFader } from '../scene/occlusionFade';
 import { createSnowfall } from '../scene/snowfall';
 import { createWinterLight, setShadows } from '../scene/winterLight';
 import { LocalRun } from '../session/localRun';
+import type { TeamRun } from '../session/mirrorRun';
+import { playerBack, playerGone } from '../core/presence';
+import { IDLE_INTENT } from '../input/intent';
 import type { ActionIcon } from '../ui/actionIcons';
 import { createControls } from '../ui/controls';
 import { createHud } from '../ui/hud';
@@ -92,8 +95,13 @@ export function startChapter4(models: Models, opts?: StoryOptions): void {
   host.appendChild(renderer.domElement);
   const scene = new THREE.Scene();
   const params = new URLSearchParams(location.search);
+  const net = params.has('solo') ? undefined : opts?.net;
+  const guest = net?.role === 'guest';
   const solo = params.has('solo');
-  const PLAYERS = solo ? (['p0'] as const) : (['p0', 'p1'] as const);
+  /** 이 시도의 요정들(1인 연습 하나, 한 기기 둘, 여러 기기는 방장이 시작할 때 정한 2~4명) */
+  const PLAYERS: readonly string[] = solo ? ['p0'] : net ? net.slots : ['p0', 'p1'];
+  /** 이 기기가 움직이는 요정 */
+  const ME = net?.me ?? 'p0';
   const touchDevice = window.matchMedia?.('(pointer: coarse)').matches ?? false;
   const low = params.get('quality') === 'low';
   const light = createWinterLight(scene, renderer, { shadows: !low && !params.has('noshadow'), mapSize: touchDevice ? 1024 : 2048 });
@@ -171,7 +179,8 @@ export function startChapter4(models: Models, opts?: StoryOptions): void {
 
   // 1인 연습 저장은 본편과 따로
   const roomId = solo ? 'practice-ch4' : sto.roomId;
-  const run = new LocalRun(new CheckpointStore(browserStorage()), hud, roomId, 'p0', sto.story ? undefined : chapter4Checkpoint(roomId));
+  const makeRun = () => new LocalRun(new CheckpointStore(browserStorage()), hud, roomId, 'p0', sto.story ? undefined : chapter4Checkpoint(roomId));
+  const run: TeamRun = net ? net.bindRun(hud, makeRun) : makeRun();
   run.attachVisibility(document);
   const fresh = () => (solo ? createPractice('p0') : createChapter4(PLAYERS));
   run.onEffect((e) => {
@@ -190,6 +199,11 @@ export function startChapter4(models: Models, opts?: StoryOptions): void {
   if (wantIntro) sto.markIntro(run.state.runId, 4);
   if (!wantIntro) begin();
   let lastProgress = '';
+  // 여러 기기: 끊긴 요정은 멈추고 들던 것을 놓는다(발전기 손잡이도) / 참가자는 방장 사건으로 소리·연출을 시작한다
+  net?.onPresence((id, on) => (state = on ? playerBack(state, id) : playerGone(state, id)));
+  net?.onEvents((evs) => {
+    for (const e of evs as Ch4Event[]) onEvent(e);
+  });
 
   // 요정
   const elves = PLAYERS.map((_, i) => {
@@ -531,6 +545,10 @@ export function startChapter4(models: Models, opts?: StoryOptions): void {
     const frame = Math.min(raw, 0.25);
     if (introT !== -2) {
       run.frame(now);
+      if (guest) {
+        net!.sendIntent(IDLE_INTENT);
+        state = net!.remote<Ch4State>() ?? state;
+      }
       elapsed += frame;
       controls.update('none');
       updateIntro(frame);
@@ -540,24 +558,29 @@ export function startChapter4(models: Models, opts?: StoryOptions): void {
     run.frame(now);
     const live = run.canPlay;
     const i1 = mergeIntents(k1.sample(), controls.touch.sample());
-    const i2 = k2.sample();
-    let inputs: Record<string, SewingInput> = live ? (solo ? { p0: toSewingInput(i1) } : { p0: toSewingInput(i1), p1: toSewingInput(i2) }) : { p0: idle, p1: idle };
+    if (guest) {
+      // 참가자: 입력만 보내고 방장 상태를 그린다
+      net!.sendIntent(live ? i1 : IDLE_INTENT);
+      state = net!.remote<Ch4State>() ?? state;
+      // 사건을 놓쳤어도(잠깐 끊김) 방장 상태로 끝 장면을 시작한다
+      if (state.complete && ending < 0) onEvent({ type: 'complete' } as Ch4Event);
+      elapsed += frame;
+      acc = 0;
+      draw(frame);
+      return;
+    }
+    let inputs: Record<string, SewingInput> = net
+      ? net.inputs(i1, live)
+      : live
+        ? solo
+          ? { p0: toSewingInput(i1) }
+          : { p0: toSewingInput(i1), p1: toSewingInput(k2.sample()) }
+        : { p0: idle, p1: idle };
     while (acc >= SIM_DT) {
       const r = step(state, inputs, SIM_DT);
       state = r.state;
-      for (const e of r.events) {
-        events.push(e);
-        if (e.type === 'pick' || e.type === 'drop') actAt.set(e.playerId, elapsed);
-        if (e.type === 'plugged') flashAt[e.color] = elapsed;
-        if (e.type === 'wrong' || e.type === 'needPower') wrongAt = elapsed;
-        if (e.type === 'entered' && !reduceMotion) reveal = REVEAL.sec;
-        // 시간 초과: 가벼운 실수(스위치 쌍만 풀린다, 시계·전선·충전 유지)
-        if (e.type === 'timeout') run.dispatch({ type: 'lightFail', at: performance.now() });
-        if (e.type === 'complete' && ending < 0) {
-          run.dispatch({ type: 'completeChapter', at: performance.now(), chapterId: 4 });
-          ending = 0;
-        }
-      }
+      for (const e of r.events) onEvent(e);
+      net?.emit(r.events);
       inputs = Object.fromEntries(Object.entries(inputs).map(([k, v]) => [k, { ...v, actionDown: false }]));
       acc -= SIM_DT;
       elapsed += SIM_DT;
@@ -571,8 +594,23 @@ export function startChapter4(models: Models, opts?: StoryOptions): void {
         for (const [k, v] of Object.entries(prog)) if (run.state.progress[k] !== v) run.dispatch({ type: 'setProgress', at: performance.now(), key: k, value: v });
       }
     }
+    net?.publish(4, state);
     draw(frame);
   });
+
+  function onEvent(e: Ch4Event): void {
+    events.push(e);
+    if (e.type === 'pick' || e.type === 'drop') actAt.set(e.playerId, elapsed);
+    if (e.type === 'plugged') flashAt[e.color] = elapsed;
+    if (e.type === 'wrong' || e.type === 'needPower') wrongAt = elapsed;
+    if (e.type === 'entered' && !reduceMotion) reveal = REVEAL.sec;
+    // 시간 초과: 가벼운 실수(스위치 쌍만 풀린다, 시계·전선·충전 유지)
+    if (e.type === 'timeout') run.dispatch({ type: 'lightFail', at: performance.now() });
+    if (e.type === 'complete' && ending < 0) {
+      run.dispatch({ type: 'completeChapter', at: performance.now(), chapterId: 4 });
+      ending = 0;
+    }
+  }
 
   function draw(frame: number): void {
     const kf = 1 - Math.exp(-frame * 22);
@@ -591,7 +629,7 @@ export function startChapter4(models: Models, opts?: StoryOptions): void {
       else e.act?.(null);
       e.root.updateMatrixWorld(true);
       const a = run.canPlay && ending < 0 ? planAction(state, p.id) : ({ kind: 'none' } as const);
-      if (i === 0) mine = a;
+      if (p.id === ME) mine = a;
       const pr = pickRings[i]!;
       const tgt = a.kind === 'pick' ? state.items.find((q) => q.id === a.itemId) : null;
       pr.visible = !!tgt;
@@ -599,7 +637,7 @@ export function startChapter4(models: Models, opts?: StoryOptions): void {
       pr.scale.setScalar(0.8 + Math.sin(elapsed * 6) * 0.05);
       // 전선 끝을 들고 있으면 같은 표시 단자 발밑에 고리(어디에 끼울지)
       const c = held?.id.startsWith('plug-') ? (held.id.slice(5) as WireColor) : null;
-      if (c && i === 0) {
+      if (c && p.id === ME) {
         const tp = W(TERMINALS[c].s, TERMINALS[c].t);
         socketRing.visible = true;
         (socketRing.material as THREE.MeshBasicMaterial).color.set(WIRE_HEX[c]);
@@ -733,7 +771,7 @@ export function startChapter4(models: Models, opts?: StoryOptions): void {
     if (!endElves) endElves = state.players.map((p) => toLane(shown.get(p.id) ?? p));
     elves.forEach((e, i) => {
       const from = endElves![i]!;
-      const hide = lane(TREE.s + 3.4, TREE.t + (i === 0 ? -0.9 : 0.9));
+      const hide = lane(TREE.s + 3.4 + (i >= 2 ? 0.9 : 0), TREE.t + [-0.9, 0.9, -1.7, 1.7][i % 4]!);
       const k = ezf(seg(t, E.elvesHide));
       const p = mixL(from, hide, k);
       const w = W(p.s, p.t);
@@ -814,6 +852,13 @@ export function startChapter4(models: Models, opts?: StoryOptions): void {
       ch4Events: () => events.map((e) => ({ ...e })),
       run: () => ({ ...run.state }),
       ending: () => ending,
+      /** 시험(여러 기기 이어 붙이기): 방장이 이 장을 바로 마친 것으로(사건을 참가자에게도 보낸다) */
+      debugWin: () => {
+        const e = { type: 'complete' } as Ch4Event;
+        state = { ...state, complete: true };
+        onEvent(e);
+        net?.emit([e]);
+      },
       endBeat: () => (ending >= 0 ? treeEndBeat(ending) : null),
       seekEnding: (t: number) => {
         if (ending >= 0) ending = t;
