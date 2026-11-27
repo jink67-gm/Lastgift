@@ -48,7 +48,7 @@ void Models.load().then(async (models) => {
     const emu = q.has('emu');
     const keep = ['emu', 'test', 'noshadow'].filter((k) => q.has(k)).map((k) => `&${k}`).join('');
     const start = q.has('host')
-      ? await hostTeam({ emu, mode: chapter === null ? 'story' : `ch${chapter}`, inviteSearch: (code) => `?join=${code}${keep}` })
+      ? await hostTeam({ emu, mode: chapter === null ? 'story' : `ch${chapter}`, inviteSearch: (code) => `?join=${code}${keep}`, fresh: q.has('new') })
       : await joinTeam(normalizeRoomCode(q.get('join') ?? ''), emu);
     if (!start) return;
     const story = chapter === null;

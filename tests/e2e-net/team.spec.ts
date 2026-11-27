@@ -375,3 +375,42 @@ test('느린 참가자 기기(CPU 2배 느리게·보통 품질, 초당 몇 화�
   // 고치기 전: 화면 사이가 0.2초를 넘으면 입력을 빈 것으로 보내 0 m. 이 컨테이너에서는 초당 1~2 화면이라 조금만 간다
   expect(Math.hypot(b.x - a.x, b.z - a.z)).toBeGreaterThan(0.2);
 });
+
+test('다음 수업: 같은 방장 기기에서 ?host&new → 지난 방이 아닌 새 방·새 시도, 주소에서 new가 빠져 장을 넘겨도 그 방 그대로', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const first = await openHost(browser, '?host');
+  const guest = await openGuest(browser, first.code);
+  await waitOpen(first.page, 2);
+  expect(await net<boolean>(first.page, 'start')).toBe(true);
+  await onPage(first.page, 0);
+  const oldRun = (await game<RunLite>(first.page, 'run')).runId;
+  await first.page.close();
+  await guest.ctx.close();
+
+  // 같은 기기(같은 저장소)에서 「새 방」
+  const page = await first.ctx.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto(`/?host&new${FLAGS}`);
+  await hasNet(page, 'roomCode');
+  const code = await net<string>(page, 'roomCode');
+  expect(code).not.toBe(first.code);
+  expect(new URL(page.url()).searchParams.has('new')).toBe(false);
+  // 새 방은 아직 시작 전: 새 학생이 들어올 수 있다
+  const g2 = await openGuest(browser, code);
+  await waitOpen(page, 2);
+  expect(await net<boolean>(page, 'start')).toBe(true);
+  await onPage(page, 0);
+  const run = await game<RunLite>(page, 'run');
+  expect(run.roomId).toBe(`net-${code}`);
+  expect(run.runId).not.toBe(oldRun);
+  // 장을 넘겨 페이지가 다시 읽혀도(주소에 new 없음) 같은 방
+  const reload = page.waitForEvent('load', { timeout: 60_000 });
+  await game(page, 'debugWin');
+  await reload;
+  await hasNet(page, 'roomCode');
+  expect(await net<string>(page, 'roomCode')).toBe(code);
+  await onPage(page, 1);
+  await onPage(g2.page, 1);
+  expect(errors).toEqual([]);
+});

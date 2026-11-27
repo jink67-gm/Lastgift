@@ -101,6 +101,8 @@ export interface TeamOptions {
   mode: string;
   /** 초대 링크에 붙일 주소 */
   inviteSearch: (code: string) => string;
+  /** 지난 방을 잇지 않고 새 방(수업마다: `?host&new`). 장이 넘어가며 페이지를 다시 읽어도 또 새 방이 되지 않게 주소에서 지운다 */
+  fresh?: boolean;
 }
 
 /** 첫 화면 이후 장을 열 때 필요한 것: 어느 장(page)을, 어떤 연결로 */
@@ -629,10 +631,15 @@ export async function hostTeam(o: TeamOptions): Promise<TeamStart | null> {
   }
   let code: string;
   try {
-    code = saved && (await sig.resumeRoom(saved.code)) ? saved.code : await sig.createRoom();
+    code = saved && !o.fresh && (await sig.resumeRoom(saved.code)) ? saved.code : await sig.createRoom();
   } catch {
     lobby.showMessage('방을 만들지 못했어요. 잠시 뒤 다시 해 주세요.', true);
     return null;
+  }
+  if (o.fresh) {
+    const u = new URL(location.href);
+    u.searchParams.delete('new');
+    history.replaceState(history.state, '', u);
   }
   const same = saved?.code === code;
   const seats = new Map<string, Slot>(same ? saved!.seats : []);

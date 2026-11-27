@@ -7,7 +7,7 @@
 
 | 기기 | 주소 | 입력 |
 |---|---|---|
-| 방장(선생님 노트북 또는 학생 기기 하나) | https://jink67-gm.github.io/Lastgift/?host | 키보드 WASD + E |
+| 방장(선생님 노트북 또는 학생 기기 하나) | https://jink67-gm.github.io/Lastgift/?host&new (수업마다 새 방, `docs/TEACHER_GUIDE.md`) | 키보드 WASD + E |
 | 참가자 1~3대 | 방장 화면의 초대 링크(또는 `?join=코드`) | 노트북·웨일북은 키보드, 태블릿은 왼쪽 스틱 + 오른쪽 행동 단추 |
 
 - 시작 전에 기기마다 오른쪽 위 톱니 → **기록 → 지우기**(지난 시험 기록을 비운다).
