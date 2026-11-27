@@ -1,0 +1,58 @@
+<!-- 시제품(게임 코드 아님): 꼬마 요정 에셋(createLittleElf)을 상태별로 나란히. 예전 미니 요정과 키 비교.
+     npx vite --port 5199 → /tools/prototypes/little-elf.html?view=front|game -->
+<!doctype html><html><body style="margin:0;background:#dfe7f4"><canvas id=c></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { Models } from '/src/scene/models.ts';
+import { createLittleElf } from '/src/scene/littleElf.ts';
+import { createMiniElf } from '/src/scene/miniElf.ts';
+import { createGift } from '/src/scene/gifts.ts';
+import { giftScale } from '/src/scene/hold.ts';
+import { placeOnHands } from '/src/scene/hold.ts';
+import { ELF_LOOKS } from '/src/data/elves.ts';
+const q = new URLSearchParams(location.search);
+const r = new THREE.WebGLRenderer({ canvas: c, antialias: true }); r.setSize(1600, 600); r.setPixelRatio(1);
+const s = new THREE.Scene(); s.background = new THREE.Color('#dfe7f4');
+s.add(new THREE.HemisphereLight('#fff', '#8a93a8', 2.2)); const d = new THREE.DirectionalLight('#fff4e0', 1.6); d.position.set(-3, 8, 7); s.add(d);
+const models = await Models.load(['elf', 'littleElf'], '/');
+const T = Number(q.get('t') || 0.35);
+// [제목, 요정 번호, 움직임, 자세, 연출, 고개]
+const rows = [
+  ['서 있기', 0, false, { carry: 'none', act: 0, tired: false }, null, 0],
+  ['걷기', 1, true, { carry: 'none', act: 0, tired: false }, null, 0],
+  ['선물 들기', 2, false, { carry: 'light', act: 0, tired: false, span: 0.4 }, null, 0],
+  ['들고 걷기', 3, true, { carry: 'light', act: 0, tired: false, span: 0.4 }, null, 0],
+  ['함께 들기', 0, true, { carry: 'heavy', act: 0, tired: false }, null, 0],
+  ['집기(손 뻗기)', 1, false, { carry: 'none', act: 0.5, tired: false }, null, 0],
+  ['손 흔들기', 2, false, { carry: 'none', act: 0, tired: false }, 'Wave', 0],
+  ['손잡이 돌리기', 3, false, { carry: 'none', act: 0, tired: false }, 'Interact', 0],
+  ['물림', 0, false, { carry: 'none', act: 0, tired: false }, 'HitRecieve', 0],
+  ['넘어짐', 1, false, { carry: 'none', act: 0, tired: false }, 'Death', 0],
+  ['고개 숙이기', 2, false, { carry: 'none', act: 0, tired: false }, null, 1],
+  ['던지기', 3, false, { carry: 'none', act: 0, tired: false }, 'Throw', 0],
+];
+const cf = { pos: new THREE.Vector3(), quat: new THREE.Quaternion() };
+const elves = rows.map(([, i, mv, pose, act, look], k) => {
+  const e = createLittleElf(models, ELF_LOOKS[i]);
+  e.root.position.x = -7.15 + k * 1.3;
+  e.root.rotation.y = q.get('view') === 'side' ? Math.PI / 2 : 0;
+  s.add(e.root);
+  if (act) e.act(act, { once: act === 'HitRecieve' || act === 'Death' });
+  e.look(look);
+  let gift = null;
+  if (pose.carry === 'light') { gift = createGift('ball'); gift.scale.setScalar(giftScale('ball', 1)); s.add(gift); }
+  return { e, mv, pose, gift };
+});
+// 키 비교: 예전 미니 요정
+const old = createMiniElf(models, ELF_LOOKS[0]); if (old) { old.root.position.x = 8.45; s.add(old.root); }
+for (let f = 0; f <= Math.round(T * 60); f++) {
+  for (const x of elves) { x.e.animate(f / 60, x.mv, x.pose); }
+  old?.animate(f / 60, false);
+}
+for (const x of elves) if (x.gift) { x.e.root.updateMatrixWorld(true); placeOnHands(x.gift, x.e.carryFrame(cf.pos, cf.quat) ? cf : null, { x: x.e.root.position.x, z: 0, yaw: x.e.root.rotation.y }, 1); }
+const cam = new THREE.PerspectiveCamera(38, 1600 / 600, 0.1, 200);
+if (q.get('view') === 'game') { cam.position.set(0.65, 6, 8); cam.lookAt(0.65, 0.5, 0); } else { cam.position.set(0.65, 0.9, 9.5); cam.lookAt(0.65, 0.7, 0); }
+window.__info = elves.map((x, k) => { const p = new THREE.Vector3(), qq = new THREE.Quaternion(); x.e.root.updateMatrixWorld(true); x.e.carryFrame(p, qq); return [rows[k][0], +p.y.toFixed(3)]; });
+r.render(s, cam);
+window.__ready = true;
+</script></body></html>

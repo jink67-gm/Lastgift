@@ -1,0 +1,26 @@
+<!-- 시제품(게임 코드 아님): 사용자 요정 에셋(LittleElf.glb) 원본 보기. ?clip=Walk&t=0.3&cam=front -->
+<!doctype html><html><body style="margin:0;background:#cfd8e6"><script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
+const q = new URLSearchParams(location.search);
+const r = new THREE.WebGLRenderer({ antialias: true });
+r.setSize(1200, 600); document.body.appendChild(r.domElement);
+const s = new THREE.Scene(); s.background = new THREE.Color('#cfd8e6');
+s.add(new THREE.HemisphereLight('#ffffff', '#667', 2)); const d = new THREE.DirectionalLight('#fff', 2); d.position.set(2, 4, 3); s.add(d);
+const cam = new THREE.PerspectiveCamera(30, 2, 0.01, 50);
+const front = q.get('cam') !== 'side';
+cam.position.set(front ? 0 : 1.6, 0.35, front ? 2.2 : 1.4); cam.lookAt(0, 0.24, 0);
+const g = await new GLTFLoader().loadAsync('/models/custom/little-elf.glb');
+const cols = ['#d23a3a', '#2f6fd0', '#2f9a4a', '#e0b021'];
+const clip = g.animations.find((a) => a.name === (q.get('clip') || 'Idle'));
+window.__info = { anims: g.animations.map((a) => a.name), meshes: [] };
+cols.forEach((c, i) => {
+  const m = SkeletonUtils.clone(g.scene);
+  m.position.x = (i - 1.5) * 0.32;
+  m.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); window.__info.meshes.push([o.name, o.material.name, o.material.vertexColors]); if (o.material.name.startsWith('TeamCloth')) o.material.color.set(c); } });
+  s.add(m);
+  const mx = new THREE.AnimationMixer(m); if (clip) { mx.clipAction(clip).play(); mx.update(Number(q.get('t') || 0.3)); }
+});
+r.render(s, cam); window.__ready = true;
+</script></body></html>

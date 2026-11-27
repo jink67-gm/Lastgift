@@ -9,6 +9,8 @@ export const KENNEY_SCALE = 2;
 
 export const MODEL_FILES = {
   elf: 'quaternius/hooded-adventurer.glb',
+  // 꼬마 요정: 사용자가 준 에셋(뼈대·동작 포함). 있으면 이것을 쓰고, 없으면 위 미니 요정·기본 도형
+  littleElf: 'custom/little-elf.glb',
   // 콩이(유기견): Quaternius Shiba Inu(CC0). 다시 칠하고 줄여 쓴다
   dog: 'quaternius/shiba-inu.glb',
   // 산타: 사용자가 준 에셋(Idle·ReceiveGift 동작 포함)

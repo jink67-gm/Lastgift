@@ -24,7 +24,7 @@ const PAINT: Record<string, Record<string, string | null>> = {
   Medieval_Feet: { LightBrown: '#f4f1ea', DarkBrown: '#2f7a3e' }, // 흰·초록 긴 양말(장화는 따로 신긴다)
 };
 
-function hatTexture(base: string, pattern: HatPattern, accent: string): THREE.CanvasTexture {
+export function hatTexture(base: string, pattern: HatPattern, accent: string): THREE.CanvasTexture {
   const n = 256;
   const cv = document.createElement('canvas');
   cv.width = cv.height = n;

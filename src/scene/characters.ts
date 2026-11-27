@@ -3,6 +3,7 @@
 // 도토는 요정과 같은 뼈대 모델(Quaternius Hooded Adventurer, CC0)을 비율·색·소품만 바꿔 쓴다(같은 그림체, 같은 동작 이름).
 // 콩이는 Quaternius Shiba Inu(CC0)를 다시 칠하고 줄였다. 모델이 없으면 기본 도형으로 대신한다. 판정과 무관.
 import * as THREE from 'three';
+import { createLittleElf } from './littleElf';
 import { createElf, type ElfView } from './elf';
 import { createRigged, elfBuild, pointyHat, type RigBuild, type RigCtx } from './miniElf';
 import type { Models } from './models';
@@ -181,7 +182,9 @@ const DOTO_BUILD: RigBuild = {
 };
 
 export function createDoto(models: Models): ElfView {
-  return createRigged(models, DOTO_BUILD) ?? createElf({ slot: 0, hat: '#7a4a2a', pattern: 'checks', accent: '#d07a2a' });
+  // 꼬마 요정 에셋이 있으면 같은 그림체로(갈색 체크 모자 = 정비공), 없으면 예전 미니 요정 꾸밈 → 기본 도형
+  const look = { slot: 0, hat: '#7a4a2a', pattern: 'checks', accent: '#d07a2a' } as const;
+  return createLittleElf(models, look) ?? createRigged(models, DOTO_BUILD) ?? createElf(look);
 }
 
 // ── 콩이(유기견) ─────────────────────────────────────────
