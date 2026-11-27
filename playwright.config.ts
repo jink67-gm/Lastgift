@@ -27,6 +27,12 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], viewport: { width: 1366, height: 768 }, launchOptions: { args: swiftshader } },
     },
     {
+      // 장면 점검용 촬영(docs/screens/review/). 시험이 아니라 사람이 보는 화면 모음
+      name: 'review',
+      testDir: 'tests/review',
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 720 }, launchOptions: { args: swiftshader } },
+    },
+    {
       name: 'net',
       testDir: 'tests/e2e-net',
       use: {
