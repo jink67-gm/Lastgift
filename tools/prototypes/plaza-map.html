@@ -1,0 +1,36 @@
+<!-- 시제품(게임 코드 아님): 0장 광장을 위에서 본 지도(배치 검토용) + 게임 카메라 구도. ?view=top|game|wide -->
+<!doctype html><html><body style="margin:0;background:#111"><script type="module">
+import * as THREE from 'three';
+import { Models } from '/src/scene/models.ts';
+import { createPlaza } from '/src/scene/plaza.ts';
+import { createMarkers } from '/src/scene/chapter0.ts';
+import { MARKERS, SORT_GIFTS, CH0 } from '/src/data/chapter0.ts';
+import { PLAZA_BOUNDS } from '/src/data/plaza.ts';
+const q = new URLSearchParams(location.search);
+const view = q.get('view') || 'top';
+const W = 1400, H = view === 'top' ? 1000 : 788;
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(W, H); r.setPixelRatio(1); document.body.appendChild(r.domElement);
+const s = new THREE.Scene(); s.background = new THREE.Color('#9fb3cf');
+s.add(new THREE.HemisphereLight('#ffffff', '#8a93a8', 2.0)); const d = new THREE.DirectionalLight('#fff4e0', 1.6); d.position.set(-6, 14, 8); s.add(d);
+const models = await Models.load(undefined, '/');
+s.add(createPlaza(models));
+const mk = createMarkers(); s.add(mk.root);
+// 겹쳐 그리기: 플레이 경계(빨강), 표식(원), 선물(점), 시작 자리(초록), 재봉틀(갈색)
+const line = (pts, color) => { const g = new THREE.BufferGeometry().setFromPoints(pts.map((p) => new THREE.Vector3(p.x, 0.15, p.z))); s.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color }))); };
+const B = PLAZA_BOUNDS; line([{ x: B.minX, z: B.minZ }, { x: B.maxX, z: B.minZ }, { x: B.maxX, z: B.maxZ }, { x: B.minX, z: B.maxZ }, { x: B.minX, z: B.minZ }], '#e03030');
+const dot = (x, z, color, rad = 0.5) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad, 0.2, 20), new THREE.MeshBasicMaterial({ color })); m.position.set(x, 0.2, z); s.add(m); };
+for (const g of SORT_GIFTS) dot(g.x, g.z, '#ff00cc', 0.45);
+for (const p of CH0.spawns) dot(p.x, p.z, '#00c853', 0.4);
+dot(CH0.crateStart.x, CH0.crateStart.z, '#8d5524', 0.7);
+let cam;
+if (view === 'top') { cam = new THREE.OrthographicCamera(-35, 35, 25, -25, 0.1, 400); cam.position.set(0, 120, 0); cam.up.set(0, 0, -1); cam.lookAt(0, 0, 0); }
+else {
+  // 게임 카메라: 남동쪽 위(yaw 45°, pitch 30°)
+  const yaw = Math.PI / 4, pitch = (30 * Math.PI) / 180, vh = view === 'wide' ? 34 : 16;
+  cam = new THREE.OrthographicCamera((-vh * W / H) / 2, (vh * W / H) / 2, vh / 2, -vh / 2, 0.1, 500);
+  const t = view === 'wide' ? new THREE.Vector3(0, 0, -2) : new THREE.Vector3(3, 0, 2);
+  cam.position.copy(t).add(new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)).multiplyScalar(80));
+  cam.lookAt(t);
+}
+r.render(s, cam); window.__ready = true;
+</script></body></html>
