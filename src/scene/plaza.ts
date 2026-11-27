@@ -1,6 +1,7 @@
 // 광장 소품. Kenney 모델(CC0)이 있으면 그것으로, 없으면 기본 도형으로 그린다. 배치는 src/data/plaza.ts를 따른다.
 // 썰매·눈더미·산타·시계탑은 아직 직접 만든 기본 도형이다.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { PLAZA_BOUNDS, PLAZA_PROPS, PLAZA_R, WORKBENCH, WORKSHOP, type Prop, type PropKind } from '../data/plaza';
 
 /** 요정을 가리면 잠시 흐려지는 큰 물체(집·공방·창고·나무·시계탑·썰매·산타·가로등) */
@@ -103,16 +104,20 @@ function house(w: number, d: number): THREE.Group {
 function treeBed(r: number): THREE.Group {
   const g = new THREE.Group();
   const stone = new THREE.MeshStandardMaterial({ color: '#a8a39a', roughness: 0.95 });
+  // 돌 28개를 한 덩어리로(그리기 호출 1번)
   const n = 28;
+  const parts: THREE.BufferGeometry[] = [];
+  const m4 = new THREE.Matrix4();
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2;
-    const b = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.42, ((Math.PI * 2 * r) / n) * 0.96), stone);
-    b.position.set(Math.cos(a) * (r - 0.25), 0.21, Math.sin(a) * (r - 0.25));
-    b.rotation.y = -a;
-    b.castShadow = true;
-    b.receiveShadow = true;
-    g.add(b);
+    const geo = new THREE.BoxGeometry(0.55, 0.42, ((Math.PI * 2 * r) / n) * 0.96);
+    geo.applyMatrix4(m4.makeRotationY(-a).setPosition(Math.cos(a) * (r - 0.25), 0.21, Math.sin(a) * (r - 0.25)));
+    parts.push(geo);
   }
+  const stones = new THREE.Mesh(mergeGeometries(parts)!, stone);
+  stones.castShadow = true;
+  stones.receiveShadow = true;
+  g.add(stones);
   // 돌 위·흙 위의 눈
   const snow = new THREE.MeshStandardMaterial({ color: '#f6f8fc', roughness: 1 });
   const cap = new THREE.Mesh(new THREE.TorusGeometry(r - 0.25, 0.2, 6, 40), snow);
@@ -199,7 +204,7 @@ export function townLamp(): THREE.Group {
   return g;
 }
 
-function build(p: Prop, models: Models, lampLights: { n: number }): THREE.Object3D {
+function build(p: Prop, models: Models, lampLights: { n: number; max: number }): THREE.Object3D {
   switch (p.kind) {
     case 'sleigh': return scaled(sleigh(), 1.8); // 산타 썰매: 산타(사람 어른)가 앉을 크기
     case 'snowPile': return scaled(snowPile(2.2), ((p.r ?? 2.2) / 2.2) * 1.25); // 썰매 앞이 처박힌 눈둑
@@ -233,8 +238,8 @@ function build(p: Prop, models: Models, lampLights: { n: number }): THREE.Object
       const pool = warmPool(1.6);
       pool.position.y = 0.003;
       g.add(pool);
-      // 빛은 세 개까지만(저사양 기기). 높아진 등불에서 바닥까지 닿게
-      if (lampLights.n++ < 3) {
+      // 빛은 세 개까지만, 낮음 품질에서는 없음(점광원이 0장 낮음 FPS를 가장 많이 깎았다: 5.9 → 11.4). 바닥 빛 웅덩이는 남긴다
+      if (lampLights.n++ < lampLights.max) {
         const light = new THREE.PointLight('#ffd98a', 14, 13, 1.6);
         light.position.y = TOWN.lampLight;
         g.add(light);
@@ -281,7 +286,7 @@ export function createPlaza(models: Models = Models.none(), detail: Detail = 'no
   void applySnowSurface([{ mat: groundMat, w, d }, { mat: apronMat, w: w + 80, d: d + 80 }], import.meta.env.BASE_URL, detail);
   root.add(createPlazaDressing(models, import.meta.env.BASE_URL, detail));
 
-  const lampLights = { n: 0 };
+  const lampLights = { n: 0, max: detail === 'low' ? 0 : 3 };
   for (const p of PLAZA_PROPS) {
     const o = build(p, models, lampLights);
     o.position.x = p.x;

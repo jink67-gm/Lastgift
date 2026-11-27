@@ -87,12 +87,16 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
   const touchDevice = window.matchMedia?.('(pointer: coarse)').matches ?? false;
   const low = params.get('quality') === 'low';
   const light = createWinterLight(scene, renderer, { shadows: !low && !params.has('noshadow'), mapSize: touchDevice ? 1024 : 2048 });
-  const plaza = createPlaza(models, low ? 'low' : 'normal');
+  const lowScene = low || loadSettings(browserStorage()).quality === 'low';
+  const plaza = createPlaza(models, lowScene ? 'low' : 'normal');
   setShadows(plaza, true);
   scene.add(plaza);
-  // 광장 너머: 1·3·4장과 같은 산·숲·하늘(광장과 둘레 집, 사진기 쪽 남동은 비운다)
-  scene.add(createBackdrop(models, { center: { x: 0, z: 0 }, forest: [16, 95], trees: 420, keepOut: (p) => Math.hypot(p.x, p.z) < 32 || (p.x + p.z > 10 && Math.hypot(p.x, p.z) < 70) }));
-  addHaze(scene);
+  // 광장 너머: 1·3·4장과 같은 산·숲·하늘(광장과 둘레 집, 사진기 쪽 남동은 비운다).
+  // 낮음: 광장은 집으로 둘러싸여 하늘이 조금만 보인다 → 먼 배경을 빼서 가볍게(낮음 0장 FPS가 반으로 떨어졌다)
+  if (!lowScene) {
+    scene.add(createBackdrop(models, { center: { x: 0, z: 0 }, forest: [16, 95], trees: 260, keepOut: (p) => Math.hypot(p.x, p.z) < 32 || (p.x + p.z > 10 && Math.hypot(p.x, p.z) < 70) }));
+    addHaze(scene);
+  }
   // 기본 도형 산타는 숨기고 에셋 산타를 쓴다. 썰매는 도토가 고쳐 바로 서 있다
   const plainSanta = plaza.getObjectByName('santa');
   if (plainSanta) plainSanta.visible = false;

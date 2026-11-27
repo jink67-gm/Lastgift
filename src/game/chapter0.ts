@@ -88,12 +88,16 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
   // ?quality=low: 실시간 그림자·눈결·노멀맵을 뺀다(길·표식·골목은 색으로 그대로 보인다)
   const low = params.get('quality') === 'low';
   const light = createWinterLight(scene, renderer, { shadows: !low && !params.has('noshadow'), mapSize: touchDevice ? 1024 : 2048 });
-  const plaza = createPlaza(models, low ? 'low' : 'normal');
+  const lowScene = low || loadSettings(browserStorage()).quality === 'low';
+  const plaza = createPlaza(models, lowScene ? 'low' : 'normal');
   setShadows(plaza, true);
   scene.add(plaza);
-  // 광장 너머: 1·3·4장과 같은 산·숲·하늘(광장과 둘레 집, 사진기 쪽 남동은 비운다)
-  scene.add(createBackdrop(models, { center: { x: 0, z: 0 }, forest: [16, 95], trees: 420, keepOut: (p) => Math.hypot(p.x, p.z) < 32 || (p.x + p.z > 10 && Math.hypot(p.x, p.z) < 70) }));
-  addHaze(scene);
+  // 광장 너머: 1·3·4장과 같은 산·숲·하늘(광장과 둘레 집, 사진기 쪽 남동은 비운다).
+  // 낮음: 광장은 집으로 둘러싸여 하늘이 조금만 보인다 → 먼 배경을 빼서 가볍게(낮음 0장 FPS가 반으로 떨어졌다)
+  if (!lowScene) {
+    scene.add(createBackdrop(models, { center: { x: 0, z: 0 }, forest: [16, 95], trees: 260, keepOut: (p) => Math.hypot(p.x, p.z) < 32 || (p.x + p.z > 10 && Math.hypot(p.x, p.z) < 70) }));
+    addHaze(scene);
+  }
   const markers = createMarkers();
   scene.add(markers.root);
   // 썰매에서 떨어진 물건이 미끄러진 자국: 자국 끝에 주울 물건이 있다
@@ -579,6 +583,8 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
       sortEvents: () => events.map((e) => JSON.parse(JSON.stringify(e))),
       run: () => ({ ...run.state }),
       playLog: () => meter.current(),
+      /** 점검(시험만): 장면 직접(무엇이 무거운지 하나씩 숨겨 재기) */
+      scene: () => scene,
       runEffects: () => run.log.map((e) => e.type),
       savedCheckpoint: () => localStorage.getItem('lastgift.cp.v1.dev-ch0'),
       /** 화면 비교 촬영용: 지금 카메라(바라보는 땅 위 점, 화면 높이 m, 각도) */

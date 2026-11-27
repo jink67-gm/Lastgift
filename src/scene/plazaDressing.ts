@@ -5,6 +5,7 @@
 //   Poly Haven Snow 02 · Cobblestone Floor 001(512 px로 줄이고 대비를 낮춤), Tiny Treats Homely House(집·울타리·우편함).
 // 텍스처나 모델을 못 불러와도 색과 기본 도형으로 길·골목이 보인다. 저사양(detail: 'low')은 눈결·노멀맵을 뺀다.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { PLAZA_DRESSING, PLAZA_PROPS, WORKSHOP, type Prop } from '../data/plaza';
 import { FENCE_SCALE, KENNEY_HOUSE_SCALE, MAILBOX_SCALE, TOWN } from '../data/townScale';
@@ -571,26 +572,26 @@ function ringBerm(): THREE.Group {
 /** 돌 포장 무늬: 트리를 둘러싼 동심원 줄눈(눈 사이로 살짝 보이는 회색 돌 테) */
 function pavingRings(): THREE.Group {
   const g = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: '#d6d2ca', roughness: 1, transparent: true, opacity: 0.55, depthWrite: false });
-  for (const r of [4.4, 8.8, 12.4]) {
-    const m = new THREE.Mesh(new THREE.RingGeometry(r - 0.09, r + 0.09, 96), mat);
-    m.rotation.x = -Math.PI / 2;
-    m.position.y = 0.004;
-    m.userData.flat = true;
-    g.add(m);
-  }
-  // 바퀴살 줄눈(8방향, 안쪽 고리 ~ 바깥 고리)
+  // 불투명(겹쳐 그리기 비용 없이): 바닥 눈빛과 섞인 옅은 회색
+  const mat = new THREE.MeshStandardMaterial({ color: '#e6e2da', roughness: 1, polygonOffset: true, polygonOffsetFactor: -1 });
+  // 고리 셋 + 바퀴살 열여섯을 한 덩어리로(그리기 호출 1번)
+  const parts: THREE.BufferGeometry[] = [];
+  const flat = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
+  for (const r of [4.4, 8.8, 12.4]) parts.push(new THREE.RingGeometry(r - 0.09, r + 0.09, 96).applyMatrix4(flat));
   for (let k = 0; k < 16; k++) {
     const a = (k / 16) * Math.PI * 2 + Math.PI / 16;
-    const len = 12.4 - 4.4;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.14, len), mat);
-    m.rotation.x = -Math.PI / 2;
-    m.rotation.z = -a + Math.PI / 2;
     const r = (12.4 + 4.4) / 2;
-    m.position.set(Math.cos(a) * r, 0.004, Math.sin(a) * r);
-    m.userData.flat = true;
-    g.add(m);
+    const geo = new THREE.PlaneGeometry(0.14, 12.4 - 4.4);
+    geo.applyMatrix4(new THREE.Matrix4().makeRotationZ(-a + Math.PI / 2));
+    geo.applyMatrix4(flat);
+    geo.translate(Math.cos(a) * r, 0, Math.sin(a) * r);
+    parts.push(geo);
   }
+  for (const p of parts) p.deleteAttribute('uv');
+  const m = new THREE.Mesh(mergeGeometries(parts.map((p) => p.toNonIndexed()))!, mat);
+  m.position.y = 0.004;
+  m.userData.flat = true;
+  g.add(m);
   return g;
 }
 
@@ -601,19 +602,20 @@ function cameraSideWall(): THREE.Group {
   const snow = new THREE.MeshStandardMaterial({ color: '#f6f8fc', roughness: 1 });
   const R = PLAZA_DRESSING.ring.r + 0.9;
   const alleys = PLAZA_DRESSING.ring.alleys;
+  // 돌·눈 덮개를 각각 한 덩어리로(그리기 호출 2번)
+  const stones: THREE.BufferGeometry[] = [];
+  const caps: THREE.BufferGeometry[] = [];
+  const m4 = new THREE.Matrix4();
   for (let deg = 26; deg <= 118; deg += 3.2) {
     if (alleys.some((a) => Math.abs(deg - a.deg) < 13)) continue;
     const a = (deg * Math.PI) / 180;
     const len = ((Math.PI * 2 * R) / 360) * 3.2 * 0.96;
-    const b = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.55, len), stone);
-    b.position.set(Math.cos(a) * R, 0.27, Math.sin(a) * R);
-    b.rotation.y = -a;
-    b.castShadow = true;
-    g.add(b);
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.12, len), snow);
-    cap.position.set(Math.cos(a) * R, 0.6, Math.sin(a) * R);
-    cap.rotation.y = -a;
-    g.add(cap);
+    stones.push(new THREE.BoxGeometry(0.5, 0.55, len).applyMatrix4(m4.makeRotationY(-a).setPosition(Math.cos(a) * R, 0.27, Math.sin(a) * R)));
+    caps.push(new THREE.BoxGeometry(0.58, 0.12, len).applyMatrix4(m4.makeRotationY(-a).setPosition(Math.cos(a) * R, 0.6, Math.sin(a) * R)));
+  }
+  if (stones.length) {
+    g.add(new THREE.Mesh(mergeGeometries(stones)!, stone));
+    g.add(new THREE.Mesh(mergeGeometries(caps)!, snow));
   }
   g.traverse((o) => (o.userData.noCast = true));
   return g;

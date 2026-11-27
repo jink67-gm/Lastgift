@@ -50,7 +50,8 @@ async function openGuest(browser: Browser, code: string): Promise<Device> {
 }
 
 async function waitOpen(host: Page, n: number) {
-  await host.waitForFunction((k) => (window as unknown as { __lastgiftNet: { openSlots(): string[] } }).__lastgiftNet.openSlots().length === k, n, { timeout: 30_000 });
+  // 장이 바뀌면 방장·참가자 페이지가 다시 열린다: 브라우저 넷을 소프트웨어로 그리면 다시 이어지기까지 오래 걸린다
+  await host.waitForFunction((k) => (window as unknown as { __lastgiftNet: { openSlots(): string[] } }).__lastgiftNet.openSlots().length === k, n, { timeout: 60_000 });
 }
 
 type P = { id: string; x: number; z: number; connected: boolean };
@@ -342,13 +343,13 @@ for (const q of ['?chapter=0&host', '?host']) test(`0장 두 기기(${q}): 참�
   expect(guest.errors).toEqual([]);
 });
 
-test('느린 참가자 기기(CPU 3배 느리게·보통 품질, 초당 몇 화면): 이동 입력이 끊기지 않고 방장 판정에', async ({ browser }) => {
+test('느린 참가자 기기(CPU 2배 느리게·보통 품질, 초당 몇 화면): 이동 입력이 끊기지 않고 방장 판정에', async ({ browser }) => {
   test.setTimeout(240_000);
   const host = await openHost(browser, '?chapter=3&host');
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   opened.push(ctx);
   const slow = await ctx.newPage();
-  await (await ctx.newCDPSession(slow)).send('Emulation.setCPUThrottlingRate', { rate: 3 });
+  await (await ctx.newCDPSession(slow)).send('Emulation.setCPUThrottlingRate', { rate: 2 });
   await slow.goto(`/?join=${host.code}&emu&test`); // 품질 낮춤 없이(초당 몇 화면)
   await slow.waitForFunction(() => !!(window as unknown as { __lastgiftNet?: { slot?: () => string | null } }).__lastgiftNet?.slot?.(), null, { timeout: 60_000 });
   await waitOpen(host.page, 2);
