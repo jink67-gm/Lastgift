@@ -32,6 +32,8 @@ test('0장 광장 부분별 비용(낮음)', async ({ page }) => {
     ['사람 집', "o.name.startsWith('house-')"],
     ['꾸밈(길·눈둑·돌담·노점·먼 마을)', "o.name === 'plazaDressing'"],
     ['트리', "o.name === 'tree'"],
+    ['화단', "o.name === 'treeBed'"],
+    ['썰매', "o.name === 'sleigh'"],
     ['공방', "o.name === 'workshop'"],
     ['소나무', "o.name.startsWith('pine')"],
     ['시계탑', "o.name === 'clockTower'"],
@@ -41,5 +43,6 @@ test('0장 광장 부분별 비용(낮음)', async ({ page }) => {
     out.push(`${label} 숨김 ${(await fps()).toFixed(1)}`);
     await hide(pred, false);
   }
+  out.push(`전부(다시) ${(await fps()).toFixed(1)}`);
   console.log(out.join('\n'));
 });

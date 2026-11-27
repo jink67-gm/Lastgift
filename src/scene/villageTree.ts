@@ -2,6 +2,7 @@
 // 원판을 쌓은 느낌을 없애려고: 층마다 가지 끝이 들쭉날쭉 처지고, 층 윗면에 눈이 얹히고,
 // 나선으로 감긴 전구 줄·장식 공·꼭대기 별을 단다. 전구·공은 한 번에 그리는 묶음(InstancedMesh).
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export const VILLAGE_TREE = { height: 9.6, baseR: 2.3 } as const; // 가지 끝·장식 공이 화단 판정(반지름 3.2) 안에 들게
 
@@ -98,18 +99,30 @@ export function createVillageTree(opts: { lights?: boolean } = {}): THREE.Group 
   }
   const top = tiers[n - 1]!;
   const crown = top.y + top.h / 2; // 별 아래
+  // 층·눈을 각각 한 덩어리로(그리기 호출 2번). 층마다 초록을 조금씩 달리(정점 색)
+  const tierGeos: THREE.BufferGeometry[] = [];
+  const snowGeos: THREE.BufferGeometry[] = [];
+  const col = new THREE.Color();
   tiers.forEach((t, i) => {
     const tips = Math.max(7, Math.round(8 + t.r * 3));
-    const mat = new THREE.MeshStandardMaterial({ color: greens[i]!, roughness: 0.85, flatShading: true });
-    const tier = new THREE.Mesh(tierGeometry(t.r, t.h, tips, rand), mat);
-    tier.position.y = t.y;
-    tier.rotation.y = i * 0.7;
-    g.add(tier);
-    const snow = new THREE.Mesh(snowGeometry(t.r, t.h, tips), snowMat);
-    snow.position.y = t.y;
-    snow.rotation.y = i * 0.7;
-    g.add(snow);
+    const tg = tierGeometry(t.r, t.h, tips, rand).toNonIndexed();
+    tg.rotateY(i * 0.7);
+    tg.translate(0, t.y, 0);
+    col.set(greens[i]!);
+    const n = tg.attributes.position!.count;
+    const c = new Float32Array(n * 3);
+    for (let k = 0; k < n; k++) c.set([col.r, col.g, col.b], k * 3);
+    tg.setAttribute('color', new THREE.BufferAttribute(c, 3));
+    tg.deleteAttribute('uv');
+    tierGeos.push(tg);
+    const sg = snowGeometry(t.r, t.h, tips).toNonIndexed();
+    sg.rotateY(i * 0.7);
+    sg.translate(0, t.y, 0);
+    sg.deleteAttribute('uv');
+    snowGeos.push(sg);
   });
+  g.add(new THREE.Mesh(mergeGeometries(tierGeos)!, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true })));
+  g.add(new THREE.Mesh(mergeGeometries(snowGeos)!, snowMat));
 
   // 겉면 반지름(높이 y에서): 층 가장자리를 잇는 원뿔 근사
   const bottomY = tiers[0]!.y - tiers[0]!.h / 2;
@@ -126,11 +139,11 @@ export function createVillageTree(opts: { lights?: boolean } = {}): THREE.Group 
     pts.push(new THREE.Vector3(Math.cos(a) * rr, yy - 0.18 * Math.abs(Math.sin(a * 2.5)), Math.sin(a) * rr));
   }
   const spiral = new THREE.CatmullRomCurve3(pts);
-  const garland = new THREE.Mesh(new THREE.TubeGeometry(spiral, 400, 0.05, 5, false), new THREE.MeshStandardMaterial({ color: '#e7c35a', roughness: 0.35, metalness: 0.7 }));
+  const garland = new THREE.Mesh(new THREE.TubeGeometry(spiral, 180, 0.05, 4, false), new THREE.MeshStandardMaterial({ color: '#e7c35a', roughness: 0.35, metalness: 0.7 }));
   g.add(garland);
 
   const bulbCount = 110;
-  const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.075, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffffff' }), bulbCount) // 빛나는 전구: 조명과 무관하게 제 색(묶음마다 색);
+  const bulbs = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.08, 0), new THREE.MeshBasicMaterial({ color: '#ffffff' }), bulbCount); // 빛나는 전구: 조명과 무관하게 제 색(묶음마다 색). 면 8개(소프트웨어 그리기에서 트리가 가장 무거웠다)
   const bulbColors = ['#ffd36b', '#ff6b5e', '#7fc8ff', '#a6f08a', '#ffd36b'];
   const m = new THREE.Matrix4();
   const c = new THREE.Color();
@@ -144,7 +157,7 @@ export function createVillageTree(opts: { lights?: boolean } = {}): THREE.Group 
   g.add(bulbs);
 
   // 장식 공: 층 가장자리 가지 끝에 매달린다
-  const balls = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 14, 10), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.25, metalness: 0.45 }), 46);
+  const balls = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.25, metalness: 0.45 }), 46);
   const ballColors = ['#c8333b', '#e0b64e', '#3f6fd1', '#d9dde5', '#c8333b', '#7b3fc4'];
   let bi = 0;
   tiers.forEach((t, ti) => {
