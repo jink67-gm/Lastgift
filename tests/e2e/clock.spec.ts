@@ -23,9 +23,18 @@ async function setHidden(page: Page, hidden: boolean) {
 test('화면 위에 30:00부터 줄어드는 팀 시계가 보이고, 시작 체크포인트가 저장된다', async ({ page }) => {
   const errors = await open(page);
   await expect(page.locator('#hud .timer')).toBeVisible();
+  // 첫 화면(장면·셰이더 준비)이 느린 기기에서도: 처음 읽은 값은 30:00 이하, 2.2초 뒤에는 약 2초 줄었다
+  const sec = (t: string | null) => {
+    const [m, s] = (t ?? '0:0').split(':').map(Number);
+    return m! * 60 + s!;
+  };
+  const first = sec(await page.locator('#hud .timer .t').textContent());
+  expect(first).toBeLessThanOrEqual(30 * 60);
+  expect(first).toBeGreaterThanOrEqual(30 * 60 - 6);
   await page.waitForTimeout(2200);
-  const text = await page.locator('#hud .timer .t').textContent();
-  expect(['29:58', '29:57']).toContain(text);
+  const later = sec(await page.locator('#hud .timer .t').textContent());
+  expect(first - later).toBeGreaterThanOrEqual(1);
+  expect(first - later).toBeLessThanOrEqual(3);
   const saved = await page.evaluate(() => localStorage.getItem('lastgift.cp.v1.local'));
   expect(JSON.parse(saved!)).toMatchObject({ chapterId: 0, savedRemainingMs: 1_800_000, retryCount: 0 });
   await expect(page.locator('#hud .save-error')).toBeHidden();

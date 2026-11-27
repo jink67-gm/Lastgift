@@ -1,0 +1,61 @@
+<!-- 시제품(게임 코드 아님): 꼬마 요정 동작 점검. 상태마다 8초씩 돌려
+     (1) 손 높이가 시간이 갈수록 변하는지(쌓임) (2) 한 화면 사이 손·머리가 튀는지 (3) 값이 깨지는지(NaN) 를 잰다.
+     이어 붙인 순서(서기→걷기→집기→들고 걷기→멈춤→놓기→손 흔들기→손잡이→넘어짐→일어나기)도 같은 검사. → window.__info -->
+<!doctype html><html><body><script type="module">
+import * as THREE from 'three';
+import { Models } from '/src/scene/models.ts';
+import { createLittleElf } from '/src/scene/littleElf.ts';
+import { ELF_LOOKS } from '/src/data/elves.ts';
+const models = await Models.load(['littleElf'], '/');
+const SCALE = 1.2, DT = 1 / 60;
+const NONE = { carry: 'none', act: 0, tired: false }, LIGHT = { carry: 'light', act: 0, tired: false, span: 0.4 }, HEAVY = { carry: 'heavy', act: 0, tired: false }, GRIP = { carry: 'grip', act: 0, tired: false };
+function probe(e) {
+  const l = new THREE.Vector3(), r = new THREE.Vector3(); e.hands(l, r);
+  let head = null; e.root.traverse((o) => { if (o.isBone && o.name === 'Head') head = o.getWorldPosition(new THREE.Vector3()); });
+  return { l, r, head };
+}
+function run(name, steps) {
+  const e = createLittleElf(models, ELF_LOOKS[0]); e.root.scale.setScalar(SCALE);
+  let t = 0, x = 0, prev = null, maxJump = 0, nan = false; const hy = [];
+  for (const st of steps) {
+    if (st.act !== undefined) e.act(st.act, st.o ?? {});
+    if (st.look !== undefined) e.look(st.look);
+    for (let f = 0; f < st.sec * 60; f++) {
+      x += (st.speed ?? 0) * DT; e.root.position.z = x;
+      const pose = { ...(st.pose ?? NONE) };
+      if (st.pulse) pose.act = Math.max(0, 1 - Math.abs(f * DT - 0.17) / 0.17); // 집기·놓기 손 뻗기(0.35초)
+      e.animate(t, (st.speed ?? 0) > 0, pose); t += DT;
+      e.root.updateMatrixWorld(true);
+      const p = probe(e);
+      if (![p.l.x, p.l.y, p.r.y, p.head?.y ?? 0].every(Number.isFinite)) nan = true;
+      if (prev) maxJump = Math.max(maxJump, p.l.clone().sub(prev.l).setZ(0).length(), p.r.clone().sub(prev.r).setZ(0).length());
+      prev = p; hy.push((p.l.y + p.r.y) / 2);
+    }
+  }
+  const n = hy.length, a = hy.slice(60, 180), b = hy.slice(n - 120);
+  const avg = (v) => v.reduce((s, q) => s + q, 0) / v.length;
+  return { name, drift: +(avg(b) - avg(a)).toFixed(3), maxJumpPerFrame: +maxJump.toFixed(3), nan, handsEnd: +hy[n - 1].toFixed(3) };
+}
+const R = [];
+// 한 상태를 오래(쌓임 검사)
+R.push(run('서 있기', [{ sec: 8 }]));
+R.push(run('걷기 3.6', [{ sec: 8, speed: 3.6 }]));
+R.push(run('선물 들고 서기', [{ sec: 8, pose: LIGHT }]));
+R.push(run('선물 들고 뛰기', [{ sec: 8, pose: LIGHT, speed: 3.6 }]));
+R.push(run('함께 들기 서기', [{ sec: 8, pose: HEAVY }]));
+R.push(run('함께 들기 걷기', [{ sec: 8, pose: HEAVY, speed: 1.6 }]));
+R.push(run('손잡이 잡기', [{ sec: 8, pose: GRIP }]));
+R.push(run('지침', [{ sec: 8, pose: { ...HEAVY, tired: true } }]));
+R.push(run('손 흔들기', [{ sec: 8, act: 'Wave' }]));
+R.push(run('손잡이 돌리기', [{ sec: 8, act: 'Interact', o: { speed: 1.6 } }]));
+R.push(run('고개 숙이기', [{ sec: 8, look: 1 }]));
+// 이어 붙이기(바뀔 때 튀는지)
+R.push(run('이어 붙이기', [
+  { sec: 1 }, { sec: 1.5, speed: 3.6 }, { sec: 0.35, pulse: true }, { sec: 1.5, pose: LIGHT, speed: 3.6 }, { sec: 1, pose: LIGHT },
+  { sec: 0.35, pulse: true }, { sec: 1 }, { sec: 1.5, act: 'Wave' }, { sec: 1, act: null }, { sec: 1.5, act: 'Interact' }, { sec: 1, act: null },
+  { sec: 1, act: 'HitRecieve', o: { once: true } }, { sec: 1.5, act: 'Death', o: { once: true, speed: 1.6 } }, { sec: 2, act: null, o: { fade: 1.1 } },
+  { sec: 1, pose: GRIP }, { sec: 2, pose: HEAVY, speed: 1.6 }, { sec: 1, pose: HEAVY }, { sec: 1 },
+]));
+R.push(run('던지기·받기', [{ sec: 1 }, { sec: 1.2, act: 'Throw', o: { once: true } }, { sec: 1 }, { sec: 1.2, act: 'Catch', o: { once: true } }, { sec: 2 }]));
+window.__info = R; window.__ready = true;
+</script></body></html>

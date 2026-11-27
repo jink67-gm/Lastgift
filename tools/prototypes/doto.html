@@ -1,0 +1,19 @@
+<!-- 시제품(게임 코드 아님): 도토(정비공 요정)와 렌치 쥔 손. ?view=front|side -->
+<!doctype html><html><body style="margin:0;background:#dfe7f4"><script type="module">
+import * as THREE from 'three';
+import { Models } from '/src/scene/models.ts';
+import { createDoto } from '/src/scene/characters.ts';
+const q = new URLSearchParams(location.search);
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(1600, 600); r.setPixelRatio(1); document.body.appendChild(r.domElement);
+const s = new THREE.Scene(); s.background = new THREE.Color('#dfe7f4');
+s.add(new THREE.HemisphereLight('#fff', '#8a93a8', 2.2)); const d = new THREE.DirectionalLight('#fff4e0', 1.6); d.position.set(-3, 8, 7); s.add(d);
+const models = await Models.load(['elf'], '/');
+for (const [i, yaw] of [[0, 0], [1, Math.PI / 2], [2, -Math.PI / 2], [3, Math.PI * 0.8]]) {
+  const e = createDoto(models); e.root.position.x = -2.4 + i * 1.6; e.root.rotation.y = yaw; s.add(e.root);
+  for (let f = 0; f < 20; f++) e.animate(f / 60, false);
+}
+// 오른손 확대(오른쪽 칸)
+const cam = new THREE.PerspectiveCamera(30, 1600 / 600, 0.05, 50);
+if (q.get('view') === 'hand') { cam.position.set(-2.4 - 0.9, 0.55, 1.1); cam.lookAt(-2.4 - 0.25, 0.5, 0); } else { cam.position.set(0, 0.8, 7); cam.lookAt(0, 0.6, 0); }
+r.render(s, cam); window.__ready = true;
+</script></body></html>

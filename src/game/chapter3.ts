@@ -314,6 +314,8 @@ export function startChapter3(models: Models, opts?: StoryOptions): void {
     return v;
   };
   const actAt = new Map<string, number>();
+  /** 이 시각까지 던지기·받기 동작 중(요정 id별) */
+  const clipUntil = new Map<string, number>();
   const gateOpen = GATES.map(() => 0);
   const idle: SewingInput = { move: { x: 0, y: 0 }, actionDown: false, actionHeld: false };
   let last = performance.now();
@@ -394,8 +396,13 @@ export function startChapter3(models: Models, opts?: StoryOptions): void {
   function onEvent(e: Ch3Event): void {
     sfxEvent(e);
     events.push(e);
-    if (e.type === 'pick' || e.type === 'drop' || e.type === 'throw') actAt.set(e.playerId, elapsed);
-    if (e.type === 'catch') actAt.set(e.playerId, elapsed);
+    if (e.type === 'pick' || e.type === 'drop') actAt.set(e.playerId, elapsed);
+    // 던지기·받기: 요정 에셋의 동작을 한 번(없는 모델이면 손 뻗기)
+    if (e.type === 'throw' || e.type === 'catch') {
+      const el = elves[PLAYERS.indexOf(e.playerId)];
+      if (el?.act?.(e.type === 'throw' ? 'Throw' : 'Catch', { once: true, fade: 0.1 })) clipUntil.set(e.playerId, elapsed + 0.85);
+      else actAt.set(e.playerId, elapsed);
+    }
     if (e.type === 'wake') wokeAt = elapsed;
     if (e.type === 'bite') {
       bittenAt = elapsed;
@@ -431,7 +438,9 @@ export function startChapter3(models: Models, opts?: StoryOptions): void {
       hs.visible = p.handUp && ending < 0;
       hs.position.set(ps.x, 2.25 * ELF_SCALE + Math.sin(elapsed * 6) * 0.05, ps.z);
       if (p.handUp) e.act?.('Wave');
-      else if (elapsed - bittenAt > 0.7 || state.kongi.biting !== p.id) e.act?.(null);
+      else if (elapsed < (clipUntil.get(p.id) ?? -9)) {
+        // 던지기·받기 동작 중(끝나면 모델이 알아서 돌아온다)
+      } else if (elapsed - bittenAt > 0.7 || state.kongi.biting !== p.id) e.act?.(null);
       const a = run.canPlay ? planAction(state, p.id) : ({ kind: 'none' } as const);
       if (p.id === ME) mine = a;
       const pr = pickRings[i]!;

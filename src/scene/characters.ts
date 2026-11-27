@@ -3,7 +3,6 @@
 // 도토는 요정과 같은 뼈대 모델(Quaternius Hooded Adventurer, CC0)을 비율·색·소품만 바꿔 쓴다(같은 그림체, 같은 동작 이름).
 // 콩이는 Quaternius Shiba Inu(CC0)를 다시 칠하고 줄였다. 모델이 없으면 기본 도형으로 대신한다. 판정과 무관.
 import * as THREE from 'three';
-import { createLittleElf } from './littleElf';
 import { createElf, type ElfView } from './elf';
 import { createRigged, elfBuild, pointyHat, type RigBuild, type RigCtx } from './miniElf';
 import type { Models } from './models';
@@ -130,15 +129,15 @@ function aviatorCap(): THREE.Group {
   return g;
 }
 
-/** 큰 렌치(원점 = 손잡이 끝, 길이 방향 +y) */
+/** 큰 렌치(원점 = 손잡이 가운데: 손이 자루 가운데를 쥔다, 길이 방향 +y = 물림쇠 쪽) */
 function wrench(): THREE.Group {
   const g = new THREE.Group();
   const steel = std('#b9c0c9', { metalness: 0.6, roughness: 0.35 });
   const handle = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.24, 0.018), steel);
-  handle.position.y = 0.12;
+  handle.position.y = 0;
   g.add(handle);
   const jaw = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.018, 6, 12, Math.PI * 1.4), steel);
-  jaw.position.y = 0.27;
+  jaw.position.y = 0.15;
   jaw.rotation.z = Math.PI * 0.8;
   g.add(jaw);
   return g;
@@ -176,15 +175,15 @@ const DOTO_BUILD: RigBuild = {
       const p = wr.getWorldPosition(new THREE.Vector3());
       const w = wrench();
       w.name = 'dotoWrench';
-      c.attach(wr, w, p.add(new THREE.Vector3(0, -0.02, 0.02)), new THREE.Euler(Math.PI, 0, 0));
+      // 주먹 가운데(손목보다 조금 아래)가 자루 가운데를 쥔다. 물림쇠는 아래쪽(다리 옆으로 늘어뜨린다)
+      c.attach(wr, w, p.add(new THREE.Vector3(0, -0.06, 0.02)), new THREE.Euler(Math.PI, 0, 0));
     }
   },
 };
 
 export function createDoto(models: Models): ElfView {
-  // 꼬마 요정 에셋이 있으면 같은 그림체로(갈색 체크 모자 = 정비공), 없으면 예전 미니 요정 꾸밈 → 기본 도형
-  const look = { slot: 0, hat: '#7a4a2a', pattern: 'checks', accent: '#d07a2a' } as const;
-  return createLittleElf(models, look) ?? createRigged(models, DOTO_BUILD) ?? createElf(look);
+  // 도토는 예전 에셋(미니 요정을 정비공으로 꾸민 것)을 그대로 쓴다
+  return createRigged(models, DOTO_BUILD) ?? createElf({ slot: 0, hat: '#7a4a2a', pattern: 'checks', accent: '#d07a2a' });
 }
 
 // ── 콩이(유기견) ─────────────────────────────────────────

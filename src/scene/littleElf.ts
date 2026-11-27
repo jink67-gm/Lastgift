@@ -14,8 +14,23 @@ import type { Models } from './models';
 export const ELF_TOTAL_HEIGHT = 1.42;
 
 const X = new THREE.Vector3(1, 0, 0);
+/**
+ * 걸음: 모델의 Walk는 보폭이 작아(약 0.6 m/s) 게임 속도(3.6 m/s)로 움직이면 미끄러져 보인다.
+ * 다리 흔들기를 키워(허벅지 ×2.2, 정강이 ×1.7) 꼬마 요정의 종종걸음 뜀으로 만들고, 실제 이동 속도에 맞춰 동작을 빠르게 한다.
+ * natural = 흔들기를 키운 뒤 동작 속도 1일 때 땅을 밀고 나가는 속도(m/s, 키 1.42 m 기준).
+ * 시제품 little-elf-gait.html로 디딘 발 미끄러짐을 재어 맞췄다(3.6 m/s에서 약 0.03 m/s)
+ */
+export const GAIT = {
+  walk: { natural: 0.61 * 2.2, thigh: 2.2, shin: 1.7, arm: 1.4 },
+  // 들고 걷기: 함께 들기(1.6 m/s)에서 디딘 발이 거의 안 미끄러지는 값(0.59 → -0.25 m/s, 0.75 → +0.15 m/s)
+  carryWalk: { natural: 0.69, thigh: 1.8, shin: 1.5, arm: 1 },
+  /** 가벼운 선물은 3.6 m/s로 들고 뛴다 → 동작을 그만큼 빠르게 할 수 있게 */
+  maxRate: 4.5,
+};
 /** 가벼운 선물을 들 때 위팔을 내리는 각(라디안) */
-const CARRY_LOWER = 0.55;
+const CARRY_LOWER = 0.45;
+/** 들고 있는 물건 자리를 두 손 가운데에서 앞으로(m, 요정 크기 1 기준) */
+const CARRY_AHEAD = 0.07;
 const Z = new THREE.Vector3(0, 0, 1);
 
 /** 팀 옷 형상에 원통 UV(머리 축 기준)를 한 번 만들어 둔다 */
@@ -75,6 +90,10 @@ export function createLittleElf(models: Models, look: ElfLook): ElfView | null {
   };
   const B = {
     hips: bone('Hips'),
+    thl: bone('Thigh.L'),
+    thr: bone('Thigh.R'),
+    shl: bone('Shin.L'),
+    shr: bone('Shin.R'),
     spine: bone('Spine'),
     head: bone('Head'),
     ul: bone('UpperArm.L'),
@@ -95,6 +114,32 @@ export function createLittleElf(models: Models, look: ElfLook): ElfView | null {
   A.idle?.play();
   mixer.update(0.3);
   model.updateMatrixWorld(true);
+
+  // 다리·팔 흔들기를 키우는 기준(서 있을 때 뼈 방향)
+  const restQ = new Map<THREE.Bone, THREE.Quaternion>();
+  for (const b of [B.thl, B.thr, B.shl, B.shr, B.ul, B.ur]) if (b) restQ.set(b, b.quaternion.clone());
+  const _d = new THREE.Quaternion(), _ax = new THREE.Vector3();
+  /** 이번 동작 값이 서 있을 때에서 벗어난 만큼을 k배로 */
+  const amplify = (b: THREE.Bone | null, k: number) => {
+    const r0 = b && restQ.get(b);
+    if (!b || !r0 || Math.abs(k - 1) < 1e-3) return;
+    _d.copy(r0).invert().multiply(b.quaternion); // 서 있을 때 기준 회전
+    const w = Math.min(1, Math.max(-1, _d.w));
+    let ang = 2 * Math.acos(w);
+    if (ang > Math.PI) ang -= Math.PI * 2;
+    const sn = Math.sqrt(1 - w * w);
+    if (sn < 1e-5) return;
+    _ax.set(_d.x / sn, _d.y / sn, _d.z / sn);
+    _d.setFromAxisAngle(_ax, ang * k);
+    b.quaternion.copy(r0).multiply(_d);
+  };
+  // 애니메이션 믹서는 값이 바뀌지 않은 뼈를 다시 쓰지 않는다(들고 서 있기처럼 팔이 멈춘 동작).
+  // 그러면 매 화면 더한 회전이 쌓여 팔이 점점 올라간다 → 더하기 전의 깨끗한 값을 두고, 믹서 전에 되돌리고 믹서 뒤에 다시 잰다
+  const touched = [B.ul, B.ur, B.fl, B.fr, B.spine, B.head, B.thl, B.thr, B.shl, B.shr].filter((b): b is THREE.Bone => !!b);
+  const clean = touched.map((b) => b.quaternion.clone());
+  let speed = 0;
+  const lastPos = new THREE.Vector3(NaN, 0, 0);
+  const _wp = new THREE.Vector3();
 
   // 키를 맞추고 발바닥을 원점에
   let box = new THREE.Box3().setFromObject(model);
@@ -192,6 +237,10 @@ export function createLittleElf(models: Models, look: ElfLook): ElfView | null {
       const side = _a.subVectors(_l, _rr);
       const tilt = side.lengthSq() > 1e-8 ? Math.atan2(side.y, Math.hypot(side.x, side.z)) : 0;
       quat.multiply(_q.setFromAxisAngle(Z, -tilt));
+      // 팔이 짧은 모델: 물건 자리를 두 손 가운데에서 조금 앞으로(큰 공도 배에 붙지 않게). 앞 = 몸 → 두 손 방향(땅과 나란히)
+      root.getWorldPosition(_l);
+      _a.set(pos.x - _l.x, 0, pos.z - _l.z);
+      if (_a.lengthSq() > 1e-6) pos.addScaledVector(_a.normalize(), CARRY_AHEAD * (root.getWorldScale(_l).y || 1));
       return true;
     },
     animate(timeSec, moving, pose: ElfPose = NO_POSE) {
@@ -203,17 +252,44 @@ export function createLittleElf(models: Models, look: ElfLook): ElfView | null {
         if (!clipOverride) crossTo(actionOf(want), actionOf(gait), 0.18);
         gait = want;
       }
-      // 무거운 짐(함께 들기): 걸음을 천천히
-      if (A.carryWalk) A.carryWalk.timeScale = pose.carry === 'heavy' ? 0.7 : 1;
+      // 실제로 땅 위를 움직인 빠르기(m/s, 부드럽게). 요정 크기(장마다 ELF_SCALE)만큼 보폭도 크다
+      root.getWorldPosition(_wp);
+      if (dt > 0 && Number.isFinite(lastPos.x)) {
+        const v = Math.hypot(_wp.x - lastPos.x, _wp.z - lastPos.z) / dt;
+        speed += (Math.min(v, 8) - speed) * (1 - Math.exp(-dt * 10));
+      }
+      lastPos.copy(_wp);
+      const scale = root.getWorldScale(_ax).y || 1;
+      const g = gait === 'carryWalk' ? GAIT.carryWalk : GAIT.walk;
+      // 막혀서 제자리걸음일 때는 천천히(속도 1)
+      const rate = moving ? Math.min(GAIT.maxRate, Math.max(1, speed / scale / g.natural)) : 1;
+      if (A.walk) A.walk.timeScale = rate;
+      if (A.carryWalk) A.carryWalk.timeScale = rate;
+      touched.forEach((b, i) => b.quaternion.copy(clean[i]!));
       mixer.update(dt);
+      touched.forEach((b, i) => clean[i]!.copy(b.quaternion));
+      // 한 번만 하는 모델 동작(던지기·받기)은 끝나면 걷기·서 있기로 저절로 돌아간다
+      if (clipOverride && clipOverride.loop === THREE.LoopOnce && clipOverride.time >= clipOverride.getClip().duration - 1e-3) {
+        crossTo(actionOf(gait), clipOverride, 0.25);
+        clipOverride = null;
+      }
+      // 걸을 때 다리·팔 흔들기를 키운다(연출 동작 중에는 원래대로)
+      if (moving && !clipOverride && (gait === 'walk' || gait === 'carryWalk')) {
+        amplify(B.thl, g.thigh);
+        amplify(B.thr, g.thigh);
+        amplify(B.shl, g.shin);
+        amplify(B.shr, g.shin);
+        if (gait === 'walk') {
+          amplify(B.ul, g.arm);
+          amplify(B.ur, g.arm);
+        }
+      }
 
       // ── 뼈로 더하는 동작 ──
-      // 연출 동작 세기
-      const target = proc ? 1 : 0;
-      const fadeK = 1 - Math.exp(-dt * (3 / Math.max(0.05, proc ? 0.18 : procFade)));
-      procW += (target - procW) * fadeK;
+      // 연출 동작 세기: 일정한 빠르기로 올리고(0.3초) 내린 뒤(fade) 부드러운 곡선을 씌운다(첫 화면에 팔이 튀지 않게)
+      procW = proc ? Math.min(1, procW + dt / 0.3) : Math.max(0, procW - dt / Math.max(0.05, procFade));
       procT += dt * procSpeed;
-      const w = procW;
+      const w = procW * procW * (3 - 2 * procW);
       const kind = proc ?? lastProc;
       model.rotation.x = 0;
       model.position.y = baseY;
@@ -253,7 +329,7 @@ export function createLittleElf(models: Models, look: ElfLook): ElfView | null {
         const lower = (CARRY_LOWER + (moving ? 0.3 : 0)) * carryW;
         turn(B.ul, X, lower);
         turn(B.ur, X, lower);
-        const keep = moving ? 0.25 : 0.7; // 아래팔을 얼마나 수평으로 되돌리나
+        const keep = moving ? 0.5 : 1.05; // 아래팔을 얼마나 앞으로 되돌리나(선물이 배에 붙지 않게)
         turn(B.fl, X, -lower * keep);
         turn(B.fr, X, -lower * keep);
       }

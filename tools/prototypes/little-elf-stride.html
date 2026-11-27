@@ -1,0 +1,25 @@
+<!-- 시제품(게임 코드 아님): 꼬마 요정 Walk·CarryWalk 동작의 보폭 → 자연스러운 걷기 속도(m/s) 재기 -->
+<!doctype html><html><body><script type="module">
+import * as THREE from 'three';
+import { Models } from '/src/scene/models.ts';
+import { createLittleElf } from '/src/scene/littleElf.ts';
+import { ELF_LOOKS } from '/src/data/elves.ts';
+const models = await Models.load(['littleElf'], '/');
+const out = {};
+for (const [name, pose] of [['Walk', { carry: 'none', act: 0, tired: false }], ['CarryWalk', { carry: 'heavy', act: 0, tired: false }]]) {
+  const e = createLittleElf(models, ELF_LOOKS[0]);
+  const foot = (n) => { let b; e.root.traverse((o) => { if (o.isBone && o.name.replace(/\./g, '') === n) b = o; }); return b; };
+  const fl = foot('FootL');
+  const zs = [];
+  for (let f = 0; f < 240; f++) { e.animate(f / 120, true, pose); e.root.updateMatrixWorld(true); const p = fl.getWorldPosition(new THREE.Vector3()); if (f > 60) zs.push([p.y, p.z]); }
+  const z = zs.map((v) => v[1]);
+  const cycle = models.animations('littleElf').find((c) => c.name === name).duration;
+  // 발이 땅에 붙어 있는 동안(가장 낮은 높이 근처) z가 줄어드는 빠르기
+  const minY = Math.min(...zs.map((v) => v[0]));
+  const st = zs.map((v, i) => [v, i]).filter(([v]) => v[0] < minY + 0.02);
+  let speed = 0, n = 0;
+  for (let i = 1; i < st.length; i++) if (st[i][1] === st[i - 1][1] + 1) { speed += (st[i - 1][0][1] - st[i][0][1]) * 120; n++; }
+  out[name] = { stride: +(Math.max(...z) - Math.min(...z)).toFixed(3), cycle, stanceSpeed: +(speed / Math.max(1, n)).toFixed(3) };
+}
+window.__info = out; window.__ready = true;
+</script></body></html>

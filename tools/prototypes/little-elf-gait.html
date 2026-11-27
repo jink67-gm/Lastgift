@@ -1,0 +1,48 @@
+<!-- 시제품(게임 코드 아님): 실제 속도로 움직이는 꼬마 요정의 발 미끄러짐 재기 + 옆모습 연속 사진.
+     ?speed=3.6&carry=none|heavy&scale=1.2 → __info.slip(디딘 발이 땅에서 미끄러지는 평균 m/s, 0이 이상적) -->
+<!doctype html><html><body style="margin:0;background:#dfe7f4"><script type="module">
+import * as THREE from 'three';
+import { Models } from '/src/scene/models.ts';
+import { createLittleElf } from '/src/scene/littleElf.ts';
+import { ELF_LOOKS } from '/src/data/elves.ts';
+const q = new URLSearchParams(location.search);
+const SPEED = Number(q.get('speed') || 3.6), SCALE = Number(q.get('scale') || 1.2), carry = q.get('carry') || 'none';
+const models = await Models.load(['littleElf'], '/');
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(1600, 420); r.setPixelRatio(1); document.body.appendChild(r.domElement);
+const s = new THREE.Scene(); s.background = new THREE.Color('#dfe7f4');
+s.add(new THREE.HemisphereLight('#fff', '#8a93a8', 2.2)); const dl = new THREE.DirectionalLight('#fff4e0', 1.6); dl.position.set(-3, 8, 7); s.add(dl);
+const e = createLittleElf(models, ELF_LOOKS[1]); e.root.scale.setScalar(SCALE); s.add(e.root);
+const feet = ['FootL', 'FootR'].map((n) => { let b; e.root.traverse((o) => { if (o.isBone && o.name.replace(/\./g, '') === n) b = o; }); return b; });
+const pose = { carry, act: 0, tired: false };
+const dt = 1 / 60;
+import('/src/scene/littleElf.ts').then(() => {});
+const { GAIT } = await import('/src/scene/littleElf.ts');
+if (q.get('natural')) GAIT[carry === 'heavy' ? 'carryWalk' : 'walk'].natural = Number(q.get('natural'));
+// 1차: 발 높이 기록 → 발마다 가장 낮은 높이 + 1.2 cm 안쪽이면 디딘 것
+const rec = [];
+for (let f = 0; f < 300; f++) {
+  e.root.position.z = SPEED * f * dt;
+  e.animate(f * dt, true, pose);
+  e.root.updateMatrixWorld(true);
+  rec.push(feet.map((b) => b.getWorldPosition(new THREE.Vector3())));
+}
+let slipSum = 0, slipN = 0;
+for (const i of [0, 1]) {
+  const ys = rec.slice(120).map((p) => p[i].y);
+  const minY = Math.min(...ys);
+  for (let f = 121; f < rec.length; f++) if (rec[f][i].y < minY + 0.012 * SCALE && rec[f - 1][i].y < minY + 0.012 * SCALE) { slipSum += (rec[f][i].z - rec[f - 1][i].z) / dt; slipN++; }
+}
+const snaps = [180, 184, 188, 192, 196, 200, 204, 208];
+window.__info = { natural: GAIT[carry === 'heavy' ? 'carryWalk' : 'walk'].natural, slip: +(slipSum / Math.max(1, slipN)).toFixed(2), samples: slipN };
+// 연속 사진: 같은 요정 8장(옆모습)을 다시 만들어 각 순간을 찍는다
+const cam = new THREE.PerspectiveCamera(30, 1600 / 420, 0.05, 80);
+const views = [];
+for (let k = 0; k < 8; k++) {
+  const x = createLittleElf(models, ELF_LOOKS[1]); x.root.scale.setScalar(SCALE); x.root.rotation.y = Math.PI / 2; s.add(x.root);
+  for (let f = 0; f <= snaps[k]; f++) { x.root.position.set(-7 + k * 2, 0, 0); x.animate(f * dt, true, pose); }
+  x.root.position.set(-7 + k * 2, 0, 0);
+}
+e.root.visible = false;
+cam.position.set(0, 1, 12); cam.lookAt(0, 0.8, 0);
+r.render(s, cam); window.__ready = true;
+</script></body></html>
