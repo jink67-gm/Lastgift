@@ -34,7 +34,8 @@ import { FirebaseSignaling, isRoomCode, RoomError } from './signaling';
 
 const SNAP_MS = 66; // 약 15Hz
 const INPUT_MS = 33; // 약 30Hz
-const INPUT_STALE_MS = 500;
+/** 방장: 참가자 입력을 이보다 오래 못 들으면 멈춘 것으로(느린 기기도 고려, 바뀐 입력은 신뢰 채널로도 온다) */
+const INPUT_STALE_MS = 1500;
 /** 이보다 오래 아무 소식이 없으면 나간 것으로 본다(창이 갑자기 닫히면 WebRTC 끊김 신호가 늦다) */
 const GUEST_GONE_MS = 2500;
 /** 들어온 직후·장을 연 직후: 참가자 기기가 장 장면을 만드느라 몇 초 멈춰도 끊긴 것으로 보지 않는다 */
@@ -121,9 +122,9 @@ class TeamHost implements TeamNet, MirrorLink {
   started = false;
   private readonly names = new Map<string, string>();
   private readonly links = new Map<string, PeerLink>();
-  private readonly lastHeard = new Map<string, number>();
+  readonly lastHeard = new Map<string, number>();
   private readonly open = new Set<Slot>(['p0']);
-  private readonly guestIn = new Map<Slot, { n: number; move: { x: number; y: number }; held: boolean; at: number }>();
+  readonly guestIn = new Map<Slot, { n: number; move: { x: number; y: number }; held: boolean; at: number }>();
   private readonly pendingAct = new Map<Slot, number>();
   private readonly seen = new Map<Slot, Set<string>>();
   private readonly presence: ((slot: Slot, on: boolean) => void)[] = [];
@@ -264,7 +265,7 @@ class TeamHost implements TeamNet, MirrorLink {
     const m = parseGuestMsg(data);
     if (!m) return;
     if (m.t === 'in') {
-      if (ch !== 'state') return;
+      // 이동 입력은 state(빠름, 잃을 수 있음)와 mission(느려도 꼭 도착) 둘로 온다 → 번호가 새것만
       const prev = this.guestIn.get(slot);
       if (prev && m.n <= prev.n) return;
       this.guestIn.set(slot, { n: m.n, move: { x: m.mx, y: m.my }, held: m.held, at: performance.now() });
@@ -415,12 +416,15 @@ class TeamGuest implements TeamNet, MirrorLink {
   private lastN = -1;
   private lastEv = 0;
   private lastJoin = 0;
-  private inN = 0;
+  inN = 0;
+  private sureKey = '';
+  private sureAt = 0;
   private lastInput = 0;
   /** 장을 열기 전(대기실)에도 빈 입력을 보내 방장이 끊긴 것으로 보지 않게 한다 */
-  private pendingIntent: Intent = IDLE_INTENT;
+  pendingIntent: Intent = IDLE_INTENT;
   /** 장 코드가 마지막으로 입력을 넘긴 시각: 오래되면(연출 중 등) 빈 입력을 보낸다(눌린 채 남지 않게) */
-  private intentAt = 0;
+  private intentTick = -9;
+  private ticks = 0;
   private lastTick = 0;
   private lobbyKey = '';
   private hud: Hud | null = null;
@@ -526,7 +530,7 @@ class TeamGuest implements TeamNet, MirrorLink {
   }
   sendIntent(local: Intent): void {
     this.pendingIntent = local;
-    this.intentAt = performance.now();
+    this.intentTick = this.ticks;
     if (local.action.down && this.link?.isOpen && this.snap && this.mySlot) {
       const r = this.snap.run;
       this.link.send('mission', { t: 'act', runId: r.runId, epoch: r.epoch, playerId: this.mySlot, eventId: newId() });
@@ -555,10 +559,21 @@ class TeamGuest implements TeamNet, MirrorLink {
       if (this.link && now - this.snapAt >= HOST_LOST_MS && this.snapAt > 0) this.link.close();
       void this.join();
     }
-    const intent = now - this.intentAt < 200 ? this.pendingIntent : IDLE_INTENT;
+    // 장 코드가 최근 화면(2번 안)에 입력을 넘기지 않았으면(연출 중 등) 빈 입력. 시간으로 재지 않는다:
+    // 느린 기기(초당 몇 화면)에서는 화면 사이가 길어 멀쩡한 입력을 버리게 된다
+    this.ticks++;
+    const intent = this.ticks - this.intentTick <= 2 ? this.pendingIntent : IDLE_INTENT;
     if (this.link?.isOpen && this.mySlot && now - this.lastInput >= INPUT_MS) {
       this.lastInput = now;
-      this.link.send('state', { t: 'in', n: ++this.inN, mx: intent.move.x, my: intent.move.y, held: intent.action.held });
+      const msg = { t: 'in', n: ++this.inN, mx: intent.move.x, my: intent.move.y, held: intent.action.held };
+      this.link.send('state', msg);
+      // 학교망처럼 state 채널 꾸러미를 많이 잃는 길에서도 움직임이 끊기지 않게: 바뀌었을 때와 0.25초마다 신뢰 채널로도
+      const key = `${msg.mx.toFixed(2)},${msg.my.toFixed(2)},${msg.held}`;
+      if (key !== this.sureKey || now - this.sureAt >= 250) {
+        this.sureKey = key;
+        this.sureAt = now;
+        this.link.send('mission', msg);
+      }
     }
     if (this.snap) setTeamHud(this.hud, this.snap.team);
     // 방장이 다음 장을 열었거나(이야기 모드) 처음부터 다시 시작했다 → 같은 장 화면으로 다시 연다
@@ -647,6 +662,9 @@ export async function hostTeam(o: TeamOptions): Promise<TeamStart | null> {
     team: () => host.slots,
     openSlots: () => host.openSlots,
     netLog: () => host.netLog.map((e) => ({ ...e })),
+    /** 점검: 참가자별 마지막 소식 뒤 ms, 마지막 입력 */
+    heard: () => [...host.lastHeard].map(([uid, t]) => ({ uid: uid.slice(0, 6), ago: Math.round(performance.now() - t) })),
+    inputs: () => [...host.guestIn].map(([slot, v]) => ({ slot, n: v.n, move: v.move, ago: Math.round(performance.now() - v.at) })),
   });
   if (host.started) {
     lobby.hide();
@@ -698,6 +716,8 @@ export async function joinTeam(code: string, emu: boolean): Promise<TeamStart | 
     role: () => 'guest',
     uid: () => sig.uid,
     slot: () => g.mySlot,
+    sent: () => g.inN,
+    intent: () => ({ move: g.pendingIntent.move, run: g.snap ? { phase: g.snap.run.phase, paused: g.snap.run.paused, resumeIn: g.snap.run.resumeIn } : null, connected: g.connected }),
     connected: () => g.connected,
     page: () => g.page,
     snap: () => (g.snap ? JSON.parse(JSON.stringify(g.snap)) : null),

@@ -232,9 +232,7 @@ test('방장 종료 → 참가자는 멈추고 기다림 → 방장이 다시 �
   try {
     await guestB.page.waitForFunction(() => (window as unknown as { __lastgift: { ending(): number } }).__lastgift.ending() >= 0, null, { timeout: 10_000 });
   } catch (e) {
-    console.log('DBG hostB', JSON.stringify(await net(hostB.page, 'netLog')), 'guestB connected', await net(guestB.page, 'connected'), 'page', await net(guestB.page, 'page'));
-    console.log('DBG guestB snap', JSON.stringify(await net<{ run: { runId: string }; page: number; n: number }>(guestB.page, 'snap')).slice(0, 200), 'hostB run', (await game<RunLite>(hostB.page, 'run')).runId);
-    throw e;
+        throw e;
   }
   expect(await game<number>(guestA.page, 'ending')).toBe(-1);
   expect(await game<RunLite>(guestA.page, 'run')).toMatchObject({ chapterId: 4, runId: runA.runId });
@@ -317,4 +315,57 @@ test('교차 접속: 노트북(키보드) 방장 + 태블릿(터치만) 참가�
   expect(Math.hypot(onTab.x - h1.x, onTab.z - h1.z)).toBeLessThan(0.3);
   expect(errors).toEqual([]);
   expect(host.errors).toEqual([]);
+});
+
+for (const q of ['?chapter=0&host', '?host']) test(`0장 두 기기(${q}): 참가자 키보드 이동이 방장 판정에`, async ({ browser }) => {
+  test.setTimeout(180_000);
+  const host = await openHost(browser, q);
+  const guest = await openGuest(browser, host.code);
+  await waitOpen(host.page, 2);
+  await net(host.page, 'start');
+  await hasGame(host.page, 'sorting');
+  await hasGame(guest.page, 'sorting');
+  await host.page.waitForFunction(() => {
+    const r = (window as unknown as { __lastgift: { run(): { phase: string; pauseReasons: string[]; resumeAt: number | null } } }).__lastgift.run();
+    return r.phase === 'play' && r.pauseReasons.length === 0 && r.resumeAt === null;
+  }, null, { timeout: 30_000 });
+  type S = { sewing: { players: P[] } };
+  const p1 = async () => (await game<S>(host.page, 'sorting')).sewing.players.find((p) => p.id === 'p1')!;
+  const a = await p1();
+  await guest.page.keyboard.down('KeyD');
+  await guest.page.waitForTimeout(800);
+  await guest.page.keyboard.up('KeyD');
+  await host.page.waitForTimeout(500);
+  const b = await p1();
+  expect(Math.hypot(b.x - a.x, b.z - a.z)).toBeGreaterThan(0.5);
+  expect(host.errors).toEqual([]);
+  expect(guest.errors).toEqual([]);
+});
+
+test('느린 참가자 기기(CPU 3배 느리게·보통 품질, 초당 몇 화면): 이동 입력이 끊기지 않고 방장 판정에', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const host = await openHost(browser, '?chapter=3&host');
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  opened.push(ctx);
+  const slow = await ctx.newPage();
+  await (await ctx.newCDPSession(slow)).send('Emulation.setCPUThrottlingRate', { rate: 3 });
+  await slow.goto(`/?join=${host.code}&emu&test`); // 품질 낮춤 없이(초당 몇 화면)
+  await slow.waitForFunction(() => !!(window as unknown as { __lastgiftNet?: { slot?: () => string | null } }).__lastgiftNet?.slot?.(), null, { timeout: 60_000 });
+  await waitOpen(host.page, 2);
+  await net(host.page, 'start');
+  await hasGame(host.page, 'ch3');
+  await hasGame(slow, 'ch3', 90_000);
+  await host.page.waitForFunction(() => {
+    const r = (window as unknown as { __lastgift: { run(): { phase: string; pauseReasons: string[]; resumeAt: number | null } } }).__lastgift.run();
+    return r.phase === 'play' && r.pauseReasons.length === 0 && r.resumeAt === null;
+  }, null, { timeout: 60_000 });
+  const p1 = async () => (await game<Ch3>(host.page, 'ch3')).players.find((p) => p.id === 'p1')!;
+  const a = await p1();
+  await slow.keyboard.down('KeyD');
+  await slow.waitForTimeout(1500);
+  await slow.keyboard.up('KeyD');
+  await host.page.waitForTimeout(800);
+  const b = await p1();
+  // 고치기 전: 화면 사이가 0.2초를 넘으면 입력을 빈 것으로 보내 0 m. 이 컨테이너에서는 초당 1~2 화면이라 조금만 간다
+  expect(Math.hypot(b.x - a.x, b.z - a.z)).toBeGreaterThan(0.2);
 });

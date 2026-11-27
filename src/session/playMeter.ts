@@ -120,7 +120,7 @@ export function createPlayMeter(o: PlayMeterOptions): PlayMeter {
         retry0 = s.retryCount;
         entry = fresh();
       }
-      const dt = Math.min(raw, 1);
+      const dt = Math.max(0, Math.min(raw, 1)); // 첫 화면은 rAF 시각이 시작 시각보다 앞설 수 있다(음수)
       stats.add(raw);
       if (o.run.canPlay) entry.playSec += dt;
       else if (s.phase === 'cutscene' || s.phase === 'ending' || s.phase === 'lobby' || document.body.classList.contains('cutscene')) entry.cutSec += dt;
