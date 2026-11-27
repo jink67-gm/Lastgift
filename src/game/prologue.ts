@@ -2,13 +2,15 @@
 // 0장 장면(광장·요정·선물·산타·도토)을 그대로 쓰고, 끝나면 모두 0장 플레이 시작 자리에 놓인다(건너뛰어도 같다).
 // 판정(선물 분류·충돌)과 무관하다. 팀 시계는 run의 'cutscene' 동안 멈춰 있다.
 import * as THREE from 'three';
-import { ease, PROLOGUE, photoLineup, seg, blinkOn, type PhotoSetup } from '../core/prologue';
+import { ease, PROLOGUE, photoLineup, seg, type PhotoSetup } from '../core/prologue';
+import { placeOnHands } from '../scene/hold';
 import type { DogView } from '../scene/characters';
 import type { ElfView } from '../scene/elf';
 import { createPrologueUi, type PrologueUi } from '../ui/prologueUi';
 
 const P = PROLOGUE;
 const C = P.crash;
+const F = P.flight;
 
 export interface Spot {
   x: number;
@@ -40,8 +42,8 @@ export interface PrologueCast {
   reduceMotion: boolean;
   /** 눈보라 세기(0~1): 조명·눈송이 수 */
   storm(k: number): void;
-  /** 눈송이를 사진기 둘레로 */
-  snowAround(dt: number, x: number, z: number, r: number): void;
+  /** 눈송이를 사진기 둘레로(y: 눈 상자 바닥 높이, 하늘 장면) */
+  snowAround(dt: number, x: number, z: number, r: number, y?: number): void;
   /** 사진을 찍은 순간(구도 저장) */
   onPhoto(p: PhotoSetup): void;
 }
@@ -228,8 +230,6 @@ export function createPrologue(cast: PrologueCast): Prologue {
 
   let t = 0;
   let done = false;
-  let captured = false;
-  let capturePending = false;
   let photoSaved = false;
   let shake = 0;
   let impacted = false;
@@ -268,74 +268,214 @@ export function createPrologue(cast: PrologueCast): Prologue {
     cast.doto.act?.(clip, o);
   };
 
-  /** 시각 t의 장면을 놓는다 */
-  function pose(dt: number): void {
-    const photoPhase = t < P.card.hide[0];
-    // ── ① 단체사진(먼 훗날, 고친 썰매 앞) ──
-    if (photoPhase) {
-      const c = photo.camera;
-      // 사진기가 천천히 다가간다(마지막 자리 = 저장한 사진 구도)
-      const push = 1 - ease(seg(t, P.photo.push));
-      setCam(c.x, c.y + 0.25 * push, c.z + 1.8 * push, c.tx, c.ty + 0.2 * push, c.tz);
-      camera.fov = c.fov;
-      sleigh.position.set(end.x, 0, end.z);
-      sleigh.rotation.set(0, sleighBase.rot.y, 0, 'YZX');
-      sleigh.visible = true;
-      const down = ease(seg(t, P.photo.lookDown));
-      cast.elves.forEach((e, i) => {
-        const spot = photo.elves[i] ?? photo.elves[0]!;
-        e.root.visible = true;
-        e.root.position.set(spot.x, 0, spot.z);
-        e.root.rotation.set(0, spot.facing, 0);
-        e.look?.(down);
-        e.animate(t, false);
-      });
-      place(cast.santa, photo.santa.x, 0, photo.santa.z, photo.santa.facing);
-      cast.santa.root.visible = true;
-      cast.santa.look?.(down * 0.85);
-      cast.santa.animate(t, false);
-      cast.doto.root.visible = false; // 사진에는 산타와 참가 요정들만
-      for (const g of cast.cargo) g.v.visible = false; // 배달을 마친 뒤
-      // 콩이: 사진기 바로 앞을 가로질러 달린다(화면 아래로 꼬리만 휙)
-      const k = seg(t, P.photo.tail);
-      const run = k > 0 && k < 1;
-      cast.kongi.root.visible = run;
-      if (run) {
-        const x0 = c.x + 2.4;
-        const x1 = c.x - 2.4;
-        // 사진기 1.25 m 앞: 화면 아래 가장자리가 땅 위 약 0.85 m. 코를 땅에 대고 달려 머리는 그 아래, 말린 꼬리만 위로 보인다
-        place(cast.kongi, x0 + (x1 - x0) * k, 0, c.z - 1.25, -Math.PI / 2);
-        cast.kongi.play('Gallop', { speed: 1.4 });
-        cast.kongi.wag(1);
-        cast.kongi.nose(1);
+  // ── ① 썰매 비행 ──────────────────────────────
+  // 하늘 길: 광장 동쪽 높은 데서 남쪽 하늘을 지나 서쪽으로 돌다가, 눈보라에 흔들려 북서쪽으로 기울며 떨어진다(하얗게 → 땅).
+  // 마을 위 25~35 m: 내려다보면 불 켜진 광장·트리·집들이 보인다
+  const flightPath = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(56, 31, -4),
+    new THREE.Vector3(36, 29, 17),
+    new THREE.Vector3(12, 28, 28),
+    new THREE.Vector3(-12, 28, 27),
+    new THREE.Vector3(-31, 30, 13),
+    new THREE.Vector3(-41, 33, -6),
+    new THREE.Vector3(-38, 30, -26),
+    new THREE.Vector3(-26, 19, -40),
+  ]);
+  /** 썰매 안 자리(썰매 모형 단위, 앞 = +x, 남쪽 옆 = +z): 산타 좌석 면, 요정 발판, 도토 맨 앞 */
+  // 요정·도토는 바닥에 실은 선물 상자 위에 올라서서(바닥 + 0.14) 옆판 너머로 마을을 본다
+  const SEAT = { santa: new THREE.Vector3(-0.66, 0.72, 0), elves: 0.5, floor: 0.66, doto: new THREE.Vector3(0.86, 0.66, 0) };
+  const qFace = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2); // 인물 앞(+z) → 썰매 앞(+x)
+  const qTmp = new THREE.Quaternion();
+  const sleighQ = new THREE.Quaternion();
+  const cf = { pos: new THREE.Vector3(), quat: new THREE.Quaternion() };
+  /** 썰매에 태운다: 썰매 모형 단위 자리 → 월드, 썰매 방향 + 인물 방향(yaw, 썰매 앞 기준) */
+  const ride = (v: ElfView, local: THREE.Vector3, yaw = 0) => {
+    v.root.position.copy(local).applyMatrix4(sleigh.matrixWorld);
+    v.root.quaternion.copy(sleighQ).multiply(qFace).multiply(qTmp.setFromAxisAngle(tmpA.set(0, 1, 0), yaw));
+  };
+  // 남쪽 날에서 튀어 나가는 나사(금색 작은 공)
+  const bolt = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), new THREE.MeshStandardMaterial({ color: '#e0b64e', metalness: 0.7, roughness: 0.3 }));
+  bolt.visible = false;
+  scene.add(bolt);
+  const boltVel = new THREE.Vector3();
+  let boltOut = false;
+  let runnerSouth: THREE.Object3D | null = null;
+  sleigh.traverse((o) => {
+    if (o.name === 'runnerSouth') runnerSouth = o;
+  });
+  const runnerRot = runnerSouth ? (runnerSouth as THREE.Object3D).rotation.clone() : null;
+  let flightDone = false;
+
+  /** 썰매 비행 장면(t < F.end) */
+  function flight(dt: number): void {
+    savePhoto();
+    cast.kongi.root.visible = false;
+    // 바람: 처음엔 잔잔(눈발 조금) → 눈보라
+    const gustK = ease(seg(t, [F.gust[0] - 0.6, F.gust[0] + 0.8]));
+    cast.storm(0.72 + 0.28 * gustK); // 밤(눈보라 조명이 어둡다) + 바람
+    const stars = sky.getObjectByName('stars') as THREE.Points | undefined;
+    if (stars) (stars.material as THREE.PointsMaterial).opacity = 0.85 - 0.5 * gustK;
+
+    // 썰매: 하늘 길을 따라(앞 = 진행 방향), 돌 때 안쪽으로 기울고, 눈보라에 흔들리고, 떨어질 때 머리를 숙이며 구른다
+    const u = Math.min(0.999, Math.max(0, t / F.end)); // 시작 직후 t가 잠깐 음수(어둡게 시작)
+    const p = flightPath.getPointAt(u, tmpB);
+    const tan = flightPath.getTangentAt(u, tmpV);
+    const h = Math.hypot(tan.x, tan.z);
+    const yaw = Math.atan2(-tan.z, tan.x);
+    const ahead = flightPath.getTangentAt(Math.min(0.999, u + 0.04), tmpA);
+    const turnRate = Math.atan2(ahead.x * tan.z - ahead.z * tan.x, ahead.x * tan.x + ahead.z * tan.z);
+    const shakeK = gustK * (1 - ease(seg(t, F.dive)) * 0.3);
+    const dive = ease(seg(t, F.dive));
+    const roll = -turnRate * 3 + Math.sin(t * 11) * 0.12 * shakeK + Math.sin(t * 4.3) * 0.08 * shakeK + dive * Math.sin(t * 5) * 0.45;
+    const nose = Math.atan2(tan.y, h) * 0.8 + Math.sin(t * 7.7) * 0.06 * shakeK - dive * 0.35;
+    sleigh.visible = true;
+    sleigh.position.copy(p).add(tmpA.set(0, Math.sin(t * 1.6) * 0.3, 0));
+    sleigh.rotation.set(roll, yaw, nose, 'YZX');
+    sleigh.updateMatrixWorld(true);
+    sleigh.getWorldQuaternion(sleighQ);
+    if (cast.snowPile) cast.snowPile.visible = false;
+
+    // 산타: 좌석에 앉아 앞을 본다(눈보라에 고개를 움츠린다)
+    cast.santa.root.visible = true;
+    santaAct('Sit');
+    ride(cast.santa, SEAT.santa);
+    cast.santa.look?.(0.15 * gustK);
+    cast.santa.animate(t, false);
+
+    // 요정들: 발판에 나란히 서서 선물을 안고 마을을 내려다본다 → 눈보라에 깜짝(움찔) → 떨어질 때 매달린다
+    const n = cast.elves.length;
+    cast.elves.forEach((e, i) => {
+      const z = n > 1 ? -0.42 + (0.84 * i) / (n - 1) : 0;
+      e.root.visible = true;
+      e.root.scale.setScalar(cast.elfScale);
+      // 모두 마을 쪽(썰매 안쪽 옆, +z)으로 조금 돌아 내려다본다
+      ride(e, tmpV.set(SEAT.elves, SEAT.floor, z), -0.35 - 0.3 * (z + 0.42));
+      e.look?.(t < F.gust[0] ? 0.55 : 0.1);
+      if (t >= F.gust[0] && e.root.userData.startled !== true) {
+        e.root.userData.startled = true;
+        e.act?.('HitRecieve', { once: true });
       }
-      cast.kongi.update(dt);
-      ui.finder(t < P.photo.shutter, blinkOn(t));
-      if (t >= P.photo.shutter && !captured) {
-        capturePending = true;
-        savePhoto();
+      if (t >= F.dive[0] && e.root.userData.cling !== true) {
+        e.root.userData.cling = true;
+        e.act?.('HitRecieve');
       }
-      ui.flash(t >= P.photo.shutter ? 1 - seg(t, [P.photo.shutter, P.photo.shutter + 0.5]) : 0);
-    } else {
-      ui.finder(false, false);
-      ui.flash(0);
+      // 손에 안은 선물(재봉틀 상자는 짐칸 아래라 안 보인다)
+      const g = cast.cargo[i + 1];
+      e.animate(t, false, { carry: g ? 'light' : 'none', act: 0, tired: false });
+      if (g) {
+        g.v.visible = true;
+        e.root.updateMatrixWorld(true);
+        placeOnHands(g.v, e.carryFrame?.(cf.pos, cf.quat) ? cf : null, { x: e.root.position.x, z: e.root.position.z, yaw: 0 }, cast.elfScale);
+      }
+    });
+    cast.cargo.forEach((g, i) => {
+      if (i === 0 || i > n) g.v.visible = false;
+    });
+
+    // 도토: 맨 앞에서 고글을 쓰고 길잡이 → 나사가 튀어 나가면 남쪽(뒤쪽 아래) 날을 돌아본다
+    const d = cast.doto;
+    d.root.visible = true;
+    d.root.scale.setScalar(cast.elfScale);
+    const lookBack = ease(seg(t, [F.bolt, F.bolt + 0.5]));
+    ride(d, SEAT.doto, -2.2 * lookBack);
+    d.look?.(0.35 * lookBack);
+    if (t >= F.bolt && d.root.userData.alarm !== true) {
+      d.root.userData.alarm = true;
+      dotoAct('HitRecieve', { once: true });
+    }
+    d.animate(t, false);
+
+    // 나사: 남쪽 날 가운데에서 튀어 나가 뒤로 떨어진다(반짝), 그 뒤로 그 날이 덜컹거린다
+    if (t >= F.bolt) {
+      if (!boltOut) {
+        boltOut = true;
+        bolt.visible = true;
+        bolt.position.set(-0.2, 0.06, 0.62).applyMatrix4(sleigh.matrixWorld);
+        // 썰매 뒤쪽·바깥(남쪽)·위로 튄다
+        boltVel.set(-6, 3, 2.5).applyQuaternion(sleighQ);
+        burst(bolt.position.x, bolt.position.y, bolt.position.z, 12, 2.4, 0.3);
+      }
+      boltVel.y -= 9.8 * dt;
+      bolt.position.addScaledVector(boltVel, dt);
+      bolt.rotation.x += dt * 20;
+      if (runnerSouth && runnerRot) {
+        const rs = runnerSouth as THREE.Object3D;
+        rs.rotation.set(runnerRot.x + Math.sin(t * 38) * 0.06, runnerRot.y, runnerRot.z + Math.sin(t * 29) * 0.05);
+      }
     }
 
-    // ── ② 사진 카드: 나타남 → 뒤집힘('한 시간 전, 마을 광장') → 사라짐 ──
-    const show = ease(seg(t, P.card.show)) * (1 - ease(seg(t, P.card.hide)));
-    ui.card(captured ? show : 0, ease(seg(t, P.card.flip)));
-    // 카드 뒤 화면: 사진일 때 반쯤 어둡게, 사진이 사라질 때 깜깜 → 눈보라 밤으로 밝아진다
-    const dimCard = 0.7 * ease(seg(t, P.card.show));
-    const dimHide = ease(seg(t, P.card.hide));
-    const dimStorm = 1 - ease(seg(t, [P.card.hide[1], P.card.hide[1] + 0.8]));
-    const dimOut = ease(seg(t, P.fadeOut));
-    if (t < P.card.hide[0]) ui.dim(dimCard);
-    else if (t < P.card.hide[1]) ui.dim(Math.max(dimCard, dimHide));
-    else ui.dim(Math.max(dimStorm, dimOut));
+    // 화면: 처음 검은 데서 밝아지고, 끝에 하얀 눈보라 속으로
+    ui.dim(1 - ease(seg(t, [0, 0.8])));
+    ui.flash(ease(seg(t, [F.white[0], F.end])));
 
-    if (photoPhase) return;
+    // 사진기(구간마다 한 컷). 썰매 기준 자리는 방향(yaw)만 따른다(기울기·흔들림은 따라가지 않아 화면이 안정)
+    const yf = (lx: number, ly: number, lz: number, out: THREE.Vector3) => {
+      const k = 1.8; // 광장 썰매 배율
+      const c = Math.cos(yaw), sn = Math.sin(yaw);
+      return out.set(sleigh.position.x + (lx * c + lz * sn) * k, sleigh.position.y + ly * k, sleigh.position.z + (-lx * sn + lz * c) * k);
+    };
+    let fov = 44;
+    if (t < F.wide[1]) {
+      // 높은 데서: 썰매가 밤하늘을 가로지르고 아래로 불 켜진 마을
+      const k = ease(seg(t, F.wide));
+      setCam(16, 39, 50, 42 - 20 * k, 28 - 2 * k, 4 + 16 * k);
+      fov = 46;
+    } else if (t < F.ride[1]) {
+      // 썰매 옆(바깥쪽)에서: 썰매 너머 아래로 마을. 조금씩 앞으로 밀며
+      const k = ease(seg(t, F.ride));
+      yf(0.9 - 0.6 * k, 1.9, -3.6, camPos);
+      yf(0.1, 0.55, 0.2, camTgt);
+      fov = 42;
+    } else if (t < F.gust[1]) {
+      // 눈보라: 마을 쪽 썰매 날 가까이 낮게(나사가 튀어 나가는 것이 보이게), 흔들린다
+      yf(0.5, 0.15, 3.6, camPos);
+      yf(-0.3, 0.3, 0.6, camTgt);
+      const j = 0.06 * (cast.reduceMotion ? 0 : 1);
+      camPos.add(tmpA.set((Math.random() - 0.5) * j, (Math.random() - 0.5) * j, (Math.random() - 0.5) * j));
+      fov = 46;
+    } else {
+      // 떨어진다: 뒤 위에서 머리를 숙인 썰매를 따라간다
+      yf(-4.4, 2.6, -1.2, camPos);
+      yf(3.0, -1.2, 0.2, camTgt);
+      fov = 50;
+    }
+    camera.fov = fov;
+  }
 
-    // ── ③ 한 시간 전: 눈보라 → 별빛 → 썰매 불시착 ──
+  /** 비행이 끝났다: 땅 장면을 위해 인물·썰매를 되돌린다(불시착 장면이 다시 놓는다) */
+  function endFlight(): void {
+    flightDone = true;
+    bolt.visible = false;
+    if (runnerSouth && runnerRot) (runnerSouth as THREE.Object3D).rotation.copy(runnerRot);
+    if (cast.snowPile) cast.snowPile.visible = true;
+    santaAct(null);
+    cast.santa.root.visible = false;
+    cast.doto.root.visible = false;
+    dotoAct(null);
+    cast.elves.forEach((e) => {
+      e.act?.(null);
+      e.look?.(0);
+      e.root.visible = false;
+      e.root.quaternion.identity();
+    });
+    for (const g of cast.cargo) g.v.visible = false;
+    sleigh.visible = false;
+  }
+
+  /** 시각 t의 장면을 놓는다 */
+  function pose(dt: number): void {
+    if (t < F.end) {
+      flight(dt);
+      return;
+    }
+    if (!flightDone) endFlight();
+    ui.finder(false, false);
+    ui.card(0, 0);
+    // 하얀 눈보라가 걷히며 땅의 광장(③). 끝에 어둡게
+    if (t < C.impact) ui.flash(1 - ease(seg(t, [F.end, F.white[1]])));
+    ui.dim(ease(seg(t, P.fadeOut)));
+
+    // ── ② 땅: 눈보라 → 별빛 → 썰매 불시착 ──
     cast.kongi.root.visible = false;
     const storm = t < C.calm[0] ? 1 : 1 - 0.85 * ease(seg(t, C.calm));
     cast.storm(storm);
@@ -549,7 +689,7 @@ export function createPrologue(cast: PrologueCast): Prologue {
   const SHOTS: { at: number; blend: number; get: (t: number, ks: number) => Shot }[] = [
     // 폭풍 전 고요: 아무도 없는 광장(썰매 자리)을 보다가 하늘로 고개를 든다
     {
-      at: P.card.hide[0],
+      at: F.end,
       blend: 0,
       get: (t) => {
         const k = ease(seg(t, C.quiet));
@@ -650,6 +790,7 @@ export function createPrologue(cast: PrologueCast): Prologue {
 
   /** 끝 모습(플레이 시작 자리)으로 놓는다 */
   function finish(): void {
+    if (!flightDone) endFlight();
     t = P.end;
     savePhoto();
     sleigh.visible = true;
@@ -729,20 +870,10 @@ export function createPrologue(cast: PrologueCast): Prologue {
       camera.position.copy(camPos).add(tmpV.set((Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh));
       camera.lookAt(camTgt);
       camera.updateProjectionMatrix();
-      cast.snowAround(dt, camTgt.x, camTgt.z, 16);
+      cast.snowAround(dt, camTgt.x, camTgt.z, 16, t < F.end ? Math.max(0, Math.min(camPos.y, camTgt.y) - 6) : 0);
     },
-    afterRender(canvas) {
-      if (!capturePending) return;
-      capturePending = false;
-      captured = true;
-      // 화면 가운데를 사진 비율(4:3)로 잘라 카드 앞면에 담는다
-      ui.setPhoto((ctx, w, h) => {
-        const cw = canvas.width;
-        const ch = canvas.height;
-        const sw = Math.min(cw, (ch * w) / h);
-        const shh = (sw * h) / w;
-        ctx.drawImage(canvas, (cw - sw) / 2, (ch - shh) / 2, sw, shh, 0, 0, w, h);
-      });
+    afterRender() {
+      // 예전 첫 연출(단체사진 → 사진 카드)에서 셔터 순간 화면을 카드에 담던 자리. 지금은 할 일 없음
     },
     skip() {
       if (!done) finish();

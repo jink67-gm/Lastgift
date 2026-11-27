@@ -1,0 +1,38 @@
+<!-- 시제품(게임 코드 아님): 꼬마 요정 자루 메기(Sling) 단계별 + 멘 채 걷기. 옆모습 -->
+<!doctype html><html><body style="margin:0;background:#dfe7f4"><script type="module">
+import * as THREE from 'three';
+import { Models } from '/src/scene/models.ts';
+import { createLittleElf } from '/src/scene/littleElf.ts';
+import { createSack } from '/src/scene/chapter0.ts';
+import { ELF_LOOKS } from '/src/data/elves.ts';
+const q = new URLSearchParams(location.search);
+const W = 1600, H = 560;
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(W, H); r.setPixelRatio(1); document.body.appendChild(r.domElement);
+const s = new THREE.Scene(); s.background = new THREE.Color('#dfe7f4');
+s.add(new THREE.HemisphereLight('#fff', '#8a93a8', 2.2)); const d = new THREE.DirectionalLight('#fff4e0', 1.6); d.position.set(-3, 8, 7); s.add(d);
+const g = new THREE.Mesh(new THREE.PlaneGeometry(40, 10), new THREE.MeshStandardMaterial({ color: '#f2f4f8' })); g.rotation.x = -Math.PI / 2; s.add(g);
+const models = await Models.load(['littleElf'], '/');
+const times = [0, 0.3, 0.5, 0.7, 0.9, 1.2, 2.0, -1];
+const side = q.get('view') !== 'back';
+times.forEach((tt, i) => {
+  const e = createLittleElf(models, ELF_LOOKS[i % 4]);
+  e.root.scale.setScalar(1.2);
+  e.root.position.x = -7 + i * 2;
+  e.root.rotation.y = side ? Math.PI / 2 : Math.PI; // 옆모습(오른쪽을 본다) / 뒷모습
+  s.add(e.root);
+  const sack = createSack('#2f6fd0', i + 1);
+  e.root.updateMatrixWorld(true);
+  const front = new THREE.Vector3(0, 0, 0.75).applyMatrix4(e.root.matrixWorld);
+  sack.position.copy(front);
+  s.add(sack);
+  let t = 0;
+  for (; t < 0.3; t += 1 / 30) e.animate(t, false);
+  e.backpack(sack, { sling: true });
+  const end = tt < 0 ? t + 1.6 : t + tt;
+  const walking = tt < 0;
+  for (; t < end; t += 1 / 30) e.animate(t, walking && t > 1.5);
+  e.animate(end, walking);
+});
+const cam = new THREE.PerspectiveCamera(30, W / H, 0.05, 100); cam.position.set(0, 1.4, 22); cam.lookAt(0, 0.9, 0);
+r.render(s, cam); window.__ready = true;
+</script></body></html>

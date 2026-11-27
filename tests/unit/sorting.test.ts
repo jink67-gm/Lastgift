@@ -80,13 +80,15 @@ describe('0장 선물 분류', () => {
     expect(planAction(sim.s, 'a')).toEqual({ kind: 'pick', itemId: 'ball' });
   });
 
-  it('유나네 두 물건(스케치북·색연필 통)이 같은 표식에 겹치지 않게 놓인다', () => {
+  it('유나네 두 물건(스케치북·색연필 통)은 둘 다 물고기 자루 속으로 들어간다(자루 자리)', () => {
     const sim = new Sim();
     sim.deliver('a', 'sketchbook', 'yuna');
     sim.deliver('a', 'pencils', 'yuna');
     const a = sim.item('sketchbook'), b = sim.item('pencils');
     expect(a.sorted && b.sorted).toBe(true);
-    expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThan(0.5);
+    const m = markerOf('yuna');
+    expect(m.sack).toBe(true);
+    for (const it of [a, b]) expect([it.x, it.z]).toEqual([m.x, m.z]);
   });
 
   it('재봉틀은 혼자 들리지 않고, 가벼운 선물을 든 요정은 손잡이를 잡지 않는다', () => {
@@ -162,14 +164,22 @@ describe('0장 선물 분류', () => {
     expect(sim.count('complete')).toBe(1);
   });
 
-  it('벽·표지판에 막히면 놓지 못한다', () => {
+  it('자루를 보고 놓으면 그 자루 앞 자리에 들어가고, 트리 화단 같은 벽에 막히면 놓지 못한다', () => {
     const sim = new Sim();
     const it = sim.item('sketchbook');
     sim.place('a', it.x - 0.6, it.z, Math.PI / 2);
     sim.press('a');
     const m = markerOf('yuna');
-    // 표지판(바깥쪽) 바로 앞에서 표지판 쪽을 보고 놓으려 하면 막힌다
+    // 자루 바로 앞에서 자루 쪽을 보고 놓으면(놓는 점이 자루에 걸린다) 막히지 않고 그 자루 앞 자리로
     sim.place('a', m.signX + 0.75, m.signZ, -Math.PI / 2);
+    expect(planAction(sim.s, 'a').kind).toBe('drop');
+    sim.press('a');
+    expect(sim.item('sketchbook').sorted).toBe(true);
+    // 다른 선물을 들고 트리 화단(반지름 3.2) 쪽을 보고 놓으면 막힌다
+    const ball = sim.item('ball');
+    sim.place('a', ball.x - 0.6, ball.z, Math.PI / 2);
+    sim.press('a');
+    sim.place('a', 0, 3.85, Math.PI);
     expect(planAction(sim.s, 'a').kind).toBe('blocked');
   });
 });

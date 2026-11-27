@@ -8,8 +8,8 @@ export interface Snowfall {
   points: THREE.Points;
   /** 보일 눈송이 수(0이면 끔) */
   setCount(n: number): void;
-  /** 화면 중심(땅 위 x, z)과 화면 크기에 맞춰 눈송이를 움직인다 */
-  update(dt: number, cx: number, cz: number, radius: number): void;
+  /** 화면 중심(땅 위 x, z)과 화면 크기에 맞춰 눈송이를 움직인다. baseY: 눈 상자 바닥 높이(하늘 장면에서 사진기를 따라간다) */
+  update(dt: number, cx: number, cz: number, radius: number, baseY?: number): void;
   /** 눈보라(0~1): 눈송이가 커지고 바람에 옆으로 날린다(프롤로그) */
   setStorm(k: number): void;
 }
@@ -64,7 +64,7 @@ export function createSnowfall(pixelRatio: () => number): Snowfall {
     setStorm(k) {
       storm = Math.min(1, Math.max(0, k));
     },
-    update(dt, cx, cz, radius) {
+    update(dt, cx, cz, radius, baseY = 0) {
       if (!count) return;
       t += dt;
       mat.size = (5 + 4 * storm) * pixelRatio();
@@ -76,7 +76,8 @@ export function createSnowfall(pixelRatio: () => number): Snowfall {
         pos[k + 1] = pos[k + 1]! - speed[i]! * fall * dt;
         pos[k] = pos[k]! + Math.sin(t * 0.9 + seed[i]!) * 0.25 * dt + wind * dt; // 살짝 흔들리며 바람 쪽(+x)으로
         // 화면 둘레 상자를 벗어나면 반대쪽으로 되감는다(카메라를 따라간다)
-        if (pos[k + 1]! < 0) pos[k + 1] = TOP;
+        if (pos[k + 1]! < baseY) pos[k + 1] = baseY + TOP - ((baseY - pos[k + 1]!) % TOP);
+        else if (pos[k + 1]! > baseY + TOP) pos[k + 1] = baseY + ((pos[k + 1]! - baseY) % TOP);
         let dx = pos[k]! - cx, dz = pos[k + 2]! - cz;
         if (dx > radius) dx -= span;
         else if (dx < -radius) dx += span;

@@ -10,7 +10,8 @@ test('프롤로그 시간대별', async ({ page }) => {
   // 3배 느리게: 화면을 찍는 동안 장면이 덜 지나가게
   await page.goto('/?chapter=0&test&prologue&slow=3');
   await page.waitForFunction(() => !!(window as unknown as { __lastgift?: { prologue?: () => unknown } }).__lastgift?.prologue?.(), null, { timeout: 60_000 });
-  const times = [1.0, 3.0, 4.6, 5.3, 7.0, 9.8, 13.0, 16.0, 18.8, 20.6, 22.5, 25.5, 27.6, 29.8, 31.8, 33.2, 34.4, 35.8];
+  // 비행(0~12초) 9장 + 땅(12초~) 12장
+  const times = [1.0, 3.0, 4.4, 5.8, 7.4, 8.1, 9.0, 10.6, 11.6, 13.0, 16.0, 18.8, 20.6, 22.5, 25.5, 27.6, 29.8, 31.8, 33.2, 34.4, 35.8];
   for (const t of times) {
     await page.waitForFunction((tt) => ((window as unknown as { __lastgift: { prologue(): { t: number } | null } }).__lastgift.prologue()?.t ?? 99) >= tt, t, { timeout: 200_000 });
     await page.screenshot({ path: `${OUT}/prologue_${t.toFixed(1).padStart(4, '0')}.png` });

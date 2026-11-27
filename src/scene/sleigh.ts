@@ -120,6 +120,7 @@ export function createSleigh(): THREE.Group {
   for (const s of [-1, 1]) {
     const runner = new THREE.Mesh(runnerGeo, gold);
     runner.position.z = s * (HALF_W - 0.02);
+    runner.name = s > 0 ? 'runnerSouth' : 'runnerNorth'; // 프롤로그: 남쪽 날 나사가 빠져 덜컹거린다
     g.add(runner);
     for (const x of [-1.0, -0.2, 0.7]) {
       const post = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, BODY_Y - 0.03, 6), gold);

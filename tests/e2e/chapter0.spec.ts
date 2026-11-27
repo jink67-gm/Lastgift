@@ -27,7 +27,8 @@ const KEYS = {
 type Pid = keyof typeof KEYS;
 const GRIP = 1.15;
 // 둥근 광장(docs/PLAZA_PLAN.md): 표식 = 골목 입구(반지름 13)
-const MARK = { yuna: { x: 6.1, z: -11.48 }, tailor: { x: 12.87, z: 1.81 }, minjae: { x: -8.0, z: 10.24 }, grandma: { x: -12.5, z: -3.58 } };
+// 썰매 옆 놓는 자리(data/chapter0 MARKERS): 유나네·할머니 댁은 자루(가운데), 민재네·수선집은 깔개
+const MARK = { yuna: { x: 1.2, z: -4.75 }, tailor: { x: -3.0, z: -4.1 }, minjae: { x: -2.4, z: -7.9 }, grandma: { x: -0.7, z: -6.3 } };
 
 function keysFor(pid: Pid, gx: number, gz: number): string[] {
   const sx = (gx - gz) / Math.SQRT2, sy = -(gx + gz) / Math.SQRT2;
@@ -90,10 +91,14 @@ async function bring(page: Page, pid: Pid, itemId: string, path: { x: number; z:
   await press(page, pid);
   expect((await st(page)).items.find((i) => i.id === itemId)!.carriedBy).toBe(pid);
   await walk(page, pid, path, tol);
-  // 표식 가운데 쪽으로 짧게 한 번 걸어 그쪽을 보게 한 뒤 놓는다
+  // 놓는 점(요정 앞 0.75 m)이 이미 놓는 자리 안이면 그대로 놓는다(마지막 걸음을 자리 쪽으로 곧게 걸어 들어온다).
+  // 아니면 자리 쪽으로 짧게 한 번 걸어 그쪽을 보게 한 뒤 놓는다(느린 화면에서는 한 번에 1 m 넘게 미끄러질 수 있다)
   const p = (await st(page)).sewing.players.find((q) => q.id === pid)!;
-  await hold(page, { [pid]: keysFor(pid, mark.x - p.x, mark.z - p.z) }, 60);
+  const ahead = { x: p.x + Math.sin(p.facing) * 0.75, z: p.z + Math.cos(p.facing) * 0.75 };
+  if (process.env.DBG) console.log('DBG at', itemId, p.x.toFixed(2), p.z.toFixed(2), p.facing.toFixed(2), ahead.x.toFixed(2), ahead.z.toFixed(2));
+  if (Math.hypot(ahead.x - mark.x, ahead.z - mark.z) > 0.9) await hold(page, { [pid]: keysFor(pid, mark.x - p.x, mark.z - p.z) }, 60);
   await press(page, pid);
+  if (process.env.DBG) { const q = await st(page); console.log('DBG', itemId, JSON.stringify(q.sewing.players.find((r) => r.id === pid)), JSON.stringify(q.items.find((i) => i.id === itemId)), JSON.stringify((await evs(page)).slice(-3))); }
 }
 const grip = (c: { x: number; z: number; yaw: number }, h: 0 | 1) => {
   const s = h === 0 ? -1 : 1;
@@ -127,46 +132,54 @@ test('두 요정이 선물 다섯 개를 그림 표식 네 곳에 나눠 놓으�
   await page.goto('/?chapter=0&test&noshadow'); // 규칙 시험: 그림자는 꺼서 소프트웨어 WebGL 부담을 줄인다(화면은 비교 촬영으로 확인)
   await page.waitForFunction(() => !!(window as unknown as { __lastgift?: { sorting?: unknown } }).__lastgift?.sorting, null, { timeout: 30_000 });
 
-  // 1P: 스케치북 → 유나네(물고기)
-  // (트리 화단 동쪽 → 산타 동쪽으로 돌아 북쪽 골목 입구)
-  await bring(page, 'p0', 'sketchbook', [{ x: 8.5, z: 4 }, { x: 8.5, z: -8.5 }, { x: 6.5, z: -10.5 }], MARK.yuna);
+  // 1P: 스케치북 → 썰매 옆 물고기 자루(유나네). 트리 동쪽으로 돌아 썰매 남쪽, 자루 쪽(북쪽)을 보며 걸어 들어와 넣는다
+  const toYuna = [{ x: 2.7, z: -3.55 }, { x: 1.2, z: -3.55 }, { x: 1.2, z: -3.95 }];
+  await bring(page, 'p0', 'sketchbook', [{ x: 6.6, z: 1.0 }, { x: 4.8, z: -2.4 }, ...toYuna], MARK.yuna);
   let s = await st(page);
   expect(s.items.find((i) => i.id === 'sketchbook')!.sorted).toBe(true);
+  if (process.env.SHOTS) await page.screenshot({ path: 'docs/screens/review/ch0/play_10_sack.png' }); // 점검 촬영(SHOTS=1)
 
-  // 1P: 축구공을 일부러 유나네에 → 원래 자리로 돌아간다
-  await walk(page, 'p0', [{ x: 8.5, z: -8.5 }, { x: 8.5, z: -1.5 }]);
-  await bring(page, 'p0', 'ball', [{ x: 8.5, z: -1.5 }, { x: 8.5, z: -8.5 }, { x: 6.5, z: -10.5 }], MARK.yuna);
+  // 1P: 축구공을 일부러 물고기 자루에 → 원래 자리로 돌아간다
+  await walk(page, 'p0', [{ x: 1.2, z: -3.55 }, { x: 2.7, z: -3.55 }, { x: 4.8, z: -2.4 }]);
+  await bring(page, 'p0', 'ball', [{ x: 4.8, z: -2.4 }, ...toYuna], MARK.yuna);
   s = await st(page);
   const ball = s.items.find((i) => i.id === 'ball')!;
   expect(ball.sorted).toBe(false);
   expect([ball.x, ball.z]).toEqual([ball.homeX, ball.homeZ]);
   expect(count(await evs(page), 'wrong')).toBe(1);
 
-  // 2P: 색연필 통 → 유나네, 수리 상자 → 할머니 댁(트리 있는 집)
-  // (재봉틀 상자 남쪽으로 돌아 동쪽 → 북쪽 골목 입구)
-  await bring(page, 'p1', 'pencils', [{ x: -4, z: 7.6 }, { x: 4.5, z: 7.6 }, { x: 8.5, z: 4 }, { x: 8.5, z: -8.5 }, { x: 6.5, z: -10.2 }], MARK.yuna);
-  // 썰매 북쪽(공방 앞)을 지나 수리 상자 쪽으로 → 할머니 댁(트리 있는 집) 골목
-  await walk(page, 'p1', [{ x: 3, z: -9.6 }, { x: -1.5, z: -9.4 }, { x: -2.5, z: -6.2 }]);
-  await bring(page, 'p1', 'repair', [{ x: -8, z: -4 }, { x: -11, z: -3.6 }], MARK.grandma, 0.5);
-  // 1P: 축구공 → 민재네(눈사람): 산타 동쪽으로 내려와 재봉틀 상자 남쪽을 지나
-  await walk(page, 'p0', [{ x: 8.5, z: -8.5 }, { x: 8.5, z: -1.5 }]);
-  await bring(page, 'p0', 'ball', [{ x: 8.5, z: 7.6 }, { x: -5, z: 9.4 }, { x: -7, z: 9.8 }], MARK.minjae);
+  // 2P: 색연필 통 → 물고기 자루(트리 서쪽으로 돌아 북쪽, 화단과 자루 사이 길로), 수리 상자 → 트리 집 자루(할머니 댁)
+  await bring(page, 'p1', 'pencils', [{ x: -6.6, z: 3.2 }, { x: -6.6, z: -1.0 }, { x: -3.7, z: -3.0 }, { x: -1.2, z: -3.7 }, { x: 0.3, z: -3.6 }, { x: 1.2, z: -3.55 }, { x: 1.2, z: -3.95 }], MARK.yuna);
+  await walk(page, 'p1', [{ x: 1.2, z: -3.55 }, { x: -1.2, z: -3.7 }, { x: -3.7, z: -3.0 }]);
+  await bring(page, 'p1', 'repair', [{ x: -3.2, z: -3.6 }, { x: -0.7, z: -4.6 }, { x: -0.7, z: -5.4 }], MARK.grandma);
+  // 1P: 축구공 → 눈사람 깔개(민재네, 자루 없이 깔개 위에): 트리와 썰매 사이를 지나 서북쪽으로
+  await walk(page, 'p0', [{ x: 4.8, z: -2.4 }]);
+  await bring(page, 'p0', 'ball', [{ x: 2.7, z: -3.55 }, { x: 0.0, z: -3.7 }, { x: -1.4, z: -4.6 }, { x: -2.4, z: -6.6 }, { x: -2.4, z: -7.05 }], MARK.minjae);
   s = await st(page);
   expect(s.items.every((i) => i.sorted)).toBe(true);
   expect(s.complete).toBe(false); // 재봉틀이 아직
+  if (process.env.SHOTS) await page.screenshot({ path: 'docs/screens/review/ch0/play_11_sacks_full.png' });
 
-  // 재봉틀: 혼자서는 안 들린다 → 둘이 양끝을 잡아 수선집(단추)으로
+  // 재봉틀: 혼자서는 안 들린다 → 둘이 양끝을 잡아 단추 깔개(수선집)로(썰매 서북쪽에서 약 4 m)
   const c = s.sewing.crate;
-  await walk(page, 'p0', [{ x: -3, z: 8.2 }, { x: 0.2, z: 6.4 }, grip(c, 0)], 0.25);
+  await walk(page, 'p0', [{ x: -4.2, z: -7.0 }, grip(c, 1)], 0.25);
   await press(page, 'p0');
   expect((await st(page)).sewing.crate.lifted).toBe(false);
-  await walk(page, 'p1', [{ x: -8, z: 4.8 }, { x: -3, z: 7.6 }, { x: 3.6, z: 7.6 }, grip(c, 1)], 0.25);
+  await walk(page, 'p1', [{ x: -0.7, z: -4.6 }, { x: -3.4, z: -4.6 }, { x: -5.5, z: -5.2 }, { x: -7.9, z: -5.6 }, grip(c, 0)], 0.25);
   await press(page, 'p1');
   expect((await st(page)).sewing.crate.lifted).toBe(true);
-  for (const wp of [{ x: 7, z: 4.4 }, { x: 12.4, z: 2.0 }]) await carry(page, { ...wp, yaw: Math.PI / 2 });
+  await carry(page, { x: -3.0, z: -4.1, yaw: Math.PI / 2 });
   await press(page, 'p0');
   s = await st(page);
   expect(s.crateSorted).toBe(true);
+  if (process.env.SHOTS) await page.screenshot({ path: 'docs/screens/review/ch0/play_12_crate.png' });
+  if (process.env.SHOTS) {
+    // 끝 장면: 물고기 자루를 등에 메고 골목 쪽으로
+    await page.waitForTimeout(1700);
+    await page.screenshot({ path: 'docs/screens/review/ch0/play_13_ending_sling.png' });
+    await page.waitForTimeout(1600);
+    await page.screenshot({ path: 'docs/screens/review/ch0/play_14_ending_go.png' });
+  }
   expect(s.complete).toBe(true);
   expect(count(await evs(page), 'complete')).toBe(1);
 

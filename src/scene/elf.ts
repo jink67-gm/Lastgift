@@ -84,6 +84,11 @@ export interface ElfView {
   act?(clip: string | null, o?: { once?: boolean; speed?: number; fade?: number }): boolean;
   /** 연출용: 고개를 숙인다(0 = 앞, 1 = 발밑을 본다) */
   look?(down: number): void;
+  /**
+   * 등에 메는 자루(배달 자루). obj를 요정에게 붙여 등 위에 둔다. sling이면 지금 자리(땅)에서 두 손으로 들어
+   * 어깨 너머로 넘겨 메는 동작(약 1.2초)을 한 뒤 멘다. null이면 내려놓는다(떼어 낸 물건을 돌려준다). 없으면 false
+   */
+  backpack?(obj: THREE.Object3D | null, o?: { sling?: boolean }): THREE.Object3D | null | false;
 }
 
 export function createElf(look: ElfLook): ElfView {

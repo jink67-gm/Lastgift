@@ -66,6 +66,9 @@ export function createSantaAsset(models: Models, height: number): ElfView | null
     sr: bone('Shin.R'),
   };
 
+  // 엉덩이 높이(서 있을 때, 뿌리 기준): 앉으면 엉덩이가 뿌리 높이(= 좌석 면)에 오도록 몸을 내린다
+  model.updateMatrixWorld(true);
+  const hipH = B.hips ? B.hips.getWorldPosition(new THREE.Vector3()).y : height * 0.48;
   const clean = new Map<THREE.Object3D, { q: THREE.Quaternion; p: THREE.Vector3 }>();
   for (const b of Object.values(B)) if (b) clean.set(b, { q: b.quaternion.clone(), p: b.position.clone() });
 
@@ -86,7 +89,8 @@ export function createSantaAsset(models: Models, height: number): ElfView | null
   idle?.play();
   let current: THREE.AnimationAction | undefined = idle;
   /** 뼈로 만드는 연출 동작(에셋에 없는 것) */
-  let proc: 'Wave' | null = null;
+  let proc: 'Wave' | 'Sit' | null = null;
+  let sitK = 0; // 앉기 섞임(썰매 좌석)
   let procT = 0;
   let lookDown = 0;
   let lastT: number | null = null;
@@ -112,6 +116,12 @@ export function createSantaAsset(models: Models, height: number): ElfView | null
     act(clip, o) {
       if (clip === null) {
         proc = null;
+        play(idle, o);
+        return true;
+      }
+      if (clip === 'Sit') {
+        // 썰매 좌석에 앉는다: 뿌리(root) 높이 = 좌석 면
+        proc = 'Sit';
         play(idle, o);
         return true;
       }
@@ -148,6 +158,7 @@ export function createSantaAsset(models: Models, height: number): ElfView | null
       walkK = ease(walkK, moving ? 1 : 0, 6);
       holdK = ease(holdK, holding ? 1 : 0, 4);
       waveK = ease(waveK, proc === 'Wave' ? 1 : 0, 5);
+      sitK = ease(sitK, proc === 'Sit' ? 1 : 0, 6);
       if (moving) stride += dt * (holding ? 5.2 : 6.4);
       procT += dt;
 
@@ -194,6 +205,23 @@ export function createSantaAsset(models: Models, height: number): ElfView | null
         if (B.fr && tw) B.fr.quaternion.multiply(_q.setFromAxisAngle(Y_AXIS, tw));
         turn(B.spine, Z, 0.04 * k);
         turn(B.head, Z, 0.06 * k);
+      }
+
+      // 앉기: 허벅지를 앞으로 눕히고 무릎을 굽힌다. 엉덩이를 뿌리 높이까지 내리고, 두 손은 앞(썰매 앞판)에
+      model.position.y = -hipH * sitK;
+      shadow.visible = sitK < 0.5;
+      if (sitK > 0.001) {
+        const k = sitK;
+        turn(B.tl, X, -1.5 * k);
+        turn(B.tr, X, -1.5 * k);
+        // 무릎은 조금만 굽혀 다리를 앞으로 뻗는다(많이 굽히면 썰매 바닥 아래로 발이 나온다)
+        turn(B.sl, X, 0.5 * k);
+        turn(B.sr, X, 0.5 * k);
+        turn(B.spine, X, -0.06 * k);
+        turn(B.ul, X, -0.7 * k);
+        turn(B.ur, X, -0.7 * k);
+        turn(B.fl, X, -0.5 * k);
+        turn(B.fr, X, -0.5 * k);
       }
 
       // 고개 숙이기: 머리 먼저, 많이 숙이면 등도 조금

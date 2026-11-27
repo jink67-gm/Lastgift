@@ -99,6 +99,14 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
     addHaze(scene);
   }
   const markers = createMarkers();
+  /**
+   * 0장 끝 장면(다 나누면): 물고기 자루(유나네)에 가장 가까운 요정이 자루 앞으로 걸어가 두 손으로 들어 등에 메고(1.2초),
+   * 모두 유나네 골목 쪽을 보고 몇 걸음 → 1장. 화면만(판정과 무관). 방장·참가자 모두 같은 상태에서 같은 요정을 고른다
+   */
+  let ending: { clock: number; carrier: number; from: { x: number; z: number }; slung: boolean } | null = null;
+  const ENDING = { walk: 1.3, sling: 1.35, turn: 2.75, go: 3.2, next: 4.4 } as const;
+  /** 자루에 넣은 시각(선물 id → 초): 자루로 옮겨 가는 이음이 끝난 뒤 숨긴다 */
+  const sackedAt = new Map<string, number>();
   scene.add(markers.root);
   // 썰매에서 떨어진 물건이 미끄러진 자국: 자국 끝에 주울 물건이 있다
   const sleighAt = PLAZA_PROPS.find((p) => p.kind === 'sleigh')!;
@@ -296,7 +304,7 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
         snow.setCount(Math.min(600, base * (1 + 1.6 * k)));
         snow.setStorm(k);
       },
-      snowAround: (dt, x, z, r) => snow.update(dt, x, z, r),
+      snowAround: (dt, x, z, r, y) => snow.update(dt, x, z, r, y),
       onPhoto: (photo) => run.dispatch({ type: 'savePhoto', at: performance.now(), photo }),
     });
     prologue.update(0, aspect);
@@ -379,8 +387,8 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
     // 다섯 물건이 모두 제자리 → 0장 완료(1장 최초 체크포인트 저장)
     if (e.type === 'complete') {
       run.dispatch({ type: 'completeChapter', at: performance.now(), chapterId: 0 });
-      // 이야기 모드: 잠깐 뒤 1장으로
-      if (sto.story) window.setTimeout(() => sto.next(), 1800);
+      // 이야기 모드: 끝 장면(자루 메고 골목 쪽으로) 뒤 1장으로
+      if (sto.story) window.setTimeout(() => sto.next(), ENDING.next * 1000);
     }
   }
 
@@ -425,11 +433,64 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
     // 두 손잡이를 든 요정의 손 높이(재봉틀을 손에 맞춰 띄운다)
     let handY = 0;
     let handN = 0;
+    if (sort.complete && !ending) {
+      const sack = markerOf('yuna');
+      let best = 0;
+      sw.players.forEach((p, i) => {
+        const b = sw.players[best]!;
+        if (p.connected && (!b.connected || Math.hypot(p.x - sack.x, p.z - sack.z) < Math.hypot(b.x - sack.x, b.z - sack.z))) best = i;
+      });
+      const b = shown.get(sw.players[best]!.id) ?? sw.players[best]!;
+      ending = { clock: 0, carrier: best, from: { x: b.x, z: b.z }, slung: false };
+    }
+    if (ending) ending.clock += frame;
     sw.players.forEach((p, i) => {
       const e = elves[i]!;
       const ps = follow(p.id, p.x, p.z, p.facing, kf);
       e.root.position.set(ps.x, 0, ps.z);
       e.root.rotation.y = ps.yaw;
+      if (ending) {
+        const t = ending.clock;
+        const sack = markerOf('yuna');
+        const mouth = PLAZA_DRESSING.alleyMouth;
+        const toMouth = Math.atan2(mouth.x - ps.x, mouth.z - ps.z);
+        let walking = false;
+        if (i === ending.carrier) {
+          // 자루 앞(자루에서 요정 쪽으로 0.8 m)까지 걸어가 자루를 본다 → 메기 → 골목 쪽으로 몇 걸음
+          const f = ending.from;
+          const d = Math.hypot(f.x - sack.x, f.z - sack.z) || 1;
+          const gx = sack.x + ((f.x - sack.x) / d) * 0.8, gz = sack.z + ((f.z - sack.z) / d) * 0.8;
+          const k = Math.min(1, t / ENDING.walk);
+          const e2 = k * k * (3 - 2 * k);
+          let x = f.x + (gx - f.x) * e2, z = f.z + (gz - f.z) * e2;
+          walking = k < 1 && Math.hypot(gx - f.x, gz - f.z) > 0.2;
+          let yaw = Math.atan2(sack.x - x, sack.z - z);
+          if (!ending.slung && t >= ENDING.sling) {
+            ending.slung = true;
+            const obj = markers.sack('yuna');
+            if (obj) e.backpack?.(obj, { sling: true });
+          }
+          if (t >= ENDING.go) {
+            const g = Math.min(1.4, (t - ENDING.go) * 1.6);
+            const a = Math.atan2(mouth.x - gx, mouth.z - gz);
+            x = gx + Math.sin(a) * g;
+            z = gz + Math.cos(a) * g;
+            yaw = a;
+            walking = g < 1.4;
+          }
+          e.root.position.set(x, 0, z);
+          e.root.rotation.y = yaw;
+        } else {
+          // 다른 요정: 메는 친구를 보다가 골목 쪽으로 돈다
+          const cx = elves[ending.carrier]!.root.position;
+          e.root.rotation.y = t < ENDING.turn ? Math.atan2(cx.x - ps.x, cx.z - ps.z) : toMouth;
+        }
+        e.animate(elapsed, walking, { carry: 'none', act: 0, tired: false });
+        bars[i]!.group.visible = false;
+        swaps[i]!.visible = false;
+        rings[i]!.visible = false;
+        return;
+      }
       const held = sort.items.find((it) => it.carriedBy === p.id);
       const since = elapsed - (actAt.get(p.id) ?? -9);
       e.animate(elapsed, p.moving || runInPlace.has(p.id), {
@@ -485,7 +546,13 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
         g.tag.position.set(it.x, 0.95, it.z);
       }
       holdTween.apply(it.id, g.v, idx >= 0, elapsed);
+      // 자루에 넣은 선물: 손에서 자루로 옮겨 가는 짧은 이음(0.25초)이 끝나면 자루 속으로(숨김)
+      const inSack = it.sorted && markerOf(it.dest).sack;
+      if (inSack && !sackedAt.has(it.id)) sackedAt.set(it.id, elapsed);
+      if (!inSack) sackedAt.delete(it.id);
+      g.v.visible = !(inSack && elapsed - sackedAt.get(it.id)! > 0.28);
     }
+    for (const d of ['yuna', 'grandma'] as const) markers.fill(d, sort.items.filter((i) => i.sorted && i.dest === d).length);
     // 산타는 썰매 앞쪽을 받치고, 도토는 썰매 날을 살핀다
     santa.animate(elapsed, false, { carry: 'heavy', act: 0, tired: false });
     doto.animate(elapsed, false);

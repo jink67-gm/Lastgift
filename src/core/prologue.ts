@@ -1,31 +1,31 @@
 // 프롤로그(명세서 §4 0장 첫 문단) 시간표와 단체사진 구도. three.js와 무관한 순수 값·계산(단위 시험 대상).
-//   ① 단체사진(나중 5장 장면을 먼저 보여 준다): 예약 셔터가 깜박이는 동안 화면 아래로 콩이 꼬리가 휙 → 모두 발밑을 본다 → 찰칵
-//   ② 사진을 뒤집으면 '한 시간 전, 마을 광장'
-//   ③ 아무도 없는 눈보라 광장 → 별빛 → 삐걱거리는 썰매가 광장 눈더미에 처박힘 → 선물·요정이 흩어짐
+// 2026-11-27 사용자 결정으로 첫 연출을 바꿨다: 5장 단체사진을 먼저 보여 주고 사진 뒷면('한 시간 전, 마을 광장')으로
+// 넘어가던 것을 빼고, 밤하늘을 나는 썰매 안에서 시작한다(인물 소개 + 사고 원인).
+//   ① 썰매 비행: 높은 데서 밤하늘을 가로지르는 썰매 → 썰매 옆(산타는 좌석, 요정들은 선물을 안고 마을을 내려다보고,
+//      도토는 맨 앞 길잡이) → 눈보라에 흔들리다 썰매 날 나사가 튀어 나감 → 기우뚱 떨어지며 하얀 눈보라 속으로
+//   ② 땅: 아무도 없는 눈보라 광장 → 별빛(떨어지는 썰매) → 광장 눈더미에 처박힘 → 선물·요정이 흩어짐
 //      → 눈 구름이 가라앉는 동안 쓰러진 요정들에게 낮게 다가감 → 하나씩 일어나 두리번 → 산타 무사(손 흔들기)
 //      → 도토가 눈을 털고 썰매 날을 살핌 → 산타가 썰매 한쪽을 받침 → 흩어진 선물의 그림 이름표 → 0장 플레이
-// 대사·자막 없음. 글자는 사진 뒷면 한 줄뿐(소품).
+// 대사·자막·글자 없음. 단체사진 구도(5장에서 찍는 사진)는 처음에 정해 저장한다.
 
 /** 구간 [시작, 끝](초) */
 export type Span = readonly [number, number];
 
 export const PROLOGUE = {
-  photo: {
-    /** 사진기가 천천히 다가간다 */
-    push: [0, 5.6] as Span,
-    /** 예약 셔터 깜박임(점점 빨라진다) */
-    blinks: [1.6, 2.6, 3.4, 4.0, 4.45, 4.8, 5.05] as const,
-    /** 콩이가 화면 아래를 가로지른다 */
-    tail: [4.3, 5.05] as Span,
-    /** 모두 발밑을 내려다본다 */
-    lookDown: [4.45, 4.85] as Span,
-    shutter: 5.35,
-  },
-  card: {
-    show: [5.6, 6.3] as Span,
-    flip: [8.4, 9.3] as Span,
-    /** 뒷면을 보여 준 뒤 사라진다 */
-    hide: [11.3, 12.0] as Span,
+  flight: {
+    /** 높은 데서: 밤하늘을 가로지르는 썰매와 그 아래 불 켜진 마을 */
+    wide: [0, 3.8] as Span,
+    /** 썰매 옆에서: 산타는 좌석에, 요정들은 선물을 안고 마을을 내려다본다, 도토는 맨 앞 길잡이 */
+    ride: [3.8, 7.0] as Span,
+    /** 눈보라: 썰매가 흔들리고 */
+    gust: [7.0, 9.6] as Span,
+    /** 썰매 날 나사가 튀어 나간다 */
+    bolt: 7.8,
+    /** 기우뚱 → 머리를 숙이며 떨어진다 */
+    dive: [9.6, 12.0] as Span,
+    /** 눈보라 속으로 하얗게 → 땅의 광장 */
+    white: [11.2, 12.6] as Span,
+    end: 12.0,
   },
   crash: {
     /** 눈보라 밤하늘 */
@@ -78,17 +78,11 @@ export function ease(x: number): number {
   return t * t * (3 - 2 * t);
 }
 
-/** 예약 셔터 불빛이 지금 켜져 있는가(깜박임마다 0.16초) */
-export function blinkOn(t: number): boolean {
-  return PROLOGUE.photo.blinks.some((b) => t >= b && t < b + 0.16);
-}
-
 /** 지금 장면 이름(화면 확인·시험용) */
-export type PrologueBeat = 'photo' | 'card' | 'storm' | 'crash' | 'aftermath' | 'done';
+export type PrologueBeat = 'flight' | 'storm' | 'crash' | 'aftermath' | 'done';
 export function beatAt(t: number): PrologueBeat {
   if (t >= PROLOGUE.end) return 'done';
-  if (t < PROLOGUE.photo.shutter) return 'photo';
-  if (t < PROLOGUE.card.hide[1]) return 'card';
+  if (t < PROLOGUE.flight.end) return 'flight';
   if (t < PROLOGUE.crash.sleigh[0]) return 'storm';
   if (t < PROLOGUE.crash.impact + 0.6) return 'crash';
   return 'aftermath';

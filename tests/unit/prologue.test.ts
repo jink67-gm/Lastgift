@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beatAt, blinkOn, isPhotoSetup, PHOTO_SPOT, photoLineup, PROLOGUE, seg } from '../../src/core/prologue';
+import { beatAt, isPhotoSetup, PHOTO_SPOT, photoLineup, PROLOGUE, seg } from '../../src/core/prologue';
 import { createRun, fromCheckpoint, reduce, remainingAt, toCheckpoint } from '../../src/core/run';
 import { CheckpointStore, type KeyValue } from '../../src/save/store';
 
@@ -17,25 +17,23 @@ class MemoryKV implements KeyValue {
 }
 
 describe('프롤로그 시간표', () => {
-  it('순서: 사진 → 사진 뒤집기 → 눈보라 → 불시착 → 그 뒤 → 끝', () => {
+  it('순서: 썰매 비행 → 눈보라 광장 → 불시착 → 그 뒤 → 끝', () => {
     const P = PROLOGUE;
-    expect(beatAt(0)).toBe('photo');
-    expect(beatAt(P.photo.shutter + 0.1)).toBe('card');
-    expect(beatAt(P.card.hide[1] + 0.1)).toBe('storm');
+    expect(beatAt(0)).toBe('flight');
+    expect(beatAt(P.flight.end + 0.1)).toBe('storm');
     expect(beatAt(P.crash.sleigh[0] + 0.1)).toBe('crash');
     expect(beatAt(P.crash.impact + 1)).toBe('aftermath');
     expect(beatAt(P.end)).toBe('done');
   });
-  it('콩이 꼬리는 셔터 직전에 사라지고, 모두 그 사이에 발밑을 본다', () => {
-    const P = PROLOGUE.photo;
-    expect(P.tail[1]).toBeLessThan(P.shutter);
-    expect(P.lookDown[0]).toBeGreaterThan(P.tail[0]);
-    expect(P.lookDown[1]).toBeLessThan(P.shutter);
-    // 예약 셔터는 셔터 전에만 깜박이고 점점 빨라진다
-    const gaps = P.blinks.slice(1).map((b, i) => b - P.blinks[i]!);
-    gaps.slice(1).forEach((g, i) => expect(g).toBeLessThanOrEqual(gaps[i]!));
-    expect(blinkOn(P.blinks[0]! + 0.05)).toBe(true);
-    expect(blinkOn(P.shutter + 0.05)).toBe(false);
+  it('비행: 높은 데서 → 썰매 옆 → 눈보라(그 사이 나사가 튀어 나감) → 떨어짐 → 하얗게, 땅 장면은 비행이 끝난 뒤', () => {
+    const F = PROLOGUE.flight;
+    expect(F.wide[1]).toBeLessThanOrEqual(F.ride[0]);
+    expect(F.ride[1]).toBeLessThanOrEqual(F.gust[0]);
+    expect(F.bolt).toBeGreaterThan(F.gust[0]);
+    expect(F.bolt).toBeLessThan(F.gust[1]);
+    expect(F.dive[0]).toBeGreaterThanOrEqual(F.gust[1]);
+    expect(F.white[0]).toBeLessThan(F.end);
+    expect(PROLOGUE.crash.quiet[0]).toBeGreaterThanOrEqual(F.end);
   });
   it('불시착 뒤: 산타가 손을 흔든 다음(무사) 썰매를 받치고, 도토는 눈을 턴 다음 썰매 날로 간다', () => {
     const C = PROLOGUE.crash;

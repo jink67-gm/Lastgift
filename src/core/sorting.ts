@@ -1,13 +1,14 @@
 // 0장 선물 분류 규칙(명세서 §5 0장). 방장만 계산한다. three.js·DOM에 의존하지 않는다.
 //
 // - 가벼운 선물 네 개는 혼자 들고 놓는다(core/carry). 재봉틀은 두 요정이 양끝을 함께 든다(core/sewing, 'ch0' 배치).
-// - 그림 표식 자리에 놓으면: 목적지가 맞으면 그 자리에 고정, 틀리면 원래 자리로 돌아가 다시 집을 수 있다.
+// - 썰매 옆 그림 자루(유나네·할머니 댁) 둘레나 그림 깔개(민재네·수선집)에 놓으면: 목적지가 맞으면 고정(자루면 자루 속),
+//   틀리면 원래 자리로 돌아가 다시 집을 수 있다. 자루를 보고 놓아도(놓는 점이 자루에 걸려도) 자루 속으로 넣은 것으로 친다.
 // - 재봉틀을 수선집 표식에 내려놓으면 고정, 다른 표식에 내려놓으면 원래 자리로 돌아간다.
 // - 네 선물과 재봉틀(양끝 함께 들기를 해야만 옮길 수 있다)이 모두 제자리면 0장 완료(한 번만).
-import { applyAction, chooseTarget, planAction as planCarry, PICK_RANGE, type Item } from './carry';
+import { applyAction, chooseTarget, dropPoint, planAction as planCarry, PICK_RANGE, type Item } from './carry';
 import type { Collider } from './collision';
 import { createSewing, crateObb, gripPos, layoutOf, planAction as planSewing, step as sewingStep, type SewingEvent, type SewingInput, type SewingState } from './sewing';
-import { MARKERS, SORT_GIFTS, type Dest } from '../data/chapter0';
+import { MARKERS, SACK_R, SORT_GIFTS, type Dest } from '../data/chapter0';
 
 export interface SortItem extends Item {
   dest: Dest;
@@ -60,13 +61,26 @@ function dropColliders(s: SortState): Collider[] {
   return [...layoutOf(s.sewing).walls, crateObb(s.sewing.crate)];
 }
 
+/** 자루를 보고 놓을 때 자루 속으로 넣어 주는 거리(자루 가운데에서 놓는 점까지) */
+const INTO_SACK = SACK_R + 0.25 + 0.3;
+
+/** 가벼운 선물 내려놓기: 보통은 요정 앞, 놓는 점이 그림 자루에 걸리면(자루를 보고 놓으면) 그 자루 속으로 */
+function dropPlan(s: SortState, playerId: string) {
+  const p = s.sewing.players.find((q) => q.id === playerId)!;
+  const plan = planCarry(playerId, p, s.items, dropColliders(s), layoutOf(s.sewing).bounds);
+  if (plan.kind !== 'blocked') return plan;
+  const at = dropPoint(p);
+  const m = MARKERS.find((k) => k.sack && dist(at, { x: k.signX, z: k.signZ }) <= INTO_SACK);
+  return m ? ({ kind: 'drop', itemId: plan.itemId, x: m.x, z: m.z } as const) : plan;
+}
+
 export function planAction(s: SortState, playerId: string): SortAction {
   const p = s.sewing.players.find((q) => q.id === playerId);
   if (!p || !p.connected || s.complete) return { kind: 'none' };
   const held = s.items.find((i) => i.carriedBy === playerId);
   if (held || p.holding !== null) {
     if (p.holding !== null) return { kind: 'sewing', sub: planSewing(s.sewing, playerId) };
-    const a = planCarry(playerId, p, s.items, dropColliders(s), layoutOf(s.sewing).bounds);
+    const a = dropPlan(s, playerId);
     return a.kind === 'drop' ? { kind: 'drop', itemId: a.itemId } : { kind: 'blocked', itemId: held!.id };
   }
   // 맨손: 가까운 선물과 재봉틀 손잡이 중 더 가까운 쪽
@@ -86,9 +100,8 @@ function settleItem(s: SortState, itemId: string, fx: SortEvent[]): SortState {
   const m = markerAt(it);
   if (!m) return s;
   if (m.dest === it.dest) {
-    // 놓는 자리 안에서 선물끼리 겹치지 않게 칸을 나눠 고정한다
-    const n = s.items.filter((i) => i.sorted && i.dest === m.dest).length;
-    const slot = { x: m.x + (n === 0 ? -0.45 : 0.45), z: m.z };
+    // 자루면 자루 속(자루 자리, 화면에서는 숨기고 자루가 불룩해진다), 깔개면 깔개 가운데
+    const slot = { x: m.x, z: m.z };
     fx.push({ type: 'sorted', itemId, dest: m.dest });
     return { ...s, items: s.items.map((i) => (i.id === itemId ? { ...i, ...slot, sorted: true } : i)) };
   }
@@ -117,7 +130,7 @@ export function step(state: SortState, inputs: Record<string, SewingInput>, dt: 
       s = { ...s, items: applyAction(p.id, s.items, { kind: 'pick', itemId: a.itemId }) as SortItem[] };
       fx.push({ type: 'pick', playerId: p.id, itemId: a.itemId });
     } else if (a.kind === 'drop') {
-      const plan = planCarry(p.id, p, s.items, dropColliders(s), layoutOf(s.sewing).bounds);
+      const plan = dropPlan(s, p.id);
       if (plan.kind === 'drop') {
         s = { ...s, items: applyAction(p.id, s.items, plan) as SortItem[] };
         fx.push({ type: 'drop', playerId: p.id, itemId: a.itemId });

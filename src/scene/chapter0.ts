@@ -1,7 +1,7 @@
-// 0장 화면 소품(직접 제작): 배달지 그림 4종, 그림 표지판·놓는 자리, 선물 이름표 카드.
+// 0장 화면 소품(직접 제작): 배달지 그림 4종, 썰매 옆 그림 자루·놓는 자리, 골목 입구 길 찾기 표지판, 선물 이름표 카드.
 // 그림은 글자 없이 알아보게: 유나네 = 물고기, 수선집 = 단추, 민재네 = 눈사람, 할머니 댁 = 트리 있는 집.
 import * as THREE from 'three';
-import { MARKERS, type Dest } from '../data/chapter0';
+import { ALLEY_SIGNS, MARKERS, type Dest } from '../data/chapter0';
 
 const ACCENT: Record<Dest, string> = { yuna: '#2f6fd0', tailor: '#c8323c', minjae: '#2f9a4a', grandma: '#e0a021' };
 
@@ -137,25 +137,75 @@ export interface MarkerView {
   root: THREE.Group;
   /** 맞게 놓았으면 초록, 틀렸으면 빨강으로 잠깐 빛난다 */
   flash(dest: Dest, ok: boolean): void;
+  /** 자루에 든 선물 수(0~): 들수록 자루가 불룩해지고, 들어가는 순간 한 번 출렁인다 */
+  fill(dest: Dest, n: number): void;
+  /** 자루 하나(그 장을 시작할 때 등에 멜 자루). 없으면 null */
+  sack(dest: Dest): THREE.Object3D | null;
   update(dt: number): void;
 }
 
+/** 천 자루(불룩하고 울퉁불퉁 + 묶인 목 위로 벌어진 주름 + 색 끈). 원점은 바닥 가운데, 높이 약 1 m */
+export function createSack(accent: string, seed = 1): THREE.Group {
+  const g = new THREE.Group();
+  const cloth = new THREE.MeshStandardMaterial({ color: '#a77a4e', roughness: 1, flatShading: true });
+  const geo = new THREE.SphereGeometry(0.45, 14, 12);
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const pinch = y > 0.1 ? 1 - Math.min(1, (y - 0.1) / 0.34) * 0.76 : 1;
+    const bump = 1 + 0.07 * Math.sin(x * 17 + z * 7 + seed) * Math.cos(z * 13 - y * 9 + seed * 2);
+    pos.setXYZ(i, x * pinch * bump, y < -0.32 ? -0.32 - (y + 0.32) * 0.3 : y, z * pinch * bump);
+  }
+  geo.computeVertexNormals();
+  const body = new THREE.Mesh(geo, cloth);
+  body.position.y = 0.36;
+  g.add(body);
+  const ruffle = new THREE.CylinderGeometry(0.17, 0.07, 0.2, 12, 1, true);
+  const rp = ruffle.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < rp.count; i++) if (rp.getY(i) > 0) rp.setY(i, rp.getY(i) + 0.045 * Math.sin(Math.atan2(rp.getZ(i), rp.getX(i)) * 6));
+  ruffle.computeVertexNormals();
+  const top = new THREE.Mesh(ruffle, new THREE.MeshStandardMaterial({ color: '#a77a4e', roughness: 1, flatShading: true, side: THREE.DoubleSide }));
+  top.position.y = 0.9;
+  g.add(top);
+  const tie = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.03, 6, 14), new THREE.MeshStandardMaterial({ color: accent, roughness: 0.6 }));
+  tie.rotation.x = Math.PI / 2;
+  tie.position.y = 0.79;
+  g.add(tie);
+  g.traverse((o) => {
+    if ((o as THREE.Mesh).isMesh) {
+      o.castShadow = true;
+      o.receiveShadow = true;
+    }
+  });
+  return g;
+}
+
+/** 썰매 옆 놓는 자리: 그림 자루 둘(유나네·할머니 댁, 둘레에 점선 원) + 그림 깔개 둘(민재네·수선집, 바닥 그림 + 작은 팻말).
+ *  맞게·틀리게 놓으면 원이 잠깐 빛나고, 자루는 선물이 들수록 불룩해진다 */
 export function createMarkers(): MarkerView {
   const root = new THREE.Group();
   const rings = new Map<Dest, { mat: THREE.MeshBasicMaterial; t: number; ok: boolean }>();
-  for (const m of MARKERS) {
-    // 바닥 놓는 자리: 연한 원 + 가운데 그림
+  const sacks = new Map<Dest, { obj: THREE.Group; n: number; bump: number }>();
+  MARKERS.forEach((m, i) => {
+    // 바닥: 점선 원(+ 깔개면 가운데 그림)
     const floorTex = canvasTexture((g, n) => {
-      g.fillStyle = 'rgba(255,255,255,0.0)';
-      g.fillRect(0, 0, n, n);
+      g.fillStyle = m.sack ? 'rgba(255,255,255,0.0)' : 'rgba(255,253,246,0.55)';
+      if (m.sack) g.fillRect(0, 0, n, n);
+      else {
+        g.beginPath();
+        g.arc(n / 2, n / 2, n * 0.46, 0, 7);
+        g.fill();
+      }
       g.strokeStyle = ACCENT[m.dest];
       g.lineWidth = n * 0.05;
       g.setLineDash([n * 0.08, n * 0.05]);
       g.beginPath();
       g.arc(n / 2, n / 2, n * 0.44, 0, 7);
       g.stroke();
-      g.globalAlpha = 0.85;
-      drawSymbol(g, m.dest, n / 2, n / 2, n * 0.5);
+      if (!m.sack) {
+        g.globalAlpha = 0.85;
+        drawSymbol(g, m.dest, n / 2, n / 2, n * 0.5);
+      }
     });
     const disc = new THREE.Mesh(new THREE.CircleGeometry(m.r, 40), new THREE.MeshBasicMaterial({ map: floorTex, transparent: true, depthWrite: false }));
     disc.rotation.x = -Math.PI / 2;
@@ -168,13 +218,38 @@ export function createMarkers(): MarkerView {
     ring.position.set(m.x, 0.02, m.z);
     root.add(ring);
     rings.set(m.dest, { mat: glow, t: 0, ok: true });
-    // 표지판: 기둥 + 그림판(항상 카메라 쪽을 향하는 카드)
+    if (m.sack) {
+      // 자루 + 자루에 매단 그림 이름표(항상 카메라 쪽을 향하는 카드)
+      const sack = createSack(ACCENT[m.dest], i + 1);
+      sack.position.set(m.signX, 0, m.signZ);
+      sack.rotation.y = i * 1.3;
+      sack.name = `sack-${m.dest}`;
+      const board = new THREE.Sprite(new THREE.SpriteMaterial({ map: symbolCard(m.dest) }));
+      board.scale.set(0.95, 0.95, 1);
+      board.position.y = 1.55;
+      board.name = 'sackTag';
+      sack.add(board);
+      root.add(sack);
+      sacks.set(m.dest, { obj: sack, n: 0, bump: 0 });
+    } else {
+      // 깔개 옆 작은 그림 팻말
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.95, 8), new THREE.MeshStandardMaterial({ color: '#6b4428', roughness: 0.9 }));
+      pole.position.set(m.signX, 0.47, m.signZ);
+      root.add(pole);
+      const board = new THREE.Sprite(new THREE.SpriteMaterial({ map: symbolCard(m.dest) }));
+      board.scale.set(0.8, 0.8, 1);
+      board.position.set(m.signX, 1.25, m.signZ);
+      root.add(board);
+    }
+  });
+  // 길 찾기: 골목 입구 그림 표지판(기둥 + 그림판, 판정 없음)
+  for (const a of ALLEY_SIGNS) {
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 1.9, 8), new THREE.MeshStandardMaterial({ color: '#6b4428', roughness: 0.9 }));
-    pole.position.set(m.signX, 0.95, m.signZ);
+    pole.position.set(a.x, 0.95, a.z);
     root.add(pole);
-    const board = new THREE.Sprite(new THREE.SpriteMaterial({ map: symbolCard(m.dest) }));
+    const board = new THREE.Sprite(new THREE.SpriteMaterial({ map: symbolCard(a.dest) }));
     board.scale.set(1.15, 1.15, 1);
-    board.position.set(m.signX, 2.25, m.signZ);
+    board.position.set(a.x, 2.25, a.z);
     root.add(board);
   }
   return {
@@ -185,10 +260,26 @@ export function createMarkers(): MarkerView {
       r.ok = ok;
       r.mat.color.set(ok ? '#5fd36a' : '#e0505a');
     },
+    fill(dest, n) {
+      const k = sacks.get(dest);
+      if (!k || k.n === n) return;
+      if (n > k.n) k.bump = 1;
+      k.n = n;
+    },
+    sack(dest) {
+      return sacks.get(dest)?.obj ?? null;
+    },
     update(dt) {
       for (const r of rings.values()) {
         r.t = Math.max(0, r.t - dt);
         r.mat.opacity = r.t > 0 ? 0.35 + 0.45 * Math.abs(Math.sin(r.t * 8)) : 0;
+      }
+      for (const k of sacks.values()) {
+        if (k.obj.parent !== root) continue; // 요정이 등에 멨다
+        k.bump = Math.max(0, k.bump - dt * 2.2);
+        const full = 1 + 0.14 * Math.min(2, k.n);
+        const wob = Math.sin(k.bump * Math.PI * 3) * 0.12 * k.bump;
+        k.obj.scale.set(full * (1 + wob), full * (1 - wob * 0.8), full * (1 + wob));
       }
     },
   };

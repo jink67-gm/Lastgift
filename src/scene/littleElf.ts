@@ -52,8 +52,15 @@ function addClothUv(g: THREE.BufferGeometry): void {
   g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 }
 
-type Proc = 'Wave' | 'Interact' | 'HitRecieve' | 'Death' | 'GetUp';
-const PROCS: readonly string[] = ['Wave', 'Interact', 'HitRecieve', 'Death', 'GetUp'];
+type Proc = 'Wave' | 'Interact' | 'HitRecieve' | 'Death' | 'GetUp' | 'Sling';
+const PROCS: readonly string[] = ['Wave', 'Interact', 'HitRecieve', 'Death', 'GetUp', 'Sling'];
+/** 자루 메기(허리 굽혀 두 손으로 잡고 → 머리 위로 → 어깨 너머 등으로) 걸리는 시간(초) */
+const SLING_SEC = 1.2;
+/**
+ * 등에 멘 자루(산타처럼): 묶은 입구(자루 목, 자루 원점에서 neck 높이)를 오른쪽 어깨에 걸쳐 오른손으로 잡고,
+ * 몸통은 등 뒤로 늘어진다. shoulder = 등뼈에서 오른쪽 어깨 위(요정 크기 1 기준, 요정 오른쪽 = -x), dir = 몸통 → 목 방향
+ */
+const PACK = { shoulder: { x: -0.13, y: 0.2, z: -0.02 }, dir: { x: -0.12, y: 0.72, z: 0.62 }, neck: 0.8, scale: 0.6 } as const;
 /** 일어나기(뒤로 쓰러진 자세 → 앉기 → 쪼그려 앉기 → 서기) 걸리는 시간(초) */
 const GETUP_SEC = 1.6;
 
@@ -167,6 +174,13 @@ export function createLittleElf(models: Models, look: ElfLook): ElfView | null {
     { u: 1, rot: 0, hz: 0, hy: hipH, thigh: 0, shin: 0, spine: 0, armX: 0, armZ: 0 },
   ] as const;
   const _hip = new THREE.Vector3(), _eul = new THREE.Euler();
+  // 등에 멘 자루
+  let pack: THREE.Object3D | null = null;
+  let packT = Infinity; // 메기 시작부터 흐른 시간(Infinity = 이미 멤)
+  const packFrom = new THREE.Vector3();
+  const packFromQ = new THREE.Quaternion();
+  let packFromS = 1;
+  const _sp = new THREE.Vector3(), _pk = new THREE.Vector3(), _c1 = new THREE.Vector3(), _pq = new THREE.Quaternion();
 
   // 발밑 그림자
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.3, 24), new THREE.MeshBasicMaterial({ color: '#1b2433', transparent: true, opacity: 0.25, depthWrite: false }));
@@ -239,6 +253,36 @@ export function createLittleElf(models: Models, look: ElfLook): ElfView | null {
     },
     look(down) {
       lookDown = Math.max(0, Math.min(1, down));
+    },
+    backpack(obj, o = {}) {
+      if (obj === null) {
+        const old = pack;
+        if (old) {
+          old.parent?.remove(old);
+          pack = null;
+        }
+        return old;
+      }
+      // 지금 자리(월드)를 기억해 두고 요정에게 붙인다
+      root.updateMatrixWorld(true);
+      obj.updateMatrixWorld(true);
+      obj.getWorldPosition(_pk);
+      packFrom.copy(root.worldToLocal(_pk.clone()));
+      obj.getWorldQuaternion(packFromQ);
+      packFromQ.premultiply(root.getWorldQuaternion(_pq).invert());
+      packFromS = obj.getWorldScale(_pk).y / (root.getWorldScale(_c1).y || 1);
+      root.add(obj);
+      pack = obj;
+      packT = o.sling ? 0 : Infinity;
+      if (o.sling) {
+        procT = 0;
+        proc = 'Sling';
+        lastProc = proc;
+        procFade = 0.3;
+        procOnce = true;
+        procSpeed = 1;
+      }
+      return obj;
     },
     hands(l, r) {
       if (!B.gl || !B.gr) return false;
@@ -333,6 +377,25 @@ export function createLittleElf(models: Models, look: ElfLook): ElfView | null {
           turn(B.ul, Z, 0.6 * w * k);
           turn(B.ur, Z, -0.6 * w * k);
           if (procOnce && procT > 0.55) proc = null;
+        } else if (kind === 'Sling') {
+          // 허리 굽혀 두 손으로 자루 목을 잡고(0~0.35) → 머리 위로 들어(~0.7) → 어깨 너머 등으로 넘기고 끈을 잡는다(~1)
+          const u = Math.min(1, procT / SLING_SEC);
+          const sm = (a: number, b: number) => {
+            const x = Math.min(1, Math.max(0, (u - a) / (b - a)));
+            return x * x * (3 - 2 * x);
+          };
+          const bend = sm(0, 0.25) * (1 - sm(0.3, 0.55));
+          const lift = sm(0.3, 0.62) * (1 - sm(0.72, 1));
+          const hold = sm(0.72, 1);
+          turn(B.spine, X, (0.55 * bend - 0.12 * lift + 0.12 * hold) * w);
+          // 두 손으로 들어 올리고, 끝에는 왼손은 내리고 오른손은 어깨 위 자루 목을 잡는다(등에 멘 자루 쪽에서)
+          const armX = -0.9 * bend - 2.5 * lift;
+          turn(B.ul, X, armX * w);
+          turn(B.ur, X, armX * w);
+          turn(B.fl, X, -0.4 * lift * w);
+          turn(B.fr, X, -0.4 * lift * w);
+          void hold;
+          if (procOnce && u >= 1) proc = null;
         } else if (kind === 'GetUp') {
           // 뒤로 쓰러진 자세(Death 끝)에서: 상체를 일으켜 앉고 → 무릎을 당겨 쪼그려 앉고 → 선다. 엉덩이를 축으로(판자처럼 서지 않게)
           const u = Math.min(1, procT / GETUP_SEC);
@@ -395,6 +458,45 @@ export function createLittleElf(models: Models, look: ElfLook): ElfView | null {
       }
       // 고개 숙이기(0 = 앞, 1 = 발밑)
       if (lookDown > 0.001) turn(B.head, X, 0.75 * lookDown);
+      // 등에 멘 자루: 자루 목을 오른쪽 어깨에 걸치고(오른손으로 잡음) 몸통은 등 뒤로. 걸을 때 조금 출렁.
+      // 메는 중이면 땅 → 머리 위 → 어깨로 호를 그린다
+      if (pack && B.spine) {
+        root.updateMatrixWorld(true);
+        B.spine.getWorldPosition(_sp);
+        root.worldToLocal(_sp);
+        _sp.x += PACK.shoulder.x;
+        _sp.y += PACK.shoulder.y;
+        _sp.z += PACK.shoulder.z;
+        const sway = moving ? Math.sin(timeSec * 9) * 0.06 : 0;
+        _pk.set(PACK.dir.x, PACK.dir.y, PACK.dir.z + sway).normalize();
+        _pq.setFromUnitVectors(_c1.set(0, 1, 0), _pk);
+        // 자루 원점(바닥) = 어깨 - 목 방향 × 목 높이
+        const neck = PACK.neck * PACK.scale;
+        const tx = _sp.x - _pk.x * neck, ty = _sp.y - _pk.y * neck, tz = _sp.z - _pk.z * neck;
+        packT += dt;
+        const u = Math.min(1, packT / SLING_SEC);
+        if (u < 1) {
+          // 잡을 때까지(0.3)는 제자리, 그다음 머리 위(앞 조금)를 지나 어깨로
+          const k = Math.max(0, (u - 0.3) / 0.7);
+          const e = k * k * (3 - 2 * k);
+          _c1.set(0, ELF_TOTAL_HEIGHT * 1.15, 0.2);
+          const v = 1 - e;
+          pack.position.set(v * v * packFrom.x + 2 * v * e * _c1.x + e * e * tx, v * v * packFrom.y + 2 * v * e * _c1.y + e * e * ty, v * v * packFrom.z + 2 * v * e * _c1.z + e * e * tz);
+          pack.quaternion.copy(packFromQ).slerp(_pq, e);
+          pack.scale.setScalar(packFromS + (PACK.scale - packFromS) * e);
+        } else {
+          pack.position.set(tx, ty, tz);
+          pack.quaternion.copy(_pq);
+          pack.scale.setScalar(PACK.scale);
+        }
+        // 오른손: 어깨 위 자루 목을 잡는다(위팔을 앞위로, 아래팔을 뒤로 접어 손이 어깨에). 메는 동작 끝부분부터 섞는다
+        const grip = u < 1 ? Math.max(0, (u - 0.75) / 0.25) : 1;
+        if (grip > 0) {
+          turn(B.ur, X, -1.35 * grip);
+          turn(B.ur, Z, -0.35 * grip);
+          turn(B.fr, X, -2.0 * grip);
+        }
+      }
     },
   };
 }
