@@ -4,7 +4,7 @@
 // 민재네 = 눈사람, 할머니 댁 = 트리 있는 집(4장 봉투·수리 상자의 같은 집 그림).
 import type { Collider } from '../core/collision';
 import type { GiftKind } from './gifts';
-import { PLAZA_BOUNDS, PLAZA_COLLIDERS } from './plaza';
+import { ALLEYS, PLAZA_BOUNDS, PLAZA_COLLIDERS, SLEIGH } from './plaza';
 
 export type Dest = 'yuna' | 'tailor' | 'minjae' | 'grandma';
 
@@ -19,12 +19,11 @@ export interface Marker {
   signZ: number;
 }
 
-export const MARKERS: readonly Marker[] = [
-  { dest: 'yuna', x: -14, z: -3, r: 1.5, signX: -15.9, signZ: -3 },
-  { dest: 'tailor', x: 13, z: -4.6, r: 1.5, signX: 15, signZ: -4.6 },
-  { dest: 'minjae', x: 8, z: 11, r: 1.5, signX: 8, signZ: 12.9 },
-  { dest: 'grandma', x: -14, z: 10, r: 1.5, signX: -15.9, signZ: 10 },
-];
+/** 표식 = 그 장으로 가는 골목 입구(광장 둘레 안쪽, data/plaza ALLEYS). 표지판은 입구 쪽 */
+export const MARKERS: readonly Marker[] = ALLEYS.map((a) => {
+  const c = Math.cos((a.deg * Math.PI) / 180), s = Math.sin((a.deg * Math.PI) / 180);
+  return { dest: a.dest, x: c * 13, z: s * 13, r: 1.5, signX: c * 14.8, signZ: s * 14.8 };
+});
 
 export interface SortGiftDef {
   id: string;
@@ -36,19 +35,20 @@ export interface SortGiftDef {
 }
 
 /** 광장에 흩어진 다섯 물건(자리는 시험 광장과 같다) */
+/** 광장에 흩어진 물건(트리 둘레 눈밭, 썰매에서 튕겨 나온 쪽) */
 export const SORT_GIFTS: readonly SortGiftDef[] = [
-  { id: 'sketchbook', kind: 'sketchbook', dest: 'yuna', x: 5.5, z: 1.5, light: true },
-  { id: 'pencils', kind: 'pencils', dest: 'yuna', x: -2.5, z: 5, light: true },
-  { id: 'ball', kind: 'ball', dest: 'minjae', x: 8.5, z: -2.5, light: true },
-  { id: 'repair', kind: 'repair', dest: 'grandma', x: -1.5, z: -6.5, light: true },
+  { id: 'sketchbook', kind: 'sketchbook', dest: 'yuna', x: 6, z: 5.5, light: true },
+  { id: 'pencils', kind: 'pencils', dest: 'yuna', x: -4.5, z: 6, light: true },
+  { id: 'ball', kind: 'ball', dest: 'minjae', x: 7, z: -1.5, light: true },
+  { id: 'repair', kind: 'repair', dest: 'grandma', x: -4.5, z: -4.5, light: true },
 ];
 
 const signs: Collider[] = MARKERS.map((m) => ({ kind: 'circle', x: m.signX, z: m.signZ, r: 0.18 }));
 
 /** 썰매를 받치는 산타(광장 산타 자리 그대로, 썰매 앞쪽 모서리를 본다) */
-const SANTA_HOLD = { x: 6.4, z: -8.2, facing: -0.79 };
-/** 썰매 날(남쪽)을 살피는 도토 */
-const DOTO_FIX = { x: 3.6, z: -4.45, facing: Math.PI };
+const SANTA_HOLD = { x: SLEIGH.x + 2.6, z: SLEIGH.z + 2.3, facing: Math.PI * 0.95 };
+/** 썰매 날(남쪽 뒤쪽)을 살피는 도토 */
+const DOTO_FIX = { x: SLEIGH.x - 1.4, z: SLEIGH.z + 1.85, facing: Math.PI };
 
 export const CH0 = {
   bounds: PLAZA_BOUNDS,
@@ -57,13 +57,14 @@ export const CH0 = {
   dotoFix: DOTO_FIX,
   /** 재봉틀 상자(무거움, 두 요정이 양끝을 함께 든다).
    *  0장은 첫 함께 들기 연습이라 수선집 표식까지 11 m 남짓(곧게 가면 5초, 체력은 28초)만 둔다. */
-  crateStart: { x: 0.6, z: -1.2, yaw: Math.PI / 2 },
+  crateStart: { x: 2.4, z: 4.6, yaw: Math.PI / 2 },
   tailorZone: { x: MARKERS[1]!.x, z: MARKERS[1]!.z, zone: MARKERS[1]!.r },
+  // 트리 남쪽(사진기 쪽), 재봉틀 상자 바로 뒤
   spawns: [
-    { x: 2, z: 4.5 },
-    { x: 4.2, z: 4.5 },
-    { x: 1, z: 6 },
-    { x: 5.2, z: 6 },
+    { x: -1.5, z: 8 },
+    { x: 1.5, z: 8 },
+    { x: -3, z: 9.5 },
+    { x: 3, z: 9.5 },
   ],
 };
 

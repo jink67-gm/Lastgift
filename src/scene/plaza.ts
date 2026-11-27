@@ -1,10 +1,10 @@
 // 광장 소품. Kenney 모델(CC0)이 있으면 그것으로, 없으면 기본 도형으로 그린다. 배치는 src/data/plaza.ts를 따른다.
 // 썰매·눈더미·산타·시계탑은 아직 직접 만든 기본 도형이다.
 import * as THREE from 'three';
-import { PLAZA_BOUNDS, PLAZA_PROPS, WORKBENCH, WORKSHOP, type Prop, type PropKind } from '../data/plaza';
+import { PLAZA_BOUNDS, PLAZA_PROPS, PLAZA_R, WORKBENCH, WORKSHOP, type Prop, type PropKind } from '../data/plaza';
 
 /** 요정을 가리면 잠시 흐려지는 큰 물체(집·공방·창고·나무·시계탑·썰매·산타·가로등) */
-const FADEABLE = new Set<PropKind>(['cabin', 'workshop', 'shed', 'pine', 'tree', 'clockTower', 'sleigh', 'santa', 'lamp']);
+const FADEABLE = new Set<PropKind>(['cabin', 'workshop', 'shed', 'pine', 'tree', 'clockTower', 'sleigh', 'santa', 'lamp']); // 화단(treeBed)은 낮아서 흐리게 하지 않는다
 import { BENCH_SCALE, KENNEY_HOUSE_SCALE, TOWN } from '../data/townScale';
 import { buildCabin, kenneyProp } from './kenney';
 import { createShed, createWorkbench, createWorkshopSign } from './workshop';
@@ -99,6 +99,34 @@ function house(w: number, d: number): THREE.Group {
   return g;
 }
 
+/** 가운데 트리 둘레 낮은 돌 턱 화단(턱 높이 = 요정 무릎) + 눈 덮인 흙 */
+function treeBed(r: number): THREE.Group {
+  const g = new THREE.Group();
+  const stone = new THREE.MeshStandardMaterial({ color: '#a8a39a', roughness: 0.95 });
+  const n = 28;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.42, ((Math.PI * 2 * r) / n) * 0.96), stone);
+    b.position.set(Math.cos(a) * (r - 0.25), 0.21, Math.sin(a) * (r - 0.25));
+    b.rotation.y = -a;
+    b.castShadow = true;
+    b.receiveShadow = true;
+    g.add(b);
+  }
+  // 돌 위·흙 위의 눈
+  const snow = new THREE.MeshStandardMaterial({ color: '#f6f8fc', roughness: 1 });
+  const cap = new THREE.Mesh(new THREE.TorusGeometry(r - 0.25, 0.2, 6, 40), snow);
+  cap.rotation.x = Math.PI / 2;
+  cap.position.y = 0.44;
+  cap.scale.z = 0.5;
+  g.add(cap);
+  const soil = new THREE.Mesh(new THREE.CylinderGeometry(r - 0.5, r - 0.45, 0.36, 40), snow);
+  soil.position.y = 0.18;
+  soil.receiveShadow = true;
+  g.add(soil);
+  return g;
+}
+
 function bench(w: number, d: number, seat = 0.45): THREE.Group {
   const g = new THREE.Group();
   const wood = mat('#7d5233');
@@ -177,7 +205,8 @@ function build(p: Prop, models: Models, lampLights: { n: number }): THREE.Object
     case 'snowPile': return scaled(snowPile(2.2), ((p.r ?? 2.2) / 2.2) * 1.25); // 썰매 앞이 처박힌 눈둑
     case 'santa': return scaled(santa(), 2.05); // 사람 어른: 요정 키의 약 4배
     case 'clockTower': return scaled(clockTower(), 2.5); // 집(약 12)보다 높은 랜드마크
-    case 'tree': return kenneyProp(models, 'treeDecorated', 3.4) ?? scaled(tree(), 2.6); // 마을 트리 약 7.8(공방 지붕보다 조금 높게)
+    case 'tree': return kenneyProp(models, 'treeDecorated', 4.2) ?? scaled(tree(), 3.2); // 가운데 큰 마을 트리 약 9.6(공방 지붕보다 높게)
+    case 'treeBed': return treeBed(p.r ?? 3.2); // 트리 둘레 돌 턱 화단
     case 'pine': return kenneyProp(models, p.x + p.z > 0 ? 'treeSnowB' : 'treeSnowA', 5.4) ?? scaled(pine(), 3.4);
     case 'cabin': {
       // 집 모양은 회전 전 기준(앞 = +z)으로 만들고, 배치 때 rotY로 돌린다. 통나무는 중간 밝기 갈색으로
@@ -235,7 +264,8 @@ export function createPlaza(models: Models = Models.none(), detail: Detail = 'no
 
   // 다져진 광장 바닥(밝은 크림빛 눈)과 그 바깥의 푹 쌓인 눈밭(조금 더 푸르다): 화면 끝에 빈 공간이 보이지 않게
   const groundMat = mat('#fbf8f2', { roughness: 0.95 });
-  const ground = mesh(new THREE.BoxGeometry(w, 0.4, d), groundMat, 0, -0.2, 0);
+  // 둥근 광장 바닥(돌 포장 위 다져진 눈)
+  const ground = mesh(new THREE.CylinderGeometry(PLAZA_R + 0.2, PLAZA_R + 0.2, 0.4, 72), groundMat, 0, -0.2, 0);
   ground.userData.flat = true;
   root.add(ground);
   const apronMat = mat('#e6edf6', { roughness: 1 });
@@ -245,12 +275,7 @@ export function createPlaza(models: Models = Models.none(), detail: Detail = 'no
   apron.userData.flat = true;
   root.add(apron);
 
-  // 광장 가장자리 낮은 눈둑(경계가 화면에서 보이게)
-  const rim = mat('#e6edf7', { roughness: 1 });
-  root.add(mesh(new THREE.BoxGeometry(w, 0.3, 0.4), rim, 0, 0.15, PLAZA_BOUNDS.minZ));
-  root.add(mesh(new THREE.BoxGeometry(w, 0.3, 0.4), rim, 0, 0.15, PLAZA_BOUNDS.maxZ));
-  root.add(mesh(new THREE.BoxGeometry(0.4, 0.3, d), rim, PLAZA_BOUNDS.minX, 0.15, 0));
-  root.add(mesh(new THREE.BoxGeometry(0.4, 0.3, d), rim, PLAZA_BOUNDS.maxX, 0.15, 0));
+  // 둘레 눈둑은 plazaDressing(골목 입구는 비운다)
 
   // 눈결(Poly Haven Snow 02)은 불러오는 대로 입힌다. 실패하면 단색 그대로
   void applySnowSurface([{ mat: groundMat, w, d }, { mat: apronMat, w: w + 80, d: d + 80 }], import.meta.env.BASE_URL, detail);

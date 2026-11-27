@@ -542,24 +542,29 @@ function fishMailbox(models: Models): THREE.Object3D {
   return g;
 }
 
-/** 오른쪽 아래 집 현관 바닥: 높이 0 그대로(요정이 서고 선물을 놓는 곳). 사람용 발판 매트 + 문 앞 살구빛 */
-function porch(): THREE.Group {
+
+// ─── 둥근 광장 둘레 ──────────────────────────────────────────────────
+
+/** 둥근 광장 둘레의 낮은 눈둑(골목 입구는 비운다). 판정은 data/plaza 둘레 벽 */
+function ringBerm(): THREE.Group {
   const g = new THREE.Group();
-  const mat = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 1.5), new THREE.MeshStandardMaterial({ color: '#8c4a3a', roughness: 1 }));
-  mat.rotation.x = -Math.PI / 2;
-  mat.position.set(0, 0.012, 0.95);
-  mat.userData.flat = true;
-  g.add(mat);
-  const stripe = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 0.18), new THREE.MeshStandardMaterial({ color: '#d9b35a', roughness: 1 }));
-  stripe.rotation.x = -Math.PI / 2;
-  stripe.position.set(0, 0.014, 0.95);
-  stripe.userData.flat = true;
-  g.add(stripe);
-  const glow = warmPool(2.6);
-  glow.position.set(0, 0.006, 1.6);
-  g.add(glow);
-  g.position.set(PLAZA_DRESSING.porch.x, 0, PLAZA_DRESSING.porch.z);
-  g.rotation.y = PLAZA_DRESSING.porch.rotY; // 앞(+z) = 집 앞면 방향
+  const { r, alleys } = PLAZA_DRESSING.ring;
+  const R = r + 0.55;
+  const sorted = [...alleys].sort((a, b) => a.deg - b.deg);
+  sorted.forEach((a, i) => {
+    const next = sorted[(i + 1) % sorted.length]!;
+    const gapA = ((a.width / 2 + 0.7) / R) * (180 / Math.PI);
+    const gapB = ((next.width / 2 + 0.7) / R) * (180 / Math.PI);
+    const from = a.deg + gapA;
+    let to = next.deg - gapB;
+    if (to <= from) to += 360;
+    const n = Math.max(3, Math.ceil((to - from) / 6));
+    const pts = Array.from({ length: n + 1 }, (_, k) => {
+      const d = ((from + ((to - from) * k) / n) * Math.PI) / 180;
+      return { x: Math.cos(d) * R, z: Math.sin(d) * R };
+    });
+    g.add(berm(pts, 1.3, 0.42, i + 3));
+  });
   return g;
 }
 
@@ -614,7 +619,7 @@ export function createPlazaDressing(models: Models, base: string, detail: Detail
   const root = new THREE.Group();
   root.name = 'plazaDressing';
   root.add(packedPath(base, detail));
-  root.add(packedPath(base, detail, PLAZA_DRESSING.porchPath));
+  for (const p of PLAZA_DRESSING.paths) root.add(packedPath(base, detail, p));
   for (const f of PLAZA_DRESSING.footprints) root.add(footprints(f));
   const sleigh = PLAZA_PROPS.find((p) => p.kind === 'sleigh');
   if (sleigh) root.add(sleighTrail(sleigh));
@@ -641,9 +646,8 @@ export function createPlazaDressing(models: Models, base: string, detail: Detail
   for (const f of PLAZA_DRESSING.fences) root.add(edgeFence(models, f.from, f.to));
   // 길 북쪽 윤곽: 요정 키 높이 울타리(Tiny Treats 울타리 배율 1)
   for (const f of PLAZA_DRESSING.laneFences) root.add(edgeFence(models, f.from, f.to, 1.0));
-  for (const h of PLAZA_DRESSING.alleyHouses) root.add(alleyHouse(models, h));
   root.add(fishMailbox(models));
-  root.add(porch());
+  root.add(ringBerm());
   const town = farTown();
   town.traverse((o) => (o.userData.noCast = true)); // 그림자 범위 밖
   root.add(town);

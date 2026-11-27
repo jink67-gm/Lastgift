@@ -74,7 +74,7 @@ test('처음 터치하면 스틱과 행동 버튼이 나타나고, 버튼은 48p
 
 test('스틱을 위로 끌면 요정이 화면 위로 간다', async ({ page }) => {
   const { fingers } = await open(page);
-  await page.evaluate(() => window.__lastgift.setPlayer(3, 4));
+  await page.evaluate(() => window.__lastgift.setPlayer(6, 7));
   const a = await player(page);
   await fingers.down(1, 250, 600);
   await fingers.move(1, 250, 480);
@@ -138,7 +138,7 @@ test('행동 버튼을 길게 눌러도 행동은 한 번, 다시 탭하면 내�
 
 test('터치가 취소되면(알림·제스처 등) 요정이 멈춘다', async ({ page }) => {
   const { fingers } = await open(page);
-  await page.evaluate(() => window.__lastgift.setPlayer(3, 4));
+  await page.evaluate(() => window.__lastgift.setPlayer(6, 7));
   await fingers.down(1, 250, 600);
   await fingers.move(1, 250, 480);
   await page.waitForTimeout(200);
@@ -153,7 +153,7 @@ test('터치가 취소되면(알림·제스처 등) 요정이 멈춘다', async 
 
 test('손가락이 화면 밖으로 미끄러져 나가 떼어져도 요정이 멈춘다', async ({ page }) => {
   const { fingers } = await open(page);
-  await page.evaluate(() => window.__lastgift.setPlayer(3, 4));
+  await page.evaluate(() => window.__lastgift.setPlayer(6, 7));
   await fingers.down(1, 120, 600);
   await fingers.move(1, 40, 600);
   await fingers.move(1, 0, 600); // 화면 왼쪽 끝
@@ -169,7 +169,7 @@ test('손가락이 화면 밖으로 미끄러져 나가 떼어져도 요정이 �
 
 test('걷는 중에 화면을 돌리면(가로→세로) 입력이 해제된다', async ({ page }) => {
   const { fingers } = await open(page);
-  await page.evaluate(() => window.__lastgift.setPlayer(3, 4));
+  await page.evaluate(() => window.__lastgift.setPlayer(6, 7));
   await fingers.down(1, 250, 600);
   await fingers.move(1, 250, 480);
   await page.waitForTimeout(200);

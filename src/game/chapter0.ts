@@ -3,6 +3,7 @@
 // 새 시도면 먼저 프롤로그(단체사진·썰매 불시착, game/prologue.ts)를 튼다. 시험 모드(?test)는 &prologue가 있을 때만 튼다.
 import { createHoldTween, giftScale, holdSpan, placeOnGround, placeOnHands } from '../scene/hold';
 import * as THREE from 'three';
+import { addHaze, createBackdrop } from '../scene/backdrop';
 import { gripPos, needsSwap, type SewingInput } from '../core/sewing';
 import { createSorting, planAction, step, type SortAction, type SortEvent, type SortState } from '../core/sorting';
 import { baseViewH, deadZone, frameFor, type Pt } from '../core/framing';
@@ -47,7 +48,7 @@ const CAMERA_YAW = Math.PI / 4;
 const testParams = new URLSearchParams(location.search);
 const CAMERA_PITCH = (testParams.has('test') && testParams.get('pitch') ? Number(testParams.get('pitch')) : 30) * (Math.PI / 180);
 /** 처음 몇 초 광장 전체를 넓게 보여 주는 구도(배달지 네 곳과 썰매가 한 화면에) */
-const ESTABLISH = { x: -2, z: -4, viewH: 22, sec: 3.2 }; // 썰매 뒤 골목과 두 집까지 들어오게 북쪽으로 조금
+const ESTABLISH = { x: 0, z: -2, viewH: 26, sec: 3.2 }; // 둥근 광장 전체(가운데 트리·골목 넷·썰매)가 들어오게
 const SIM_DT = 1 / 60;
 /**
  * 요정 크기: 0장 화면에서 1.2배(모자 제외 키 약 1.32). 문(2.8)·벤치 좌판(1.0)·재봉틀 상자(0.6)와 견줘 정했다.
@@ -90,13 +91,16 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
   const plaza = createPlaza(models, low ? 'low' : 'normal');
   setShadows(plaza, true);
   scene.add(plaza);
+  // 광장 너머: 1·3·4장과 같은 산·숲·하늘(광장과 둘레 집, 사진기 쪽 남동은 비운다)
+  scene.add(createBackdrop(models, { center: { x: 0, z: 0 }, forest: [16, 95], trees: 420, keepOut: (p) => Math.hypot(p.x, p.z) < 32 || (p.x + p.z > 10 && Math.hypot(p.x, p.z) < 70) }));
+  addHaze(scene);
   const markers = createMarkers();
   scene.add(markers.root);
   // 썰매에서 떨어진 물건이 미끄러진 자국: 자국 끝에 주울 물건이 있다
   const sleighAt = PLAZA_PROPS.find((p) => p.kind === 'sleigh')!;
   scene.add(createSkidTrails(sleighAt, [...SORT_GIFTS, CH0.crateStart]));
 
-  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 700);
   const camOffset = new THREE.Vector3(Math.sin(CAMERA_YAW) * Math.cos(CAMERA_PITCH), Math.sin(CAMERA_PITCH), Math.cos(CAMERA_YAW) * Math.cos(CAMERA_PITCH)).multiplyScalar(40);
   // 움직임 줄이기를 고른 기기는 처음 넓은 구도 없이 바로 시작
   // 기기 설정(동작 줄이기) 또는 게임 설정 「움직임 줄이기」
@@ -598,13 +602,13 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
         const elf = box.max.y - Math.max(0, box.min.y);
         return { elf, feet: box.min.y, crown: box.max.y, ...TOWN, ratios: { benchSeat: TOWN.benchSeat / elf, door: TOWN.doorOpening / elf, knob: TOWN.doorKnob / elf, lamp: TOWN.lampLight / elf } };
       },
-      /** 비율 확인용: 오른쪽 아래 집 현관 앞에 벤치·가로등을 같은 바닥 높이로 나란히 세운다(시험 모드만) */
+      /** 비율 확인용: 트리 남동쪽에 벤치·가로등을 같은 바닥 높이로 나란히 세운다(시험 모드만) */
       lineup: () => {
         const b = townBench(models);
-        b.position.set(PLAZA_DRESSING.porch.x + 2.4, 0, PLAZA_DRESSING.porch.z + 3.6);
+        b.position.set(5, 0, 9);
         scene.add(b);
         const l = townLamp();
-        l.position.set(PLAZA_DRESSING.porch.x + 2.4, 0, PLAZA_DRESSING.porch.z - 3.2);
+        l.position.set(5, 0, 5);
         scene.add(l);
       },
       faded: () => fader.faded(),

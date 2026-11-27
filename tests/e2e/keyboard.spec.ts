@@ -16,7 +16,7 @@ async function open(page: Page) {
 
 /** 키를 누르고 있는 동안 요정이 화면에서 어느 쪽으로 움직였는지(px) */
 async function screenDelta(page: Page, code: string, ms = 600) {
-  await page.evaluate(() => window.__lastgift.setPlayer(3, 4));
+  await page.evaluate(() => window.__lastgift.setPlayer(6, 7));
   const a = await player(page);
   await page.keyboard.down(code);
   await page.waitForTimeout(ms);
@@ -57,7 +57,7 @@ for (const [code, dir] of cases) {
 
 test('한글 입력 상태처럼 key가 "ㅈ"로 와도 code가 KeyW면 위로 간다', async ({ page }) => {
   await open(page);
-  await page.evaluate(() => window.__lastgift.setPlayer(3, 4));
+  await page.evaluate(() => window.__lastgift.setPlayer(6, 7));
   const a = await player(page);
   await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW', key: 'ㅈ', keyCode: 229 })));
   await page.waitForTimeout(500);
@@ -100,7 +100,7 @@ test('오래 걸어도 광장 밖으로 나가지 않는다', async ({ page }) =
 
 test('키를 누른 채 창이 포커스를 잃으면 요정이 멈춘다', async ({ page }) => {
   await open(page);
-  await page.evaluate(() => window.__lastgift.setPlayer(3, 4));
+  await page.evaluate(() => window.__lastgift.setPlayer(6, 7));
   await page.keyboard.down('KeyW');
   await page.waitForTimeout(200);
   await page.evaluate(() => window.dispatchEvent(new Event('blur')));

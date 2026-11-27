@@ -4,6 +4,7 @@
 //   ?chapter=6  6장부터(스노글로브는 안전 지점에, 가까이에서 E로 든다)
 //   한 기기에서 둘이(1P WASD+E·터치, 2P 방향키+Enter). 6장 끝(스노글로브 속 네 기억·뼈다귀)은 06b.
 import * as THREE from 'three';
+import { addHaze, createBackdrop } from '../scene/backdrop';
 import { baseViewH, deadZone, frameFor, type Pt } from '../core/framing';
 import { createFinale, planAction, step, stockingChecked, CAMERA_YAW, type FinaleAction, type FinaleEvent, type FinaleState } from '../core/finale';
 import { CH5_LIGHTS, CH5_PHOTO, CH6_END, ch5BlinkOn, endingBeat, lightsBeat } from '../core/finaleScenes';
@@ -89,6 +90,9 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
   const plaza = createPlaza(models, low ? 'low' : 'normal');
   setShadows(plaza, true);
   scene.add(plaza);
+  // 광장 너머: 1·3·4장과 같은 산·숲·하늘(광장과 둘레 집, 사진기 쪽 남동은 비운다)
+  scene.add(createBackdrop(models, { center: { x: 0, z: 0 }, forest: [16, 95], trees: 420, keepOut: (p) => Math.hypot(p.x, p.z) < 32 || (p.x + p.z > 10 && Math.hypot(p.x, p.z) < 70) }));
+  addHaze(scene);
   // 기본 도형 산타는 숨기고 에셋 산타를 쓴다. 썰매는 도토가 고쳐 바로 서 있다
   const plainSanta = plaza.getObjectByName('santa');
   if (plainSanta) plainSanta.visible = false;
