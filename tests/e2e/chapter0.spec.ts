@@ -121,7 +121,7 @@ async function carry(page: Page, to: { x: number; z: number; yaw: number }) {
 const count = (e: Ev[], t: string) => e.filter((x) => x.type === t).length;
 
 test('두 요정이 선물 다섯 개를 그림 표식 네 곳에 나눠 놓으면 0장 완료(틀린 표식은 원래 자리로)', async ({ page }) => {
-  test.setTimeout(480_000); // 실제 키로 끝까지 걷는다(소프트웨어 WebGL에서 약 4분)
+  test.setTimeout(720_000); // 실제 키로 끝까지 걷는다(소프트웨어 WebGL에서 약 5~8분: 새 트리·썰매·화단 뒤 8분 한도에 닿았다)
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto('/?chapter=0&test&noshadow'); // 규칙 시험: 그림자는 꺼서 소프트웨어 WebGL 부담을 줄인다(화면은 비교 촬영으로 확인)

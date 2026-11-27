@@ -3,7 +3,7 @@ import { test } from '@playwright/test';
 
 test('0장 광장 부분별 비용(낮음)', async ({ page }) => {
   test.setTimeout(300_000);
-  await page.goto('/?chapter=0&test&quality=low');
+  await page.goto(process.env.PLAZA_Q === 'normal' ? '/?chapter=0&test&noshadow' : '/?chapter=0&test&quality=low');
   await page.waitForFunction(() => !!(window as unknown as { __lastgift?: { sorting?: unknown } }).__lastgift?.sorting, null, { timeout: 60_000 });
   await page.waitForTimeout(5000);
   const fps = () =>
