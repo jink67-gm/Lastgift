@@ -29,6 +29,8 @@ export interface Chapter2Screen {
   /** 그리고, previewFor[0]의 지금 행동을 돌려준다(행동 버튼 그림용) */
   draw(s: SewingState, o: DrawOptions): SewingAction;
   toScreen(x: number, z: number): { x: number; y: number };
+  /** 낮음: 해상도 절반(저사양) */
+  setLow(low: boolean): void;
 }
 
 export function createChapter2Screen(host: HTMLElement, models: Models): Chapter2Screen {
@@ -113,6 +115,10 @@ export function createChapter2Screen(host: HTMLElement, models: Models): Chapter
 
   const v = new THREE.Vector3();
   return {
+    setLow(low) {
+      renderer.setPixelRatio(low ? 0.5 : Math.min(window.devicePixelRatio, 2));
+      resize();
+    },
     toScreen(x, z) {
       v.set(x, 0, z).project(camera);
       return { x: ((v.x + 1) / 2) * host.clientWidth, y: ((1 - v.y) / 2) * host.clientHeight };

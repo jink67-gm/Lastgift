@@ -29,6 +29,7 @@ import { createPlaza } from '../scene/plaza';
 import { createSnowfall } from '../scene/snowfall';
 import { createWinterLight, setShadows } from '../scene/winterLight';
 import { LocalRun } from '../session/localRun';
+import { createPlayMeter } from '../session/playMeter';
 import type { TeamRun } from '../session/mirrorRun';
 import { playerBack, playerGone } from '../core/presence';
 import { IDLE_INTENT } from '../input/intent';
@@ -252,6 +253,8 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
   }
 
   // 여러 기기: 끊긴 요정은 멈추고 스노글로브를 그 자리에 놓는다 / 참가자는 방장 사건으로 연출을 시작한다
+  // 플레이 기록(장별 조작 시간·FPS·기기) + FPS 표시
+  const meter = createPlayMeter({ chapterId: startChapter, run, players: PLAYERS.length, role: net?.role ?? 'local', quality: () => quality, showFps: (f, q) => settings.setFps(f, q) });
   net?.onPresence((id, on) => (state = on ? playerBack(state, id) : playerGone(state, id)));
   net?.onEvents((evs) => {
     for (const e of evs as FinaleEvent[]) onEvent(e);
@@ -290,6 +293,7 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
     requestAnimationFrame(loop);
     const raw = (now - last) / 1000;
     last = now;
+    meter.frame(raw);
     if (auto.feed(raw)) applyQuality();
     const frame = Math.min(raw, 0.25);
     run.frame(now);
@@ -707,12 +711,13 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
   // ── ③ 6장 끝: 건네기 → 스노글로브 속 기억 → 썰매 앞자리 → 뼈다귀 → 장갑 ──
   let giver = 'p0';
   let memView: MemoryView | null = null;
+  let halfRate = false;
   let endUi: HTMLDivElement | null = null;
   /** 썰매 앞자리(스노글로브를 내려놓는 곳): 썰매 몸통 윗면 앞쪽 */
   const SEAT = new THREE.Vector3(SLEIGH.x + 1.0, 1.98, SLEIGH.z + 0.35);
   function startEnding(): void {
     document.body.classList.add('cutscene');
-    memView = createMemoryView(document, CH6_END.memories, import.meta.env.BASE_URL);
+    memView = createMemoryView(document, CH6_END.memories, import.meta.env.BASE_URL, { low: quality === 'low' });
     // 건너뛰기(결과는 그대로) · 끝나면 다시 보기
     endUi = document.createElement('div');
     endUi.id = 'ending-ui';
@@ -825,6 +830,9 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
     cine.aspect = aspect;
     cine.updateProjectionMatrix();
     snow.update(frame, sp.x, sp.z, 14);
+    // 저사양: 유리가 화면 가운데를 다 덮은 동안에는 뒤 장면을 한 화면 걸러 그린다(회상 그리기 비용을 먼저 줄인다)
+    halfRate = !halfRate;
+    if (quality === 'low' && open > 0.98 && halfRate) return;
     renderer.render(scene, cine);
   }
 
@@ -840,6 +848,7 @@ export function startFinale(models: Models, startChapter: 5 | 6, opts?: StoryOpt
         net?.emit([e]);
       },
       run: () => ({ ...run.state }),
+      playLog: () => meter.current(),
       cut: () => ({ cut, t: cutT, beat: cut === 'lights' ? lightsBeat(cutT) : null }),
       seekCut: (t: number) => {
         if (cut) cutT = t;

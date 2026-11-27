@@ -445,13 +445,17 @@ export interface MemoryView {
   dispose(): void;
 }
 
-export function createMemoryView(doc: Document, memories: readonly MemoryDef[], base: string): MemoryView {
+export function createMemoryView(doc: Document, memories: readonly MemoryDef[], base: string, opts: { low?: boolean } = {}): MemoryView {
+  // 저사양: 그림 해상도를 낮추고(720 → 400) 번진 빛 테두리를 뺀다(그리는 내용·시간은 같다)
+  const S = opts.low ? 400 : 720;
+  const k0 = S / 720;
   const root = doc.createElement('div');
   root.id = 'memory';
   root.style.cssText =
-    'position:fixed;left:50%;top:50%;width:min(78vh,78vw);aspect-ratio:1;transform:translate(-50%,-50%) scale(0.2);border-radius:50%;overflow:hidden;z-index:33;pointer-events:none;opacity:0;box-shadow:0 0 0 6px rgba(255,255,255,0.55),0 0 60px 20px rgba(200,230,255,0.35);background:#1c2a52';
+    'position:fixed;left:50%;top:50%;width:min(78vh,78vw);aspect-ratio:1;transform:translate(-50%,-50%) scale(0.2);border-radius:50%;overflow:hidden;z-index:33;pointer-events:none;opacity:0;background:#1c2a52;' +
+    (opts.low ? 'box-shadow:0 0 0 6px rgba(255,255,255,0.55)' : 'box-shadow:0 0 0 6px rgba(255,255,255,0.55),0 0 60px 20px rgba(200,230,255,0.35)');
   const cv = doc.createElement('canvas');
-  cv.width = cv.height = 720;
+  cv.width = cv.height = S;
   cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
   root.appendChild(cv);
   // 영상(있으면): 기억마다 하나
@@ -471,7 +475,7 @@ export function createMemoryView(doc: Document, memories: readonly MemoryDef[], 
   }
   // 유리 위 눈발·반사
   const glass = doc.createElement('canvas');
-  glass.width = glass.height = 720;
+  glass.width = glass.height = S;
   glass.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
   root.appendChild(glass);
   doc.body.appendChild(root);
@@ -479,7 +483,7 @@ export function createMemoryView(doc: Document, memories: readonly MemoryDef[], 
   const gg = glass.getContext('2d')!;
   let current: string | null = null;
   let source: 'video' | 'drawn' | null = null;
-  const flakes = Array.from({ length: 70 }, (_, i) => ({ x: (i * 97) % 720, y: (i * 53) % 720, r: 2 + (i % 4), v: 30 + (i % 7) * 12 }));
+  const flakes = Array.from({ length: opts.low ? 35 : 70 }, (_, i) => ({ x: ((i * 97) % 720) * k0, y: ((i * 53) % 720) * k0, r: (2 + (i % 4)) * k0, v: (30 + (i % 7) * 12) * k0 }));
   return {
     update(t, open) {
       root.style.opacity = String(open);
@@ -496,22 +500,22 @@ export function createMemoryView(doc: Document, memories: readonly MemoryDef[], 
       }
       current = m?.id ?? null;
       source = null;
-      g.clearRect(0, 0, 720, 720);
+      g.clearRect(0, 0, S, S);
       if (m) {
         const v = videos.get(m.id);
         const k = (t - m.span[0]) / (m.span[1] - m.span[0]);
         if (v?.ok) source = 'video';
         else {
           source = 'drawn';
-          DRAW[m.id]?.(g, 720, 720, k, t);
+          DRAW[m.id]?.(g, S, S, k, t);
         }
       }
       // 유리 속 눈발 + 기억 사이를 쓸고 지나가는 큰 눈송이
-      gg.clearRect(0, 0, 720, 720);
+      gg.clearRect(0, 0, S, S);
       gg.fillStyle = 'rgba(255,255,255,0.85)';
       for (const f of flakes) {
-        const y = (f.y + t * f.v) % 760 - 20;
-        const x = f.x + Math.sin(t * 0.8 + f.y) * 12;
+        const y = ((f.y + t * f.v) % (760 * k0)) - 20 * k0;
+        const x = f.x + Math.sin(t * 0.8 + f.y) * 12 * k0;
         gg.beginPath();
         gg.arc(x, y, f.r, 0, Math.PI * 2);
         gg.fill();
@@ -522,16 +526,16 @@ export function createMemoryView(doc: Document, memories: readonly MemoryDef[], 
           const k = (d + 0.5) / 1.0;
           gg.fillStyle = `rgba(255,255,255,${(0.95 * Math.sin(k * Math.PI)).toFixed(3)})`;
           gg.beginPath();
-          gg.arc(-200 + k * 1120, 360, 260, 0, Math.PI * 2);
+          gg.arc((-200 + k * 1120) * k0, 360 * k0, 260 * k0, 0, Math.PI * 2);
           gg.fill();
         }
       }
       // 유리 반사
-      const hl = gg.createRadialGradient(220, 170, 10, 220, 170, 200);
+      const hl = gg.createRadialGradient(220 * k0, 170 * k0, 10 * k0, 220 * k0, 170 * k0, 200 * k0);
       hl.addColorStop(0, 'rgba(255,255,255,0.35)');
       hl.addColorStop(1, 'rgba(255,255,255,0)');
       gg.fillStyle = hl;
-      gg.fillRect(0, 0, 720, 720);
+      gg.fillRect(0, 0, S, S);
     },
     mode: () => ({ id: current, source }),
     dispose() {

@@ -2,6 +2,8 @@
 // 글자는 기능 이름의 짧은 한국어만(이야기 대사는 없다). 버튼은 터치로 누르기 쉬운 크기.
 import type { QualitySetting } from '../core/quality';
 import type { Settings } from '../save/store';
+import { formatLog } from '../core/playLog';
+import { clearPlayLog, readPlayLog } from '../session/playMeter';
 
 const CSS = `
 #settings-btn { position: fixed; z-index: 26; top: calc(env(safe-area-inset-top) + 10px); right: calc(env(safe-area-inset-right) + 12px);
@@ -27,6 +29,15 @@ const CSS = `
 #settings-panel .close { justify-self: center; min-width: 140px; min-height: 52px; border-radius: 26px; border: 3px solid #1b2433;
   background: #2f9a4a; color: #fff; font: inherit; cursor: pointer; }
 #settings-panel .note { font-weight: 500; font-size: 14px; color: #5a6478; }
+#settings-panel .log { display: none; gap: 8px; }
+#settings-panel .log.on { display: grid; }
+#settings-panel .log textarea { width: min(86vw, 560px); height: 160px; font: 500 13px/1.35 ui-monospace, Menlo, Consolas, monospace;
+  border: 2px solid #1b2433; border-radius: 10px; padding: 8px; white-space: pre; overflow: auto; color: #1b2433; background: #fff; }
+#settings-panel .box { max-height: 94vh; overflow: auto; }
+/* 글씨 크게: 글이 있는 곳(대기실·설정·시간 초과 안내·시계)을 1.25배 */
+body.large-text #lobby .card, body.large-text #overlay, body.large-text #hud, body.large-text #fps-chip { zoom: 1.25; }
+body.large-text #settings-panel .box { font-size: 21px; }
+body.large-text #settings-panel .note { font-size: 17px; }
 `;
 
 const GEAR = `<svg viewBox="0 0 32 32" aria-hidden="true"><path fill="#fff" d="M13.6 2h4.8l.7 3.6 2.4 1 3-2.1 3.4 3.4-2.1 3 1 2.4 3.6.7v4.8l-3.6.7-1 2.4 2.1 3-3.4 3.4-3-2.1-2.4 1-.7 3.6h-4.8l-.7-3.6-2.4-1-3 2.1-3.4-3.4 2.1-3-1-2.4L2 18.4v-4.8l3.6-.7 1-2.4-2.1-3 3.4-3.4 3 2.1 2.4-1z"/><circle cx="16" cy="16" r="5" fill="#1b2433"/></svg>`;
@@ -68,18 +79,28 @@ export function createSettingsUi(doc: Document, initial: Settings): SettingsUi {
       <span class="note">자동: 느린 기기면 낮음으로 바꿔요</span></div>
     <div class="row"><span>눈발</span><div class="seg" data-k="reducedSnow">
       <button type="button" data-v="false">보통</button><button type="button" data-v="true">줄이기</button></div></div>
+    <div class="row"><span>움직임 줄이기</span><div class="seg" data-k="noShake">
+      <button type="button" data-v="false">끔</button><button type="button" data-v="true">켬</button></div>
+      <span class="note">화면 흔들림·카메라 이동을 줄여요(다음 장부터)</span></div>
+    <div class="row"><span>글씨 크게</span><div class="seg" data-k="largeText">
+      <button type="button" data-v="false">끔</button><button type="button" data-v="true">켬</button></div></div>
     <div class="row"><span>FPS 표시</span><div class="seg" data-k="showFps">
       <button type="button" data-v="false">끔</button><button type="button" data-v="true">켬</button></div></div>
+    <div class="row"><span>기록</span><div class="seg logbar">
+      <button type="button" data-log="show">보기</button><button type="button" data-log="copy">복사</button><button type="button" data-log="clear">지우기</button></div>
+      <span class="note">장마다 움직인 시간·FPS·기기(이 기기에만)</span>
+      <div class="log"><textarea readonly aria-label="기록"></textarea></div></div>
     <button type="button" class="close">닫기</button>
   </div>`;
   doc.body.appendChild(panel);
 
   const sync = () => {
-    panel.querySelectorAll<HTMLElement>('.seg').forEach((seg) => {
-      const k = seg.dataset.k as 'quality' | 'reducedSnow' | 'showFps';
+    panel.querySelectorAll<HTMLElement>('.seg:not(.logbar)').forEach((seg) => {
+      const k = seg.dataset.k as 'quality' | 'reducedSnow' | 'showFps' | 'noShake' | 'largeText';
       seg.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.setAttribute('aria-pressed', String(String(value[k]) === b.dataset.v)));
     });
     fps.classList.toggle('on', value.showFps);
+    doc.body.classList.toggle('large-text', value.largeText);
   };
   sync();
   const open = (on: boolean) => {
@@ -93,7 +114,29 @@ export function createSettingsUi(doc: Document, initial: Settings): SettingsUi {
   panel.addEventListener('keydown', (e) => (e as KeyboardEvent).key === 'Escape' && open(false));
   // 패널이 열려 있을 때 게임 키(E·Enter·방향키)가 요정에게 가지 않게
   panel.addEventListener('keydown', (e) => e.stopPropagation());
-  panel.querySelectorAll<HTMLElement>('.seg').forEach((seg) =>
+  // 기록: 보기(표 글), 복사(붙여 넣기용), 지우기
+  const logBox = panel.querySelector<HTMLElement>('.log')!;
+  const logText = logBox.querySelector('textarea')!;
+  const showLog = () => {
+    logText.value = formatLog(readPlayLog());
+    logBox.classList.add('on');
+  };
+  panel.querySelector('.logbar')!.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
+    if (!b) return;
+    if (b.dataset.log === 'show') {
+      if (logBox.classList.contains('on')) logBox.classList.remove('on');
+      else showLog();
+    } else if (b.dataset.log === 'copy') {
+      showLog();
+      logText.select();
+      void navigator.clipboard?.writeText(logText.value).catch(() => doc.execCommand?.('copy'));
+    } else if (b.dataset.log === 'clear') {
+      clearPlayLog();
+      showLog();
+    }
+  });
+  panel.querySelectorAll<HTMLElement>('.seg:not(.logbar)').forEach((seg) =>
     seg.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest('button');
       if (!b) return;

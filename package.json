@@ -16,6 +16,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test --project=chromium",
     "test:net": "node scripts/with-emulators.mjs \"LASTGIFT_NET=1 vitest run && playwright test --project=net\"",
+    "test:perf": "playwright test --project=perf --trace off",
     "test:rules": "node scripts/with-emulators.mjs \"LASTGIFT_NET=1 vitest run\""
   },
   "repository": {

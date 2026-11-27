@@ -259,3 +259,62 @@ test('방장 종료 → 참가자는 멈추고 기다림 → 방장이 다시 �
   expect(errors).toEqual([]);
   for (const d of [guestA, hostB, guestB]) expect(d.errors).toEqual([]);
 });
+
+test('교차 접속: 노트북(키보드) 방장 + 태블릿(터치만) 참가자 — 스틱 이동·행동 버튼이 방장 판정에, 방장 키보드 이동도 태블릿 화면에', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const host = await openHost(browser, '?chapter=3&host');
+  // 태블릿: 터치만(키보드 없음), 가로 1024×768
+  const ctx = await browser.newContext({ viewport: { width: 1024, height: 768 }, hasTouch: true, isMobile: true });
+  opened.push(ctx);
+  const tab = await ctx.newPage();
+  const errors: string[] = [];
+  tab.on('pageerror', (e) => errors.push(String(e)));
+  await tab.goto(`/?join=${host.code}${FLAGS}`);
+  await tab.waitForFunction(() => !!(window as unknown as { __lastgiftNet?: { slot?: () => string | null } }).__lastgiftNet?.slot?.(), null, { timeout: 30_000 });
+  await waitOpen(host.page, 2);
+  await net(host.page, 'start');
+  await hasGame(host.page, 'ch3');
+  await hasGame(tab, 'ch3');
+  const cdp = await ctx.newCDPSession(tab);
+  const touch = (type: string, pts: { x: number; y: number }[]) =>
+    cdp.send('Input.dispatchTouchEvent', { type: type as 'touchStart', touchPoints: pts.map((p, i) => ({ id: i + 1, x: p.x, y: p.y, radiusX: 8, radiusY: 8, force: 1 })) });
+  // 첫 터치로 스틱·행동 단추가 나타난다
+  await touch('touchStart', [{ x: 200, y: 560 }]);
+  await touch('touchEnd', []);
+  await expect(tab.locator('#action-btn')).toBeVisible();
+
+  const p1 = async () => (await game<Ch3>(host.page, 'ch3')).players.find((p) => p.id === 'p1')!;
+  const before = await p1();
+  // 스틱: 왼쪽 아래를 누르고 오른쪽으로 끌어 0.8초
+  await touch('touchStart', [{ x: 200, y: 560 }]);
+  for (let i = 1; i <= 6; i++) await touch('touchMove', [{ x: 200 + i * 14, y: 560 }]);
+  await tab.waitForTimeout(800);
+  await touch('touchEnd', []);
+  await host.page.waitForTimeout(400);
+  const after = await p1();
+  expect(Math.hypot(after.x - before.x, after.z - before.z)).toBeGreaterThan(0.8);
+
+  // 행동 단추: 공 옆에서 누르면 방장이 집기 판정
+  const ball = (await game<Ch3>(host.page, 'ch3')).ball;
+  const lane = await game<{ s: number; t: number }>(host.page, 'lane', ball.x, ball.z);
+  await game(host.page, 'debugPlace', 'p1', lane.s - 0.6, lane.t, 0);
+  await host.page.waitForTimeout(300);
+  const b = (await tab.locator('#action-btn').boundingBox())!;
+  await touch('touchStart', [{ x: b.x + b.width / 2, y: b.y + b.height / 2 }]);
+  await tab.waitForTimeout(120);
+  await touch('touchEnd', []);
+  await host.page.waitForFunction(() => (window as unknown as { __lastgift: { ch3(): Ch3 } }).__lastgift.ch3().ball.carriedBy === 'p1', null, { timeout: 5_000 });
+
+  // 방장 키보드 이동 → 태블릿 화면 상태에도
+  const h0 = (await game<Ch3>(host.page, 'ch3')).players.find((p) => p.id === 'p0')!;
+  await host.page.keyboard.down('KeyA');
+  await host.page.waitForTimeout(700);
+  await host.page.keyboard.up('KeyA');
+  await tab.waitForTimeout(500);
+  const h1 = (await game<Ch3>(host.page, 'ch3')).players.find((p) => p.id === 'p0')!;
+  const onTab = (await game<Ch3>(tab, 'ch3')).players.find((p) => p.id === 'p0')!;
+  expect(Math.hypot(h1.x - h0.x, h1.z - h0.z)).toBeGreaterThan(0.8);
+  expect(Math.hypot(onTab.x - h1.x, onTab.z - h1.z)).toBeLessThan(0.3);
+  expect(errors).toEqual([]);
+  expect(host.errors).toEqual([]);
+});

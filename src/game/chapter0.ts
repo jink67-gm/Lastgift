@@ -30,6 +30,7 @@ import { createOffscreenMarks } from '../ui/offscreen';
 import { createPlaza, townBench, townLamp } from '../scene/plaza';
 import { TOWN } from '../data/townScale';
 import { LocalRun } from '../session/localRun';
+import { createPlayMeter } from '../session/playMeter';
 import type { TeamRun } from '../session/mirrorRun';
 import { playerBack, playerGone } from '../core/presence';
 import { IDLE_INTENT } from '../input/intent';
@@ -97,7 +98,8 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   const camOffset = new THREE.Vector3(Math.sin(CAMERA_YAW) * Math.cos(CAMERA_PITCH), Math.sin(CAMERA_PITCH), Math.cos(CAMERA_YAW) * Math.cos(CAMERA_PITCH)).multiplyScalar(40);
   // 움직임 줄이기를 고른 기기는 처음 넓은 구도 없이 바로 시작
-  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  // 기기 설정(동작 줄이기) 또는 게임 설정 「움직임 줄이기」
+  const reduceMotion = (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false) || loadSettings(browserStorage()).noShake;
   const camTarget = new THREE.Vector3(ESTABLISH.x, 0, ESTABLISH.z);
   let viewH = reduceMotion ? 0 : ESTABLISH.viewH;
   let establish = reduceMotion ? 0 : ESTABLISH.sec;
@@ -167,6 +169,8 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
     run.dispatch({ type: 'cutsceneDone', at: performance.now() });
   }
   // 여러 기기: 끊긴 요정은 멈추고 손잡이·선물을 그 자리에 놓는다 / 참가자는 방장 사건으로 소리·연출을 시작한다
+  // 플레이 기록(장별 조작 시간·FPS·기기) + FPS 표시
+  const meter = createPlayMeter({ chapterId: 0, run, players: PLAYERS.length, role: net?.role ?? 'local', quality: () => quality, showFps: (f, q) => settings.setFps(f, q) });
   net?.onPresence((id, on) => (sort = on ? playerBack(sort, id) : playerGone(sort, id)));
   net?.onEvents((evs) => {
     for (const e of evs as SortEvent[]) onEvent(e);
@@ -302,20 +306,12 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
   let acc = 0;
   let elapsed = 0;
   applyQuality();
-  let fpsT = 0;
-  let fpsN = 0;
   requestAnimationFrame(function loop(now) {
     requestAnimationFrame(loop);
     const raw = (now - last) / 1000;
     // 자동 품질: 시작 뒤 실제 프레임 시간을 보고 느리면 한 번 낮음으로
+    meter.frame(raw);
     if (auto.feed(raw) && settings.value.quality === 'auto' && !forcedLow) applyQuality();
-    fpsT += raw;
-    fpsN++;
-    if (fpsT >= 0.5) {
-      settings.setFps(fpsN / fpsT, quality === 'low' ? '낮음' : '보통');
-      fpsT = 0;
-      fpsN = 0;
-    }
     const frame = Math.min(raw, 0.25) / TEST_SLOW;
     last = now;
     acc += frame;
@@ -576,6 +572,7 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
       },
       sortEvents: () => events.map((e) => JSON.parse(JSON.stringify(e))),
       run: () => ({ ...run.state }),
+      playLog: () => meter.current(),
       runEffects: () => run.log.map((e) => e.type),
       savedCheckpoint: () => localStorage.getItem('lastgift.cp.v1.dev-ch0'),
       /** 화면 비교 촬영용: 지금 카메라(바라보는 땅 위 점, 화면 높이 m, 각도) */

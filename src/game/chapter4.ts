@@ -29,6 +29,7 @@ import { createOcclusionFader } from '../scene/occlusionFade';
 import { createSnowfall } from '../scene/snowfall';
 import { createWinterLight, setShadows } from '../scene/winterLight';
 import { LocalRun } from '../session/localRun';
+import { createPlayMeter } from '../session/playMeter';
 import type { TeamRun } from '../session/mirrorRun';
 import { playerBack, playerGone } from '../core/presence';
 import { IDLE_INTENT } from '../input/intent';
@@ -114,7 +115,8 @@ export function startChapter4(models: Models, opts?: StoryOptions): void {
 
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 700);
   const camOffset = new THREE.Vector3(Math.sin(CAMERA_YAW) * Math.cos(CAMERA_PITCH), Math.sin(CAMERA_PITCH), Math.cos(CAMERA_YAW) * Math.cos(CAMERA_PITCH)).multiplyScalar(60);
-  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  // 기기 설정(동작 줄이기) 또는 게임 설정 「움직임 줄이기」
+  const reduceMotion = (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false) || loadSettings(browserStorage()).noShake;
   const start = solo ? REVEAL : ESTABLISH;
   const camTarget = new THREE.Vector3(start.x, 0, start.z);
   let viewH = reduceMotion ? 0 : start.viewH;
@@ -200,6 +202,8 @@ export function startChapter4(models: Models, opts?: StoryOptions): void {
   if (!wantIntro) begin();
   let lastProgress = '';
   // 여러 기기: 끊긴 요정은 멈추고 들던 것을 놓는다(발전기 손잡이도) / 참가자는 방장 사건으로 소리·연출을 시작한다
+  // 플레이 기록(장별 조작 시간·FPS·기기) + FPS 표시
+  const meter = createPlayMeter({ chapterId: 4, run, players: PLAYERS.length, role: net?.role ?? 'local', quality: () => quality, showFps: (f, q) => settings.setFps(f, q) });
   net?.onPresence((id, on) => (state = on ? playerBack(state, id) : playerGone(state, id)));
   net?.onEvents((evs) => {
     for (const e of evs as Ch4Event[]) onEvent(e);
@@ -541,6 +545,7 @@ export function startChapter4(models: Models, opts?: StoryOptions): void {
     requestAnimationFrame(loop);
     const raw = (now - last) / 1000;
     last = now;
+    meter.frame(raw);
     if (auto.feed(raw)) applyQuality();
     const frame = Math.min(raw, 0.25);
     if (introT !== -2) {
@@ -851,6 +856,7 @@ export function startChapter4(models: Models, opts?: StoryOptions): void {
       ch4: () => JSON.parse(JSON.stringify(state)) as Ch4State,
       ch4Events: () => events.map((e) => ({ ...e })),
       run: () => ({ ...run.state }),
+      playLog: () => meter.current(),
       ending: () => ending,
       /** 시험(여러 기기 이어 붙이기): 방장이 이 장을 바로 마친 것으로(사건을 참가자에게도 보낸다) */
       debugWin: () => {

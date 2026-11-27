@@ -21,6 +21,12 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 720 }, launchOptions: { args: swiftshader } },
     },
     {
+      // 저사양 측정(npm run test:perf). 시험이 아니라 측정이라 기본 묶음에 넣지 않는다
+      name: 'perf',
+      testDir: 'tests/perf',
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1366, height: 768 }, launchOptions: { args: swiftshader } },
+    },
+    {
       name: 'net',
       testDir: 'tests/e2e-net',
       use: {

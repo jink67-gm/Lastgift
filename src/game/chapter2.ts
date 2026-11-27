@@ -23,6 +23,10 @@ import { createChapter2Screen } from './chapter2Screen';
 import type { Models } from '../scene/models';
 import { storyFor, type StoryOptions } from './story';
 import { createClipView, type ClipView } from '../ui/memories';
+import { createPlayMeter } from '../session/playMeter';
+import { AutoQuality, effectiveQuality, type Quality } from '../core/quality';
+import { loadSettings, saveSettings } from '../save/store';
+import { createSettingsUi } from '../ui/settings';
 
 const SIM_DT = 1 / 60;
 const LOCAL_PLAYERS = ['p0', 'p1'] as const;
@@ -104,6 +108,22 @@ function startLocal(models: Models, opts?: StoryOptions): void {
   run.dispatch({ type: 'start', at: performance.now() });
   // 여러 기기: 끊긴 요정은 손잡이를 놓는다 / 참가자는 방장 사건으로 끝 장면을 시작한다
   net?.onPresence((id, on) => (sewing = on ? playerBack(sewing, id) : playerGone(sewing, id)));
+  // 그래픽 품질(자동·낮음·보통: 2장은 해상도만) · FPS 표시 · 플레이 기록
+  const kv = browserStorage();
+  const settings = createSettingsUi(document, loadSettings(kv));
+  const auto = new AutoQuality();
+  const forcedLow = new URLSearchParams(location.search).get('quality') === 'low';
+  let quality: Quality = forcedLow ? 'low' : effectiveQuality(settings.value.quality, null);
+  const applyQuality = () => {
+    quality = forcedLow ? 'low' : effectiveQuality(settings.value.quality, auto.result);
+    screen.setLow(quality === 'low');
+  };
+  settings.onChange((v) => {
+    saveSettings(kv, v);
+    applyQuality();
+  });
+  applyQuality();
+  const meter = createPlayMeter({ chapterId: 2, run, players: PLAYERS.length, role: net?.role ?? 'local', quality: () => quality, showFps: (f, q) => settings.setFps(f, q) });
   net?.onEvents((evs) => {
     for (const e of evs as SewingEvent[]) onEvent(e);
   });
@@ -117,8 +137,11 @@ function startLocal(models: Models, opts?: StoryOptions): void {
   let clipDone = false;
   requestAnimationFrame(function loop(now) {
     requestAnimationFrame(loop);
-    const frame = Math.min((now - last) / 1000, 0.25);
+    const raw = (now - last) / 1000;
+    const frame = Math.min(raw, 0.25);
     last = now;
+    meter.frame(raw);
+    if (auto.feed(raw)) applyQuality();
     acc += frame;
     run.frame(now);
     const live = run.canPlay && !sewing.delivered;
@@ -184,6 +207,7 @@ function startLocal(models: Models, opts?: StoryOptions): void {
         net?.emit([e]);
       },
       run: () => ({ ...run.state }),
+      playLog: () => meter.current(),
       runEffects: () => run.log.map((e) => e.type),
       savedCheckpoint: () => localStorage.getItem('lastgift.cp.v1.dev-ch2'),
       toScreen: (x: number, z: number) => screen.toScreen(x, z),

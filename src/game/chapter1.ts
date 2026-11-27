@@ -25,6 +25,7 @@ import { createOutline } from '../scene/outline';
 import { createSnowfall } from '../scene/snowfall';
 import { createWinterLight, setShadows } from '../scene/winterLight';
 import { LocalRun } from '../session/localRun';
+import { createPlayMeter } from '../session/playMeter';
 import type { TeamRun } from '../session/mirrorRun';
 import { playerBack, playerGone } from '../core/presence';
 import { IDLE_INTENT } from '../input/intent';
@@ -107,7 +108,8 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     '<svg viewBox="0 0 64 40" style="position:absolute;left:-14px;top:-14px;width:44px;height:28px;background:#1b2433;border-radius:14px;border:3px solid #fff;padding:2px"><ellipse cx="32" cy="20" rx="26" ry="14" fill="#fff"/><circle cx="32" cy="20" r="8" fill="#1b2433"/></svg>';
   document.body.appendChild(peekFrame);
   const camOffset = new THREE.Vector3(Math.sin(CAMERA_YAW) * Math.cos(CAMERA_PITCH), Math.sin(CAMERA_PITCH), Math.cos(CAMERA_YAW) * Math.cos(CAMERA_PITCH)).multiplyScalar(60);
-  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  // 기기 설정(동작 줄이기) 또는 게임 설정 「움직임 줄이기」
+  const reduceMotion = (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false) || loadSettings(browserStorage()).noShake;
   const camTarget = new THREE.Vector3(ESTABLISH.x, 0, ESTABLISH.z);
   let viewH = reduceMotion ? 0 : ESTABLISH.viewH;
   let establish = reduceMotion || params.has('noestablish') ? 0 : ESTABLISH.sec;
@@ -264,6 +266,8 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
   if (!story) begin();
   state = createChapter1(PLAYERS, run.state.seed);
   // 여러 기기: 끊긴 요정은 멈추고 선물을 그 자리에 놓는다 / 참가자는 방장 사건으로 소리·연출을 시작한다
+  // 플레이 기록(장별 조작 시간·FPS·기기) + FPS 표시
+  const meter = createPlayMeter({ chapterId: 1, run, players: PLAYERS.length, role: net?.role ?? 'local', quality: () => quality, showFps: (f, q) => settings.setFps(f, q) });
   net?.onPresence((id, on) => (state = on ? playerBack(state, id) : playerGone(state, id)));
   net?.onEvents((evs) => {
     for (const e of evs as Ch1Event[]) onEvent(e);
@@ -341,6 +345,7 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     requestAnimationFrame(loop);
     const raw = (now - last) / 1000;
     last = now;
+    meter.frame(raw);
     const fq = auto.feed(raw);
     if (fq) applyQuality();
     const frame = Math.min(raw, 0.25);
@@ -622,6 +627,7 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
       },
       ch1Events: () => events.map((e) => ({ ...e })),
       run: () => ({ ...run.state }),
+      playLog: () => meter.current(),
       maps: () => PLAYERS.map((_, i) => maps.isOpen(i)),
       lane: (x: number, z: number) => toLane({ x, z }),
       world: (s: number, t: number) => W(s, t),
