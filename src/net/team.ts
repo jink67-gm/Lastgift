@@ -39,8 +39,10 @@ const INPUT_STALE_MS = 1500;
 /** 이보다 오래 아무 소식이 없으면 나간 것으로 본다(창이 갑자기 닫히면 WebRTC 끊김 신호가 늦다) */
 const GUEST_GONE_MS = 2500;
 /** 들어온 직후·장을 연 직후: 참가자 기기가 장 장면을 만드느라 몇 초 멈춰도 끊긴 것으로 보지 않는다 */
-const GUEST_LOADING_MS = 15000;
+const GUEST_LOADING_MS = 30000; // 느린 학교 기기(CPU 2배 느림)는 3장 장면을 만드는 데 15초를 넘겼다
 const HOST_LOST_MS = 3000;
+/** 이보다 긴 화면 하나 = 이 기기가 멈췄다 돌아왔다(장 장면 만들기·탭 전환). 1초로 두면 초당 1화면 기기는 늘 '멈춤'이라 끊김을 영영 못 알아챘다 */
+const LONG_FRAME_MS = 2500;
 const REJOIN_EVERY_MS = 4000;
 const IDLE: SewingInput = { move: { x: 0, y: 0 }, actionDown: false, actionHeld: false };
 
@@ -381,7 +383,7 @@ class TeamHost implements TeamNet, MirrorLink {
   /** 매 화면: 끊긴 참가자 정리, 혼자 남으면 일시중지, 스냅샷 보내기 */
   tick(now: number): void {
     // 이 기기가 오래 멈췄다 돌아왔다(장 장면 만들기·탭 전환): 그동안 못 들은 소식을 끊김으로 오해하지 않는다
-    if (now - this.lastTick > 1000) for (const uid of this.lastHeard.keys()) this.lastHeard.set(uid, now);
+    if (now - this.lastTick > LONG_FRAME_MS) for (const uid of this.lastHeard.keys()) this.lastHeard.set(uid, now);
     this.lastTick = now;
     for (const [uid, l] of this.links) {
       const slot = this.seats.get(uid);
@@ -549,7 +551,7 @@ class TeamGuest implements TeamNet, MirrorLink {
   /** 매 화면: 다시 접속, 입력 보내기, 장이 바뀌었으면 다시 읽기 */
   tick(now: number, lobby: Lobby): void {
     // 이 기기가 오래 멈췄다 돌아왔다(장 장면 만들기): 밀린 스냅샷이 들어올 때까지 다시 접속 요청을 미룬다
-    if (now - this.lastTick > 1000) {
+    if (now - this.lastTick > LONG_FRAME_MS) {
       this.lastJoin = now;
       this.snapAt = Math.max(this.snapAt, now - 1000);
     }
