@@ -326,19 +326,31 @@ const bermMat = new THREE.MeshStandardMaterial({ color: C.drift, roughness: 1, s
 let printTex: THREE.CanvasTexture | null = null;
 export function footprints(points: { x: number; z: number }[]): THREE.Mesh {
   printTex ??= (() => {
-    const t = canvasTex(32, 64, (g) => {
-      g.fillStyle = 'rgba(120,138,170,0.75)';
-      for (const [x, y] of [[10, 14], [22, 46]] as const) {
+    // 32 × 512 한 장(바닥 약 5 m)에 발자국 열네 개: 좌우 번갈아, 간격·기울기·크기를 조금씩, 중간에 한 번 끊김
+    let seed = 11;
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const t = canvasTex(32, 512, (g) => {
+      let y = 14;
+      for (let i = 0; i < 16; i++) {
+        y += 26 + rand() * 12;
+        if (y > 500) break;
+        if (i === 9) continue; // 한 발 빈 곳(눈에 덮임)
+        const left = i % 2 === 0;
+        g.save();
+        g.translate((left ? 10 : 22) + (rand() - 0.5) * 3, y);
+        g.rotate((left ? -0.12 : 0.12) + (rand() - 0.5) * 0.2);
+        g.fillStyle = `rgba(120,138,170,${0.5 + rand() * 0.3})`;
         g.beginPath();
-        g.ellipse(x, y, 4.2, 7, 0, 0, Math.PI * 2);
+        g.ellipse(0, 0, 3.6 + rand() * 0.8, 6.2 + rand() * 1.2, 0, 0, Math.PI * 2);
         g.fill();
+        g.restore();
       }
     });
     t.wrapT = THREE.RepeatWrapping;
     return t;
   })();
   const pts = points.map((p) => new THREE.Vector3(p.x, 0, p.z));
-  const m = new THREE.Mesh(ribbon(pts, 0.42, 0.62, 0.01), new THREE.MeshBasicMaterial({ map: printTex, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
+  const m = new THREE.Mesh(ribbon(pts, 0.42, 5.0, 0.01), new THREE.MeshBasicMaterial({ map: printTex, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
   m.userData.flat = true;
   m.renderOrder = 2;
   return m;
@@ -571,26 +583,59 @@ function ringBerm(): THREE.Group {
 
 /** 돌 포장 무늬: 트리를 둘러싼 동심원 줄눈(눈 사이로 살짝 보이는 회색 돌 테) */
 function pavingRings(): THREE.Group {
+  // 예전: 동심원 셋 + 바퀴살 열여섯(과녁판처럼 보였다) → 눈이 쓸려 돌판이 드러난 곳을 군데군데(길가·트리 둘레·골목 입구 쪽).
+  // 돌판은 다섯~일곱 모 납작한 조각, 색을 조금씩 달리해 한 덩어리로(그리기 호출 1번, 불투명)
   const g = new THREE.Group();
-  // 불투명(겹쳐 그리기 비용 없이): 바닥 눈빛과 섞인 옅은 회색
-  const mat = new THREE.MeshStandardMaterial({ color: '#e6e2da', roughness: 1, polygonOffset: true, polygonOffsetFactor: -1 });
-  // 고리 셋 + 바퀴살 열여섯을 한 덩어리로(그리기 호출 1번)
+  let seed = 5;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const tones = ['#ddd8cf', '#d6d0c5', '#e2ded6', '#d3cdc1'].map((c) => new THREE.Color(c));
   const parts: THREE.BufferGeometry[] = [];
   const flat = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
-  for (const r of [4.4, 8.8, 12.4]) parts.push(new THREE.RingGeometry(r - 0.09, r + 0.09, 96).applyMatrix4(flat));
-  for (let k = 0; k < 16; k++) {
-    const a = (k / 16) * Math.PI * 2 + Math.PI / 16;
-    const r = (12.4 + 4.4) / 2;
-    const geo = new THREE.PlaneGeometry(0.14, 12.4 - 4.4);
-    geo.applyMatrix4(new THREE.Matrix4().makeRotationZ(-a + Math.PI / 2));
-    geo.applyMatrix4(flat);
-    geo.translate(Math.cos(a) * r, 0, Math.sin(a) * r);
-    parts.push(geo);
+  // 드러난 곳(가운데·반지름): 트리 둘레 길 바깥, 골목으로 가는 길 옆, 노점 앞 등
+  const patches: [number, number, number][] = [];
+  for (let k = 0; k < 14; k++) {
+    const a = rand() * Math.PI * 2;
+    const r = 4.6 + rand() * 9.5;
+    patches.push([Math.cos(a) * r, Math.sin(a) * r, 1.1 + rand() * 1.4]);
   }
-  for (const p of parts) p.deleteAttribute('uv');
-  const m = new THREE.Mesh(mergeGeometries(parts.map((p) => p.toNonIndexed()))!, mat);
+  for (const [cx, cz, pr] of patches) {
+    // 돌판을 동심원 방향으로 엇갈려 깐다(광장 가운데를 도는 줄)
+    const r0 = Math.hypot(cx, cz);
+    for (let ring = -2; ring <= 2; ring++) {
+      const rr = r0 + ring * 0.6;
+      const span = pr / rr;
+      const step = 0.62 / rr;
+      const a0 = Math.atan2(cz, cx) + (ring % 2 ? step / 2 : 0);
+      for (let a = a0 - span; a <= a0 + span; a += step) {
+        const x = Math.cos(a) * rr;
+        const z = Math.sin(a) * rr;
+        const d = Math.hypot(x - cx, z - cz) / pr;
+        if (d > 1 || rand() < d * 0.75) continue; // 가장자리로 갈수록 눈에 덮여 듬성듬성
+        if (Math.hypot(x, z) < 3.5 || Math.hypot(x, z) > 15.2) continue;
+        const sides = 6 + Math.floor(rand() * 3);
+        const geo = new THREE.CircleGeometry(0.33 + rand() * 0.04, sides);
+        geo.applyMatrix4(flat);
+        geo.applyMatrix4(new THREE.Matrix4().makeRotationY(-a + rand() * 0.4));
+        geo.scale(1.15, 1, 0.92);
+        geo.translate(x, 0, z);
+        geo.deleteAttribute('uv');
+        geo.deleteAttribute('normal');
+        const t = tones[Math.floor(rand() * tones.length)]!;
+        const n = geo.attributes.position!.count;
+        const col = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) col.set([t.r, t.g, t.b], i * 3);
+        geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        parts.push(geo.toNonIndexed());
+      }
+    }
+  }
+  if (!parts.length) return g;
+  const merged = mergeGeometries(parts)!;
+  merged.computeVertexNormals();
+  const m = new THREE.Mesh(merged, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, polygonOffset: true, polygonOffsetFactor: -1 }));
   m.position.y = 0.004;
   m.userData.flat = true;
+  m.receiveShadow = true;
   g.add(m);
   return g;
 }

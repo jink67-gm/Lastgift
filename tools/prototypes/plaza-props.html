@@ -1,0 +1,30 @@
+<!-- 시제품(게임 코드 아님): 광장 소품 확인. ?what=sleigh|tree|bed  (네 방향 + 위) -->
+<!doctype html><html><body style="margin:0;background:#dfe7f4"><script type="module">
+import * as THREE from 'three';
+import { createSleigh } from '/src/scene/sleigh.ts';
+const q = new URLSearchParams(location.search);
+const what = q.get('what') ?? 'sleigh';
+const W = 1600, H = 900;
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(W, H); r.setPixelRatio(1); r.shadowMap.enabled = true; document.body.appendChild(r.domElement);
+r.setScissorTest(true);
+const s = new THREE.Scene(); s.background = new THREE.Color('#2a3550');
+s.add(new THREE.HemisphereLight('#cfe0ff', '#6a7088', 1.6));
+const d = new THREE.DirectionalLight('#fff1d8', 2.2); d.position.set(-4, 9, 7); d.castShadow = true; d.shadow.mapSize.set(2048, 2048); s.add(d);
+const ground = new THREE.Mesh(new THREE.CircleGeometry(12, 48), new THREE.MeshStandardMaterial({ color: '#eef2f8', roughness: 1 })); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; s.add(ground);
+let obj, size = 3;
+if (what === 'sleigh') { obj = createSleigh(); obj.scale.setScalar(1.8); size = 3.2; }
+const mod = q.get('mod');
+if (mod) { const m = await import(mod); obj = await m.default(); size = Number(q.get('size') ?? 5); }
+s.add(obj);
+const views = [[1, 0.35, 1], [0, 0.3, 1], [1, 0.25, 0], [-1, 0.4, -0.6], [0.0001, 1, 0.0001], [-1, 0.3, 1]];
+const cam = new THREE.PerspectiveCamera(35, (W / 3) / (H / 2), 0.05, 200);
+const box = new THREE.Box3().setFromObject(obj); const c = box.getCenter(new THREE.Vector3());
+views.forEach((v, i) => {
+  const x = (i % 3) * (W / 3), y = (1 - Math.floor(i / 3)) * (H / 2);
+  r.setViewport(x, y, W / 3, H / 2); r.setScissor(x, y, W / 3, H / 2);
+  const dir = new THREE.Vector3(...v).normalize();
+  cam.position.copy(c).addScaledVector(dir, size * 3.2); cam.lookAt(c);
+  r.render(s, cam);
+});
+window.__ready = true;
+</script></body></html>

@@ -106,8 +106,11 @@ export interface PhotoSetup {
 }
 
 /** 사진 찍는 자리: 썰매 앞(남쪽) 눈길. 산타가 가운데, 요정들은 산타 앞 양옆으로 번갈아 선다 */
-/** 단체사진 자리: 가운데 큰 트리 바로 남쪽(배경에 트리), 사진기는 남쪽(docs/PLAZA_PLAN.md) */
-export const PHOTO_SPOT = { x: 0, z: 4.6 };
+/**
+ * 단체사진 자리: 큰 트리 남남동(배경 왼쪽에 트리), 사진기는 남쪽 조금 서쪽(docs/PLAZA_PLAN.md).
+ * 예전(트리 바로 남쪽 0, 4.6)에는 트리가 산타 머리 바로 위에 겹쳐 "트리를 쓴 산타"처럼 보였고, 화단 턱이 발 뒤에 받침대처럼 보였다.
+ */
+export const PHOTO_SPOT = { x: 2.2, z: 6.0 };
 
 /**
  * 참가 요정 자리 번호(모자)로 단체사진 구도를 정한다. 같은 참가자면 언제나 같은 구도(5장 재현).
@@ -115,19 +118,20 @@ export const PHOTO_SPOT = { x: 0, z: 4.6 };
  */
 export function photoLineup(slots: readonly number[]): PhotoSetup {
   const order = [...slots].sort((a, b) => a - b);
-  const facing = 0; // 남쪽(+z, 사진기 쪽)을 본다
+  // 사진기: 조금 뒤로 물러 낮게(요정 눈높이 삼각대) → 트리 꼭대기 별과 요정 발끝이 함께 들어온다
+  const camera = { x: PHOTO_SPOT.x - 1.2, y: 1.2, z: PHOTO_SPOT.z + 9.0, tx: PHOTO_SPOT.x - 0.6, ty: 2.8, tz: PHOTO_SPOT.z, fov: 46 };
+  // 모두 사진기를 본다
+  const face = (x: number, z: number) => Math.atan2(camera.x - x, camera.z - z);
   const elves = order.map((slot, i) => {
     // 산타 왼쪽·오른쪽을 번갈아(1·2번째가 가장 가깝게)
     const side = i % 2 === 0 ? -1 : 1;
     const rank = Math.floor(i / 2);
-    return { slot, x: PHOTO_SPOT.x + side * (1.0 + rank * 0.95), z: PHOTO_SPOT.z + 1.7 + rank * 0.3, facing };
+    const x = PHOTO_SPOT.x + side * (1.0 + rank * 0.95);
+    const z = PHOTO_SPOT.z + 1.7 + rank * 0.3;
+    return { slot, x, z, facing: face(x, z) };
   });
-  return {
-    version: 1,
-    elves,
-    santa: { x: PHOTO_SPOT.x, z: PHOTO_SPOT.z - 0.35, facing },
-    camera: { x: PHOTO_SPOT.x, y: 1.2, z: PHOTO_SPOT.z + 7.8, tx: PHOTO_SPOT.x, ty: 2.25, tz: PHOTO_SPOT.z, fov: 46 },
-  };
+  const santa = { x: PHOTO_SPOT.x, z: PHOTO_SPOT.z - 0.35 };
+  return { version: 1, elves, santa: { ...santa, facing: face(santa.x, santa.z) }, camera };
 }
 
 /** 저장해 둔 값이 사진 구도인지(체크포인트 읽기 검사) */

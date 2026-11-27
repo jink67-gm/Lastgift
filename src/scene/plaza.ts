@@ -1,5 +1,5 @@
 // 광장 소품. Kenney 모델(CC0)이 있으면 그것으로, 없으면 기본 도형으로 그린다. 배치는 src/data/plaza.ts를 따른다.
-// 썰매·눈더미·산타·시계탑은 아직 직접 만든 기본 도형이다.
+// 썰매(scene/sleigh.ts)·눈더미·시계탑은 직접 만든 모형이다.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { PLAZA_BOUNDS, PLAZA_PROPS, PLAZA_R, WORKBENCH, WORKSHOP, type Prop, type PropKind } from '../data/plaza';
@@ -12,6 +12,8 @@ import { createShed, createWorkbench, createWorkshopSign } from './workshop';
 import { Models } from './models';
 import { applySnowSurface, createPlazaDressing, type Detail } from './plazaDressing';
 import { warmPool } from './winterLight';
+import { createSleigh } from './sleigh';
+import { createVillageTree } from './villageTree';
 
 const mat = (color: string, extra: THREE.MeshStandardMaterialParameters = {}) =>
   new THREE.MeshStandardMaterial({ color, roughness: 0.85, ...extra });
@@ -24,17 +26,8 @@ function mesh(geo: THREE.BufferGeometry, m: THREE.Material, x = 0, y = 0, z = 0)
 
 function sleigh(): THREE.Group {
   const g = new THREE.Group();
-  const red = mat('#b3262e');
-  g.add(mesh(new THREE.BoxGeometry(2.6, 0.7, 1.3), red, 0, 0.75, 0));
-  g.add(mesh(new THREE.BoxGeometry(0.5, 0.9, 1.3), red, -1.05, 1.2, 0)); // 등받이
-  const gold = mat('#d8b04a', { metalness: 0.4, roughness: 0.4 });
-  for (const z of [-0.55, 0.55]) {
-    g.add(mesh(new THREE.BoxGeometry(3.0, 0.08, 0.08), gold, 0.1, 0.25, z)); // 썰매 날
-    const curl = mesh(new THREE.TorusGeometry(0.28, 0.04, 6, 12, Math.PI), gold, 1.6, 0.53, z);
-    curl.rotation.z = -Math.PI / 2;
-    g.add(curl);
-  }
-  // 눈에 처박힌 각도
+  g.add(createSleigh());
+  // 눈에 처박힌 각도(5·6장은 이 각도를 풀어 바로 세운다: game/finale.ts)
   g.rotation.z = 0.28;
   g.position.y = 0.25;
   return g;
@@ -70,17 +63,6 @@ function santa(): THREE.Group {
   return g;
 }
 
-function tree(): THREE.Group {
-  const g = new THREE.Group();
-  g.add(mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.6, 10), mat('#6b4428'), 0, 0.3, 0));
-  const green = mat('#2e6b3e');
-  [[1.1, 1.3, 0.95], [0.85, 1.1, 1.75], [0.55, 0.9, 2.45]].forEach(([r, h, y]) =>
-    g.add(mesh(new THREE.ConeGeometry(r!, h!, 14), green, 0, y!, 0)),
-  );
-  g.add(mesh(new THREE.OctahedronGeometry(0.18), mat('#ffd84a', { emissive: '#ffcf33', emissiveIntensity: 0.6 }), 0, 3.0, 0));
-  return g;
-}
-
 function house(w: number, d: number): THREE.Group {
   const g = new THREE.Group();
   const wallH = KENNEY_HOUSE_SCALE; // 사람 집 벽 높이(문 열린 부분 = 요정 키 × 4.5보다 조금 높다)
@@ -100,35 +82,67 @@ function house(w: number, d: number): THREE.Group {
   return g;
 }
 
-/** 가운데 트리 둘레 낮은 돌 턱 화단(턱 높이 = 요정 무릎) + 눈 덮인 흙 */
-function treeBed(r: number): THREE.Group {
+/** 가운데 트리 둘레 화단: 크기·색이 조금씩 다른 둥근 돌 테두리(위에 눈) + 눈 덮인 흙 둔덕 + 트리 밑 선물 상자 */
+function treeBed(r: number, models: Models): THREE.Group {
   const g = new THREE.Group();
-  const stone = new THREE.MeshStandardMaterial({ color: '#a8a39a', roughness: 0.95 });
-  // 돌 28개를 한 덩어리로(그리기 호출 1번)
-  const n = 28;
-  const parts: THREE.BufferGeometry[] = [];
+  let seed = 7;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  // 돌: 각진 공을 납작하게 눌러 바퀴처럼 둘러 놓는다(한 덩어리, 돌마다 색)
+  const n = 26;
+  const stones: THREE.BufferGeometry[] = [];
+  const caps: THREE.BufferGeometry[] = [];
+  const tones = [new THREE.Color('#8f877b'), new THREE.Color('#a29a8c'), new THREE.Color('#7f786f'), new THREE.Color('#9b8f7d')];
   const m4 = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
   for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2;
-    const geo = new THREE.BoxGeometry(0.55, 0.42, ((Math.PI * 2 * r) / n) * 0.96);
-    geo.applyMatrix4(m4.makeRotationY(-a).setPosition(Math.cos(a) * (r - 0.25), 0.21, Math.sin(a) * (r - 0.25)));
-    parts.push(geo);
+    const a = (i / n) * Math.PI * 2 + rand() * 0.05;
+    const len = ((Math.PI * 2 * (r - 0.3)) / n) * (0.62 + rand() * 0.08);
+    const h = 0.26 + rand() * 0.1;
+    const geo = new THREE.DodecahedronGeometry(1, 0).toNonIndexed();
+    const sc = new THREE.Vector3(0.3 + rand() * 0.05, h, len);
+    q.setFromEuler(new THREE.Euler(rand() * 0.2, -a + (rand() - 0.5) * 0.25, rand() * 0.2));
+    geo.applyMatrix4(m4.compose(new THREE.Vector3(Math.cos(a) * (r - 0.3), h * 0.55, Math.sin(a) * (r - 0.3)), q, sc));
+    const tone = tones[i % tones.length]!;
+    const col = new Float32Array(geo.attributes.position!.count * 3);
+    for (let k = 0; k < col.length; k += 3) {
+      col[k] = tone.r;
+      col[k + 1] = tone.g;
+      col[k + 2] = tone.b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    stones.push(geo);
+    const cap = new THREE.SphereGeometry(1, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+    cap.applyMatrix4(m4.compose(new THREE.Vector3(Math.cos(a) * (r - 0.3), h * 1.25, Math.sin(a) * (r - 0.3)), q, new THREE.Vector3(sc.x * 0.95, 0.09, sc.z * 0.9)));
+    caps.push(cap);
   }
-  const stones = new THREE.Mesh(mergeGeometries(parts)!, stone);
-  stones.castShadow = true;
-  stones.receiveShadow = true;
-  g.add(stones);
-  // 돌 위·흙 위의 눈
+  const stoneMesh = new THREE.Mesh(mergeGeometries(stones)!, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true }));
   const snow = new THREE.MeshStandardMaterial({ color: '#f6f8fc', roughness: 1 });
-  const cap = new THREE.Mesh(new THREE.TorusGeometry(r - 0.25, 0.2, 6, 40), snow);
-  cap.rotation.x = Math.PI / 2;
-  cap.position.y = 0.44;
-  cap.scale.z = 0.5;
-  g.add(cap);
-  const soil = new THREE.Mesh(new THREE.CylinderGeometry(r - 0.5, r - 0.45, 0.36, 40), snow);
-  soil.position.y = 0.18;
-  soil.receiveShadow = true;
-  g.add(soil);
+  const capMesh = new THREE.Mesh(mergeGeometries(caps)!, snow);
+  g.add(stoneMesh, capMesh);
+  // 흙 위로 소복이 쌓인 눈 둔덕(가운데가 조금 높다)
+  const mound = new THREE.Mesh(new THREE.SphereGeometry(r - 0.4, 40, 8, 0, Math.PI * 2, 0, Math.PI / 2), snow);
+  mound.scale.y = 0.55 / (r - 0.4);
+  mound.position.y = 0.02;
+  g.add(mound);
+  // 트리 밑 선물 상자(Kenney CC0): 아래 가지 밑으로 보이게 줄기 둘레에
+  const presents: [string, number, number, number, number][] = [
+    ['presentA', 1.35, 0.4, 0.75, 0.3], ['presentRound', 1.6, 1.25, 0.7, 0], ['presentB', 1.3, 2.3, 0.85, -0.4], ['presentLong', 1.7, 3.2, 0.8, 0.9],
+    ['presentA', 1.45, 4.1, 0.65, 0.2], ['presentB', 1.75, 5.0, 0.7, -0.2], ['presentRound', 1.3, 5.75, 0.6, 0],
+  ];
+  for (const [name, rr, a, k, rot] of presents) {
+    const p = models.clone(name as 'presentA');
+    if (!p) continue;
+    p.scale.setScalar(k * 1.4);
+    p.position.set(Math.cos(a) * rr, 0.32, Math.sin(a) * rr);
+    p.rotation.y = rot + a;
+    g.add(p);
+  }
+  g.traverse((o) => {
+    if ((o as THREE.Mesh).isMesh) {
+      o.castShadow = true;
+      o.receiveShadow = true;
+    }
+  });
   return g;
 }
 
@@ -210,8 +224,8 @@ function build(p: Prop, models: Models, lampLights: { n: number; max: number }):
     case 'snowPile': return scaled(snowPile(2.2), ((p.r ?? 2.2) / 2.2) * 1.25); // 썰매 앞이 처박힌 눈둑
     case 'santa': return scaled(santa(), 2.05); // 사람 어른: 요정 키의 약 4배
     case 'clockTower': return scaled(clockTower(), 2.5); // 집(약 12)보다 높은 랜드마크
-    case 'tree': return kenneyProp(models, 'treeDecorated', 4.2) ?? scaled(tree(), 3.2); // 가운데 큰 마을 트리 약 9.6(공방 지붕보다 높게)
-    case 'treeBed': return treeBed(p.r ?? 3.2); // 트리 둘레 돌 턱 화단
+    case 'tree': return createVillageTree(); // 가운데 큰 마을 트리 약 9.6(공방 지붕보다 높게, scene/villageTree.ts)
+    case 'treeBed': return treeBed(p.r ?? 3.2, models); // 트리 둘레 돌 턱 화단
     case 'pine': return kenneyProp(models, p.x + p.z > 0 ? 'treeSnowB' : 'treeSnowA', 5.4) ?? scaled(pine(), 3.4);
     case 'cabin': {
       // 집 모양은 회전 전 기준(앞 = +z)으로 만들고, 배치 때 rotY로 돌린다. 통나무는 중간 밝기 갈색으로
@@ -233,6 +247,8 @@ function build(p: Prop, models: Models, lampLights: { n: number; max: number }):
       return g;
     }
     case 'shed': return createShed(p.w ?? 3.4, p.d ?? 2.4);
+    case 'snowman': return kenneyProp(models, 'snowman', 1.5) ?? snowPile(0.5); // 요정 키보다 조금 크게
+    case 'candyCane': return kenneyProp(models, 'candyCane', 2.6) ?? new THREE.Group(); // 요정 키쯤
     case 'lamp': {
       const g = townLamp();
       const pool = warmPool(1.6);

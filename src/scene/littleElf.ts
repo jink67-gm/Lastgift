@@ -52,8 +52,10 @@ function addClothUv(g: THREE.BufferGeometry): void {
   g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 }
 
-type Proc = 'Wave' | 'Interact' | 'HitRecieve' | 'Death';
-const PROCS: readonly string[] = ['Wave', 'Interact', 'HitRecieve', 'Death'];
+type Proc = 'Wave' | 'Interact' | 'HitRecieve' | 'Death' | 'GetUp';
+const PROCS: readonly string[] = ['Wave', 'Interact', 'HitRecieve', 'Death', 'GetUp'];
+/** 일어나기(뒤로 쓰러진 자세 → 앉기 → 쪼그려 앉기 → 서기) 걸리는 시간(초) */
+const GETUP_SEC = 1.6;
 
 export function createLittleElf(models: Models, look: ElfLook): ElfView | null {
   const model = models.clone('littleElf');
@@ -148,6 +150,23 @@ export function createLittleElf(models: Models, look: ElfLook): ElfView | null {
   box = new THREE.Box3().setFromObject(model);
   model.position.y -= box.min.y;
   const baseY = model.position.y;
+  // 엉덩이 자리(모델 원점 → 엉덩이, 서 있을 때). 일어나기는 엉덩이를 축으로 몸을 세운다
+  const hipV = new THREE.Vector3();
+  if (B.hips) {
+    model.updateMatrixWorld(true);
+    root.updateMatrixWorld(true);
+    root.worldToLocal(B.hips.getWorldPosition(hipV));
+    hipV.y -= baseY;
+  } else hipV.set(0, ELF_TOTAL_HEIGHT * 0.45, 0);
+  const hipH = hipV.y;
+  /** 일어나기 열쇠 자세: 몸 기울기(rot, 뒤로 -)·엉덩이 자리(앞 +z)·허벅지(-: 앞으로)·정강이(+: 뒤로 접기)·허리·팔 */
+  const GETUP_KEYS = [
+    { u: 0, rot: -1.45, hz: -0.99 * hipH, hy: 0.12 + 0.12 * hipH, thigh: 0, shin: 0, spine: 0, armX: 0, armZ: 0.9 },
+    { u: 0.34, rot: -0.08, hz: -0.88 * hipH, hy: 0.16, thigh: -1.45, shin: 0.05, spine: 0.3, armX: -0.35, armZ: 0.35 },
+    { u: 0.66, rot: 0.3, hz: -0.32 * hipH, hy: 0.48 * hipH, thigh: -1.75, shin: 2.0, spine: 0.35, armX: -0.7, armZ: 0.15 },
+    { u: 1, rot: 0, hz: 0, hy: hipH, thigh: 0, shin: 0, spine: 0, armX: 0, armZ: 0 },
+  ] as const;
+  const _hip = new THREE.Vector3(), _eul = new THREE.Euler();
 
   // 발밑 그림자
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.3, 24), new THREE.MeshBasicMaterial({ color: '#1b2433', transparent: true, opacity: 0.25, depthWrite: false }));
@@ -293,6 +312,7 @@ export function createLittleElf(models: Models, look: ElfLook): ElfView | null {
       const kind = proc ?? lastProc;
       model.rotation.x = 0;
       model.position.y = baseY;
+      model.position.z = 0;
       if (w > 0.002 && kind) {
         if (kind === 'Wave') {
           // 오른팔을 옆으로 높이 들고 아래팔을 흔든다
@@ -313,6 +333,33 @@ export function createLittleElf(models: Models, look: ElfLook): ElfView | null {
           turn(B.ul, Z, 0.6 * w * k);
           turn(B.ur, Z, -0.6 * w * k);
           if (procOnce && procT > 0.55) proc = null;
+        } else if (kind === 'GetUp') {
+          // 뒤로 쓰러진 자세(Death 끝)에서: 상체를 일으켜 앉고 → 무릎을 당겨 쪼그려 앉고 → 선다. 엉덩이를 축으로(판자처럼 서지 않게)
+          const u = Math.min(1, procT / GETUP_SEC);
+          let i = 0;
+          while (i < GETUP_KEYS.length - 2 && u > GETUP_KEYS[i + 1]!.u) i++;
+          const a0 = GETUP_KEYS[i]!, a1 = GETUP_KEYS[i + 1]!;
+          const f0 = (u - a0.u) / (a1.u - a0.u);
+          const f = f0 * f0 * (3 - 2 * f0);
+          const L = (k: 'rot' | 'hz' | 'hy' | 'thigh' | 'shin' | 'spine' | 'armX' | 'armZ') => a0[k] + (a1[k] - a0[k]) * f;
+          const rot = L('rot');
+          model.rotation.x = rot;
+          // 엉덩이가 (0, hy, hz)에 오도록 모델 원점을 옮긴다
+          _hip.copy(hipV).applyEuler(_eul.set(rot, 0, 0));
+          model.position.set(0, baseY + L('hy') - _hip.y, hipV.z + L('hz') - _hip.z);
+          turn(B.thl, X, L('thigh'));
+          turn(B.thr, X, L('thigh'));
+          turn(B.shl, X, L('shin'));
+          turn(B.shr, X, L('shin'));
+          turn(B.spine, X, L('spine'));
+          turn(B.ul, X, L('armX'));
+          turn(B.ur, X, L('armX'));
+          turn(B.ul, Z, L('armZ'));
+          turn(B.ur, Z, -L('armZ'));
+          if (procOnce && u >= 1) {
+            proc = null;
+            procW = 0;
+          }
         } else if (kind === 'Death') {
           // 뒤로 털썩 넘어진다(일어날 때는 세기가 천천히 줄며 일어선다)
           const k = procOnce ? Math.min(1, procT / 0.45) : 1;

@@ -121,6 +121,13 @@ function arc(a: THREE.Vector3, b: THREE.Vector3, h: number, u: number, out: THRE
   return out;
 }
 
+/** 이차 베지어(a → c 쪽으로 휘어 → b) */
+function bezierArc(a: THREE.Vector3, c: THREE.Vector3, b: THREE.Vector3, u: number, out: THREE.Vector3): THREE.Vector3 {
+  const v = 1 - u;
+  out.set(v * v * a.x + 2 * v * u * c.x + u * u * b.x, v * v * a.y + 2 * v * u * c.y + u * u * b.y, v * v * a.z + 2 * v * u * c.z + u * u * b.z);
+  return out;
+}
+
 export function createPrologue(cast: PrologueCast): Prologue {
   const scene = cast.scene;
   const photo = photoLineup(cast.slots);
@@ -213,7 +220,10 @@ export function createPrologue(cast: PrologueCast): Prologue {
   // 산타는 썰매 남쪽으로 내려선다(받치는 자리 바로 옆, 북쪽은 유나네 골목 표식 쪽이라 비운다)
   const santaHop = new THREE.Vector3(end.x + 1.0, 0, end.z + 2.4);
   // 도토는 썰매 꼬리 남쪽 눈 속에서 튀어나온다(산타와 떨어지고, 사진기가 가운데 트리 가지 속에 들어가지 않게)
-  const dotoPop = new THREE.Vector3(end.x - 1.4, 0, end.z + 3.4);
+  // 도토가 눈 속에서 튀어나오는 곳: 썰매 꼬리 서쪽 빈 눈밭(썰매·산타·트리 사이는 좁아 사진기 앞을 가렸다) → 썰매 날 고치는 자리로 걸어간다
+  const dotoPop = new THREE.Vector3(end.x - 3.6, 0, end.z + 0.6);
+  /** 튀어나와 눈을 털 때 보는 쪽(사진기 쪽, 서쪽) */
+  const DOTO_POP_FACING = -1.15;
   const dotoFix = new THREE.Vector3(cast.dotoFix.x, 0, cast.dotoFix.z);
 
   let t = 0;
@@ -429,7 +439,8 @@ export function createPrologue(cast: PrologueCast): Prologue {
         return;
       }
       e.root.visible = true;
-      arc(tmpB.set(end.x - 0.8, 2.1, end.z + 0.4), tmpA.set(spot.x, 0, spot.z), 2.4, k, e.root.position);
+      // 썰매(트리 북동)에서 트리 남쪽 시작 자리로: 곧게 날면 트리 가지를 뚫고 지나가므로 트리 동쪽으로 돌아 떨어진다
+      bezierArc(tmpB.set(end.x - 0.8, 2.1, end.z + 0.4), tmpV.set(6.6, 4.6, 1.4), tmpA.set(spot.x, 0, spot.z), k, e.root.position);
       // 공중제비는 떨어지기 직전에 끝나고, 닿기 직전부터 쓰러지는 동작
       const spin = Math.min(1, k / 0.75);
       // 쓰러져 있다 일어나 두리번거리는 동안은 사진기(남동쪽) 쪽을 보고, 사진기가 산타에게 간 뒤 시작 방향으로 돈다
@@ -447,7 +458,8 @@ export function createPrologue(cast: PrologueCast): Prologue {
       if (t >= rise) {
         if (e.root.userData.rose !== true) {
           e.root.userData.rose = true;
-          e.act?.(null, { fade: 1.1 }); // 쓰러진 자세에서 천천히 일어선다
+          // 쓰러진 자세에서 앉고 → 쪼그려 앉고 → 선다(뼈 동작 GetUp, 없는 모델은 천천히 풀기)
+          if (!e.act?.('GetUp', { once: true })) e.act?.(null, { fade: 1.1 });
         }
         // 일어나서 두리번(왼쪽·오른쪽을 본다) → 시작 방향
         const u = seg(t, [rise + 0.9, C.elfUp[1] + 0.4]);
@@ -498,12 +510,12 @@ export function createPrologue(cast: PrologueCast): Prologue {
       doto.root.scale.setScalar(s);
       if (t < C.dotoShake[0]) {
         const k = ease(seg(t, C.dotoUp));
-        place(doto, dotoPop.x, -1.4 * s * (1 - k), dotoPop.z, 0.3);
+        place(doto, dotoPop.x, -1.4 * s * (1 - k), dotoPop.z, DOTO_POP_FACING);
         dotoAct(null);
         doto.animate(t, false);
       } else if (t < C.dotoWalk[0]) {
         const k = seg(t, C.dotoShake);
-        place(doto, dotoPop.x, Math.abs(Math.sin(k * Math.PI * 6)) * 0.05, dotoPop.z, 0.3 + Math.sin(t * 38) * 0.4 * (1 - k));
+        place(doto, dotoPop.x, Math.abs(Math.sin(k * Math.PI * 6)) * 0.05, dotoPop.z, DOTO_POP_FACING + Math.sin(t * 38) * 0.4 * (1 - k));
         if (Math.floor(lastT * 10) !== Math.floor(t * 10)) burst(dotoPop.x, 1.2 * s, dotoPop.z, 5, 1.6, 0.5);
         doto.animate(t, false);
       } else {
@@ -587,11 +599,14 @@ export function createPrologue(cast: PrologueCast): Prologue {
     // 도토: 눈더미에서 튀어나와 눈을 털고 썰매 날로
     {
       at: C.dotoUp[0] + 0.2,
-      blend: 0.8,
+      blend: 0, // 바로 끊어 넘긴다(산타 컷에서 옮겨 가면 사진기가 썰매를 뚫고 지나갔다)
       get: () => {
         const d = cast.doto.root.position;
-        // 남동쪽 조금 높은 데서(썰매가 앞을 가리지 않고, 가운데 트리 가지에 들어가지 않게)
-        return { p: V(d.x + 1.2, 2.4, d.z + 4.0), q: V(d.x - 0.1, 0.8, d.z), fov: 40 };
+        // 남서쪽에 고정한 사진기(썰매를 비스듬히): 도토가 썰매 꼬리 서쪽 눈에서 튀어나와 → 썰매 날로 걸어가는 것을 한 화면에.
+        // 뒤로 썰매 옆면과 (썰매 너머) 산타, 트리는 사진기 오른쪽 뒤라 화면 밖.
+        // 예전(남쪽·동남쪽, 도토를 따라감)에는 트리 가지·장식 공·화단 턱·산타 다리가 화면 앞을 크게 가렸다
+        void d;
+        return { p: V(end.x - 6.4, 1.6, end.z + 3.4), q: V(end.x - 2.6, 0.8, end.z + 1.25), fov: 38 };
       },
     },
     // 산타가 썰매를 받치는 동안 물러나며 흩어진 선물(이름표)을 훑고 광장 전체로

@@ -13,7 +13,7 @@ export const PLAZA_BOUNDS: Bounds = { minX: -16.5, maxX: 16.5, minZ: -16.5, maxZ
 /** 시험 광장(?test) 요정 시작: 트리 화단 남동쪽, 화면 위·아래·좌·우로 몇 걸음 열려 있다 */
 export const ELF_SPAWN = { x: 6, z: 7 };
 
-export type PropKind = 'sleigh' | 'snowPile' | 'santa' | 'tree' | 'treeBed' | 'pine' | 'cabin' | 'clockTower' | 'bench' | 'lamp' | 'workshop' | 'workbench' | 'shed';
+export type PropKind = 'sleigh' | 'snowPile' | 'santa' | 'tree' | 'treeBed' | 'pine' | 'cabin' | 'clockTower' | 'bench' | 'lamp' | 'workshop' | 'workbench' | 'shed' | 'snowman' | 'candyCane';
 
 export interface Prop {
   id: string;
@@ -166,6 +166,9 @@ export const PLAZA_PROPS: readonly Prop[] = [
   { id: 'pine6', kind: 'pine', x: -20, z: 20, r: 2.9, collider: null },
   // 둘레 가로등
   ...ringLamps(),
+  // 작은 소품(Kenney CC0): 북서쪽 눈사람(공방과 할머니 댁 골목 사이), 유나네 골목 입구 양옆 지팡이 사탕(둘레 벽 위라 판정 없음)
+  { id: 'snowman', kind: 'snowman', x: -9.4, z: -7.9, r: 0.7, rotY: 0.75, collider: circle(-9.4, -7.9, 0.7) },
+  ...[-1, 1].map((s) => ({ id: `candyCane${s > 0 ? 'R' : 'L'}`, kind: 'candyCane' as const, ...polar(-62 + s * 9.5, PLAZA_R + 0.2), rotY: s * 0.6, collider: null })),
 ];
 
 /** 둥근 둘레 벽(판정): 원 조각을 둘레에 촘촘히(골목 입구도 막는다) */

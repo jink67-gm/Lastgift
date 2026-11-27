@@ -1,0 +1,29 @@
+<!-- 시제품(게임 코드 아님): 꼬마 요정 일어나기(GetUp) 단계별. 뒤로 넘어짐(Death) 뒤 0~1.6초 -->
+<!doctype html><html><body style="margin:0;background:#dfe7f4"><script type="module">
+import * as THREE from 'three';
+import { Models } from '/src/scene/models.ts';
+import { createLittleElf } from '/src/scene/littleElf.ts';
+import { ELF_LOOKS } from '/src/data/elves.ts';
+const W = 1600, H = 520;
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(W, H); r.setPixelRatio(1); document.body.appendChild(r.domElement);
+const s = new THREE.Scene(); s.background = new THREE.Color('#dfe7f4');
+s.add(new THREE.HemisphereLight('#fff', '#8a93a8', 2.2)); const d = new THREE.DirectionalLight('#fff4e0', 1.6); d.position.set(-3, 8, 7); s.add(d);
+const g = new THREE.Mesh(new THREE.PlaneGeometry(40, 10), new THREE.MeshStandardMaterial({ color: '#f2f4f8' })); g.rotation.x = -Math.PI / 2; s.add(g);
+const models = await Models.load(['littleElf'], '/');
+const times = [0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.6];
+times.forEach((tt, i) => {
+  const e = createLittleElf(models, ELF_LOOKS[i % 4]);
+  e.root.position.x = -6 + i * 2;
+  e.root.rotation.y = Math.PI / 2; // 옆모습
+  s.add(e.root);
+  e.act('Death', { once: true, speed: 1.6 });
+  let t = 0;
+  for (; t < 1.2; t += 1 / 30) e.animate(t, false);
+  e.act('GetUp', { once: true });
+  const end = t + tt;
+  for (; t < end; t += 1 / 30) e.animate(t, false);
+  e.animate(end, false);
+});
+const cam = new THREE.PerspectiveCamera(30, W / H, 0.05, 100); cam.position.set(0, 1.2, 16); cam.lookAt(0, 0.6, 0);
+r.render(s, cam); window.__ready = true;
+</script></body></html>
