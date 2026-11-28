@@ -170,7 +170,8 @@ export function mailboxOf(h: Ch1House): { s: number; t: number } {
 
 /** 화분 자리: 문 왼쪽·오른쪽 1.7, 앞면에서 0.7 앞 */
 export function potOf(h: Ch1House): { s: number; t: number } {
-  return housePoint(h, halfOf(h).d + 0.7, doorOff(h) + (h.potSide === 'left' ? -1.7 : 1.7) * (h.yuna ? 2.3 : 1));
+  // 유나네: 큰 계단 오른쪽 아래 앞쪽(벽의 초인종과 겹치지 않게)
+  return housePoint(h, halfOf(h).d + (h.yuna ? 2.4 : 0.7), doorOff(h) + (h.potSide === 'left' ? -1.7 : 1.7) * (h.yuna ? 2.0 : 1));
 }
 
 /** 유나 창가(돌출 창): 문 왼쪽, 사진기 쪽 앞면 */
@@ -384,7 +385,21 @@ export const BLIND = { s0: YARD.back - 1.5, t0: YUNA_WINDOW.t - 2.0, t1: YUNA_WI
 export const PORCH = { s: YARD.back - 1.9, t: -DOOR_MID * YUNA_HOUSE_K, hs: 1.2, ht: 1.8 };
 
 /** 초인종: 현관문 오른쪽 벽(창가 쪽), 버튼 높이 y. 눈뭉치가 떨어질 곳이 반지름 r 안이면 맞힌다 */
-export const DOORBELL = { s: YARD.back - 0.1, t: PORCH.t + 1.9, y: 3.2, r: 1.1 };
+/** 사람 1 m = 게임 단위(문 열린 높이 2 m = TOWN.doorOpening) */
+const HUMAN_M = TOWN.doorOpening / 2;
+/** 현관 계단 윗단 높이(유나네 집 모델에서 잰 값, 문간 바닥) */
+const STOOP_Y = 1.07;
+/** 초인종: 현관문 테두리(돌기둥) 오른쪽 벽, 창가와의 사이(문짝이 아니라 벽에 단다). 높이는 사람 기준 문간 바닥에서 1.4 m */
+export const DOORBELL = { s: YARD.back - 0.1, t: PORCH.t + 3.2, y: STOOP_Y + 1.4 * HUMAN_M, r: 1.1 };
+/** 현관 센서등(문 왼쪽 위): 요정이 현관 가까이(SENSOR_ZONE) 오면 켜지고 유나가 곧장 창밖을 본다. 눈뭉치로 덮으면 SENSOR_MELT초 꺼진다 */
+export const SENSOR = { s: YARD.back - 0.1, t: PORCH.t - 2.2, y: STOOP_Y + 2.4 * HUMAN_M, r: 0.95 }; // 사람 기준 문간 바닥에서 2.4 m(문 위쪽 옆)
+export const SENSOR_ZONE = 4.0;
+export const SENSOR_MELT = 30;
+/** 유나 방 창문(눈뭉치로 톡): 유나가 PEER.sec초 동안 창 쪽(골목 좌표 t > PEER.sideT)만 본다 */
+export const WINDOW_TARGET = { s: YARD.back - 1.6, t: YUNA_WINDOW.t, y: YUNA_WINDOW.sill + YUNA_WINDOW.height / 2, r: 1.5 };
+export const PEER = { sec: 3.5, sideT: 2.0 };
+/** 현관에서 자루를 열어 두 선물을 꺼내는 데 행동 버튼을 누르고 있어야 하는 초 */
+export const UNPACK_SEC = 2.0;
 /** 현관에 나온 유나의 눈(문간): 두리번거릴 때 여기서 마당을 본다 */
 export const DOOR_EYE = { s: YARD.back - 1.2, t: PORCH.t };
 /** 초인종에 유나가 나왔다 들어가는 시간표(초): 현관으로 걸어감 → 문 열고 두리번 → 문 닫고 창가로 */

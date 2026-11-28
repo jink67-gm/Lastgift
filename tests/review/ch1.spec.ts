@@ -118,10 +118,27 @@ test('1장 장면', async ({ page }) => {
   await hook(page, 'setTime', 0.1);
   await hook(page, 'debugPlace', 'p0', 56.8, -0.8, Math.PI * 1.25);
   await hook(page, 'debugPlace', 'p1', 55.4, -6.0, Math.PI * 1.25);
-  await page.waitForTimeout(1200);
-  await page.keyboard.press('KeyE');
-  await page.waitForTimeout(1500);
+  // 센서등: 덮이기 전 켜진 모습 → 눈으로 덮은 뒤
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: `${OUT}/i2_porchLight.png` });
+  // (불이 켜져 유나가 봤다면 검은 화면이 끝날 때까지)
+  await page.waitForFunction(() => (window as unknown as { __lastgift: { ch1(): { caughtPause: number } } }).__lastgift.ch1().caughtPause === 0, null, { timeout: 30_000 });
+  await hook(page, 'coverSensor');
+  await hook(page, 'setTime', 0.1);
+  await hook(page, 'debugPlace', 'p0', 56.8, -0.8, Math.PI * 1.25);
+  await page.waitForTimeout(800);
+  // 자루 열기: E 누르고 있기(진행 고리)
+  await page.keyboard.down('KeyE');
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: `${OUT}/i3_unpacking.png` });
+  await page.waitForFunction(() => (window as unknown as { __lastgift: { ch1Events(): { type: string }[] } }).__lastgift.ch1Events().some((e) => e.type === 'unpack'), null, { timeout: 15_000 });
+  await page.keyboard.up('KeyE');
+  await page.waitForTimeout(800);
   await page.screenshot({ path: `${OUT}/j_unpacked.png` });
+  // 창문 톡: 유나가 창 쪽만 본다
+  await hook(page, 'tapWindow');
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: `${OUT}/j2_windowTap.png` });
   // 끝 장면
   await hook(page, 'debugWin');
   for (const t of [0.5, 2.5, 4.5, 6.5, 8.5, 10.5]) {

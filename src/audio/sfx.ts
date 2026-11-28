@@ -232,6 +232,12 @@ export function sfxForEvent(e: { type: string; event?: { type: string } }): SfxN
       return 'chime';
     case 'doorOpen':
       return 'click';
+    case 'windowTap':
+      return 'click';
+    case 'sensorCovered':
+      return 'ok';
+    case 'porchLight':
+      return 'switch';
     case 'snowball':
       return 'pick';
     case 'splat':

@@ -159,9 +159,12 @@ test('1장 배달: 현관에서 자루를 풀어 두 선물을 한 번에 놓고
     h.debugPlace('p0', 56.8, -0.8, Math.PI * 1.25);
     h.debugPlace('p1', 55.6, 1.0, Math.PI * 1.25);
   });
+  await page.evaluate(() => (window as unknown as { __lastgift: { coverSensor(): void } }).__lastgift.coverSensor()); // 센서등은 덮어 둔다
   await page.waitForTimeout(500);
-  await page.keyboard.press('KeyE');
-  await page.waitForTimeout(300);
+  // 자루 열기: E를 2초 넘게 누르고 있는다
+  await page.keyboard.down('KeyE');
+  await page.waitForFunction(() => (window as unknown as { __lastgift: Hook }).__lastgift.ch1Events().some((e) => e.type === 'unpack'), null, { timeout: 15_000 });
+  await page.keyboard.up('KeyE');
   expect((await H(page, (h) => h.ch1Events())).some((e) => e.type === 'unpack' && e.playerId === 'p0')).toBe(true);
   expect((await H(page, (h) => h.ch1())).placed.sort()).toEqual(['pencils', 'sketchbook']);
   expect((await H(page, (h) => h.run())).phase).toBe('play');

@@ -142,7 +142,7 @@ describe('1장 규칙', () => {
 });
 
 import { gazeAt, gazeOf, hiddenFromDoor, hiddenFromWindow, throwTarget, CAUGHT_PAUSE, DOOR_GRACE, GAZE, LOOK_GRACE, YUNA_AWAY } from '../../src/core/chapter1';
-import { COVERS, DOOR_EYE, DOOR_TRIP, DOORBELL, GARDEN_PATH, OUTSIDE_GATE, PORCH, THROW, YUNA_EYE, inPorch } from '../../src/data/chapter1';
+import { COVERS, DOOR_EYE, DOOR_TRIP, DOORBELL, GARDEN_PATH, OUTSIDE_GATE, PEER, PORCH, SENSOR_MELT, THROW, UNPACK_SEC, WINDOW_TARGET, YUNA_EYE, inPorch } from '../../src/data/chapter1';
 
 /** 골목 좌표에 요정을 세운 상태 */
 function at(s: Ch1State, id: string, ls: number, lt: number, facing = Math.PI * 1.25): Ch1State {
@@ -320,16 +320,69 @@ describe('1장 들키지 않기(무궁화 꽃이 피었습니다 + 종)', () => 
     expect(r.hit).toBe(true);
     expect(r.state.yunaAway).toBe(0);
   });
+  it('역할: 자루를 든 요정은 눈을 뭉치지 못한다(앞마당에서 E는 내려놓기), 빈손 요정은 앞마당에서 눈을 뭉친다', () => {
+    let s = at(looking(), 'p0', 50, 2, Math.PI * 1.25);
+    s = at(s, 'p1', 50, 4, Math.PI * 1.25);
+    expect(s.items.find((i) => i.id === SACK)!.carriedBy).toBe('p0');
+    expect(['drop', 'blocked']).toContain(planAction(s, 'p0').kind);
+    expect(planAction(s, 'p1')).toEqual({ kind: 'snowball' });
+  });
+  it('현관 센서등: 덮여 있지 않으면 현관 가까이 간 순간 불이 켜지고 유나가 곧장 창밖을 본다. 눈뭉치로 덮으면 한동안 꺼진다', () => {
+    let s = createChapter1(['p0', 'p1'], 7);
+    s = { ...s, gateOpen: true, time: 0.5 };
+    expect(gazeOf(s).phase).toBe('away');
+    s = at(s, 'p0', PORCH.s - 2.0, PORCH.t);
+    let r = step(s, { p0: idle, p1: idle }, DT);
+    expect(r.events.some((e) => e.type === 'porchLight')).toBe(true);
+    expect(gazeOf(r.state).phase).toBe('look');
+    // 덮으면(눈뭉치가 센서에 떨어짐) 꺼진다
+    s = { ...s, sensorOff: SENSOR_MELT };
+    r = step(s, { p0: idle, p1: idle }, DT);
+    expect(r.events.some((e) => e.type === 'porchLight')).toBe(false);
+    expect(gazeOf(r.state).phase).toBe('away');
+  });
+  it('창문 톡: 창가의 유나가 창 쪽만 한동안 본다 — 반대쪽(왼쪽)은 움직여도 괜찮고, 창 쪽에서 움직이면 들킨다', () => {
+    let s = createChapter1(['p0', 'p1'], 7);
+    s = { ...s, gateOpen: true, time: 0.5, sensorOff: SENSOR_MELT };
+    // 창문에 맞는 눈뭉치
+    const c = W(WINDOW_TARGET.s, WINDOW_TARGET.t);
+    s = { ...s, balls: [{ from: 'p1', x0: c.x, z0: c.z, x1: c.x, z1: c.z, t: 0, dur: 0.001, target: 'window' }] };
+    s = at(s, 'p0', 50, -6); // 왼쪽
+    s = at(s, 'p1', 50, 8); // 창 쪽(오른쪽)
+    let r = step(s, { p0: idle, p1: idle }, DT);
+    expect(r.events.some((e) => e.type === 'windowTap')).toBe(true);
+    expect(gazeOf(r.state).phase).toBe('peer');
+    s = r.state;
+    let caughtIds: string[] = [];
+    for (let i = 0; i < Math.round((PEER.sec - 0.2) / DT) && !caughtIds.length; i++) {
+      r = step(s, { p0: walkRight, p1: { ...idle, move: { x: -1, y: 0 } } }, DT);
+      s = r.state;
+      caughtIds = r.events.filter((e) => e.type === 'caught').map((e) => (e as { playerId: string }).playerId);
+    }
+    expect(caughtIds).toEqual(['p1']);
+  });
   it('현관 발판에서 자루를 열면 두 선물을 한 번에 꺼내 놓고(다시 못 집음, 빈 자루는 그대로 멘다), 그 뒤 초인종을 울리면 유나가 문을 열고 발견 → 완료(한 번만)', () => {
     let s = createChapter1(['p0', 'p1'], 7);
-    s = { ...s, time: 0 };
+    s = { ...s, time: 0, sensorOff: SENSOR_MELT }; // 센서등은 눈으로 덮어 둔 상태
     const facePorch = Math.PI * 1.25; // 화면 위(집 쪽)를 본다
     s = at(s, 'p0', PORCH.s - 0.75, PORCH.t, facePorch);
     expect(planAction(s, 'p0')).toEqual({ kind: 'place', itemId: SACK });
-    let r = step(s, { p0: { ...idle, actionDown: true }, p1: idle }, DT);
+    // 누르고 있어야 열린다: 잠깐 누르고 떼면 그만둔다
+    let r = step(s, { p0: { ...idle, actionDown: true, actionHeld: true }, p1: idle }, DT);
+    r = step(r.state, { p0: idle, p1: idle }, DT);
+    expect(r.state.packed).toBe(true);
+    expect(r.state.players[0]!.unpack).toBeUndefined();
+    // UNPACK_SEC 동안 누르고 있으면 두 선물을 한 번에 꺼낸다
+    r = step(r.state, { p0: { ...idle, actionDown: true, actionHeld: true }, p1: idle }, DT);
+    const evs: string[] = [];
+    for (let i = 0; i < Math.round(UNPACK_SEC / DT) + 2; i++) {
+      r = step(r.state, { p0: { ...idle, actionHeld: true }, p1: idle }, DT);
+      evs.push(...r.events.map((e) => e.type));
+    }
     s = r.state;
-    expect(r.events.filter((e) => e.type === 'unpack').length).toBe(1);
-    expect(r.events.filter((e) => e.type === 'placed').length).toBe(2);
+    expect(evs.filter((e) => e === 'unpack').length).toBe(1);
+    expect(evs.filter((e) => e === 'placed').length).toBe(2);
+    r = { state: s, events: [] };
     expect(s.packed).toBe(false);
     expect(s.items.filter((i) => i.id !== SACK).every((i) => inPorch(i) && i.carriedBy === null)).toBe(true);
     expect(s.items.find((i) => i.id === SACK)!.carriedBy).toBe('p0');

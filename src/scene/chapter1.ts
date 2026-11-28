@@ -17,6 +17,7 @@ import {
   GARDEN_PATH,
   DOORBELL,
   PORCH,
+  SENSOR,
   GATES,
   GATE_HALF,
   LANDMARKS,
@@ -774,6 +775,49 @@ function doorbellPlate(): { group: THREE.Group; press(k: number): void } {
   };
 }
 
+/** 현관 센서등: 문 위 둥근 등 + 옆 작은 감지기(빨간 불). light(on), cover(k: 눈 덮임 0~1) */
+function porchSensor(): { lamp: THREE.Group; sensor: THREE.Group; set(on: number, cover: number): void } {
+  const lamp = new THREE.Group();
+  const lampMat = new THREE.MeshStandardMaterial({ color: '#fff3c4', emissive: '#ffd36b', emissiveIntensity: 0.05, roughness: 0.4 });
+  const globe = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 12), lampMat);
+  lamp.add(globe);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.34, 0.16, 16), std('#3b3f4a', { roughness: 0.5, metalness: 0.5 }));
+  cap.position.y = 0.32;
+  lamp.add(cap);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.5), std('#3b3f4a'));
+  arm.position.set(0, 0.38, -0.25);
+  lamp.add(arm);
+  const pool = warmPool(4.2);
+  (pool.material as THREE.MeshBasicMaterial).opacity = 0;
+  const sensor = new THREE.Group();
+  const box = new THREE.Mesh(roundedBox(0.5, 0.4, 0.22), std('#e8e4dc', { roughness: 0.6 }));
+  sensor.add(box);
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), std('#2a2d36', { roughness: 0.2, metalness: 0.4 }));
+  eye.rotation.x = Math.PI / 2;
+  eye.position.z = 0.11;
+  sensor.add(eye);
+  const ledMat = new THREE.MeshBasicMaterial({ color: '#ff3b30' });
+  const led = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), ledMat);
+  led.position.set(0.17, 0.12, 0.12);
+  sensor.add(led);
+  const snow = new THREE.Mesh(new THREE.SphereGeometry(0.36, 14, 10), std('#f8fbff', { roughness: 1 }));
+  snow.scale.set(1.1, 0.8, 0.7);
+  snow.position.z = 0.12;
+  sensor.add(snow);
+  return {
+    lamp,
+    sensor,
+    set(on, cover) {
+      lampMat.emissiveIntensity = 0.05 + 2.2 * on;
+      (pool.material as THREE.MeshBasicMaterial).opacity = 0.75 * on;
+      snow.visible = cover > 0.02;
+      snow.scale.set(1.1 * (0.4 + 0.6 * cover), 0.8 * (0.4 + 0.6 * cover), 0.7);
+      ledMat.color.set(cover > 0.02 ? '#555555' : '#ff3b30');
+    },
+    pool,
+  } as { lamp: THREE.Group; sensor: THREE.Group; set(on: number, cover: number): void; pool: THREE.Mesh };
+}
+
 /** 현관에 나온 유나(그림책 화풍 세움판, 발끝까지): look -1·0·1 세 장(두리번) */
 function doorYuna(): { group: THREE.Group; look(i: number, smile?: boolean): void } {
   const g = new THREE.Group();
@@ -821,13 +865,15 @@ export interface Ch1Scene {
   /** 창 성에(끝 장면에서 걷는다) */
   frost: THREE.Object3D;
   /** 창가 유나 자리 모습(사용자 에셋이 오기 전 실루엣): 유나 시선 단계 */
-  setGaze(phase: 'away' | 'turn' | 'look' | 'back' | 'gone' | 'door', k: number, t: number): void;
+  setGaze(phase: 'away' | 'turn' | 'look' | 'back' | 'gone' | 'door' | 'peer', k: number, t: number): void;
   /** 창 가운데(월드, 망보는 작은 화면이 보는 곳) */
   windowCenter: THREE.Vector3;
   /** 현관 계단 위 선물 두 자리(월드) */
   doorstep: THREE.Vector3[];
   /** 초인종이 눌린 뒤 지난 비율(0~1, 단추가 빛난다) */
   ringBell(k: number): void;
+  /** 현관 센서등: on 0~1(켜짐), cover 0~1(눈에 덮인 정도) */
+  setPorchLight(on: number, cover: number): void;
   /** 현관문 가운데(월드, 끝 장면 사진기가 먼저 보는 곳) */
   doorCenter: THREE.Vector3;
   /** 현관문: open 0(닫힘)~1(열림), yunaLook: 문간 유나가 보는 쪽(-1·0·1), null이면 유나 없음 */
@@ -1064,6 +1110,16 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
   dy.group.rotation.y = YAW.back;
   dy.group.visible = false;
   root.add(dy.group);
+  // 현관 센서등(문 위)과 감지기(문 왼쪽 위)
+  const ps = porchSensor() as ReturnType<typeof porchSensor> & { pool: THREE.Mesh };
+  ps.lamp.position.copy(at(door.s - 0.25, PORCH.t, stoopY + 6.4));
+  ps.lamp.rotation.y = YAW.back;
+  root.add(ps.lamp);
+  ps.sensor.position.copy(at(SENSOR.s - 0.06, SENSOR.t, SENSOR.y));
+  ps.sensor.rotation.y = YAW.back;
+  root.add(ps.sensor);
+  ps.pool.position.copy(at(door.s - 2.0, PORCH.t, 0.02));
+  root.add(ps.pool);
   const windowCenter = win.group.localToWorld(new THREE.Vector3(0, YUNA_WINDOW.sill + YUNA_WINDOW.height / 2, 1.5));
   const sil = win.silhouette;
   const baseY = sil.position.y;
@@ -1074,6 +1130,9 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
     doorCenter: at(door.s, PORCH.t, stoopY + 2.0),
     ringBell(k) {
       bellPlate.press(k);
+    },
+    setPorchLight(on, cover) {
+      ps.set(on, cover);
     },
     setDoor(open, yunaLook, smile) {
       (doorway.material as THREE.MeshBasicMaterial).opacity = 0.95 * open;
@@ -1101,6 +1160,13 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
       }
       sil.visible = true;
       sil.position.x = baseX;
+      // peer: 창문 톡 소리에 창에 바짝 붙어 창 쪽(오른쪽)을 내다본다
+      if (phase === 'peer') {
+        sil.rotation.y = 0;
+        sil.position.x = baseX - 0.5;
+        sil.position.y = baseY + 0.12;
+        return;
+      }
       // away: 등을 보이고 고개 숙여 그림(살짝 들썩) / turn: 일어나며 돌아선다 / look: 창밖을 본다 / back: 다시 돌아앉는다
       const e = k * k * (3 - 2 * k);
       const turn = phase === 'away' ? 0 : phase === 'turn' ? e : phase === 'look' ? 1 : 1 - e;

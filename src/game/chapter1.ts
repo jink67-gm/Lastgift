@@ -11,7 +11,7 @@ import { createChapter1, gazeOf, planAction, step, throwTarget, CAMERA_YAW, CAUG
 import { AutoQuality, effectiveQuality, snowCount, type Quality } from '../core/quality';
 import type { SewingInput } from '../core/sewing';
 import { chapter } from '../data/chapters';
-import { DOORBELL, DOOR_TRIP, PORCH, CH1_BOUNDS, CH1_START, THROW, W, YARD, YUNA_WINDOW, toLane } from '../data/chapter1';
+import { DOORBELL, DOOR_TRIP, PORCH, SENSOR, SENSOR_MELT, UNPACK_SEC, WINDOW_TARGET, CH1_BOUNDS, CH1_START, THROW, W, YARD, YUNA_WINDOW, toLane } from '../data/chapter1';
 import { ELF_LOOKS } from '../data/elves';
 import { attachKeyboard, KeyState, KEYMAP_P1, KEYMAP_P2 } from '../input/keyboard';
 import { mergeIntents } from '../input/merge';
@@ -76,6 +76,7 @@ export function chapter1Checkpoint(roomId: string) {
 
 function iconOf(a: Ch1Action): ActionIcon {
   if (a.kind === 'pick') return 'pick';
+  if (a.kind === 'place' && a.itemId === SACK) return 'bag'; // 자루 열기(누르고 있기)
   if (a.kind === 'drop' || a.kind === 'place') return 'drop';
   if (a.kind === 'blocked') return 'blocked';
   if (a.kind === 'map') return a.open ? 'map' : 'mapClose';
@@ -349,6 +350,15 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     return m;
   });
   const splats: { m: THREE.Mesh; at: number }[] = [];
+  const unpackRings = PLAYERS.map(() => {
+    const m = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.75, 32, 1, 0, 0.01), new THREE.MeshBasicMaterial({ color: '#7ee08a', transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide }));
+    m.renderOrder = 31;
+    (m.material as THREE.MeshBasicMaterial).depthTest = false;
+    m.visible = false;
+    m.userData.u = 0;
+    scene.add(m);
+    return m;
+  });
   const _hl = new THREE.Vector3(), _hr = new THREE.Vector3();
   const rattles = new Map<string, number>();
   applyQuality();
@@ -534,6 +544,26 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     lastPhase = gz.phase;
     // 초인종: 눈뭉치에 맞으면 단추가 잠깐 빛난다
     space.ringBell(Math.min(1, (elapsed - bellAt) / 1.2));
+    // 현관 센서등: 켜짐(요정이 다가옴) · 눈 덮임(녹으며 줄어든다)
+    space.setPorchLight((state.lightOn ?? 0) > 0 ? 1 : 0, Math.min(1, (state.sensorOff ?? 0) / SENSOR_MELT));
+    // 자루 열기 진행 고리(현관 발판 위)
+    state.players.forEach((p, i) => {
+      const ur = unpackRings[i]!;
+      const u = p.unpack === undefined ? -1 : Math.min(1, p.unpack / UNPACK_SEC);
+      ur.visible = u >= 0;
+      if (u >= 0) {
+        if (Math.abs(u - (ur.userData.u as number)) > 0.02) {
+          ur.geometry.dispose();
+          ur.geometry = new THREE.RingGeometry(0.55, 0.75, 32, 1, Math.PI / 2, -Math.PI * 2 * Math.max(0.01, u));
+          ur.userData.u = u;
+        }
+        // 머리 위에 사진기를 보게 띄운다(계단에 가리지 않게)
+        const ps = shown.get(p.id) ?? p;
+        ur.position.set(ps.x, 2.3 * ELF_SCALE, ps.z);
+        ur.quaternion.copy(camera.quaternion);
+        elves[i]?.act?.('Interact');
+      }
+    });
     // 눈뭉치: 손에 쥔 것 · 힘 모을 때 떨어질 자리 · 날아가는 것 · 떨어진 자국
     state.players.forEach((p, i) => {
       const e = elves[i]!;
@@ -566,7 +596,7 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
       const u = Math.min(1, b.t / b.dur);
       const dist = Math.hypot(b.x1 - b.x0, b.z1 - b.z0);
       // 초인종에 맞는 눈뭉치는 초인종 높이에서 끝난다(빗나가면 땅까지)
-      const endY = b.hit ? DOORBELL.y : 0;
+      const endY = b.target === 'doorbell' ? DOORBELL.y : b.target === 'sensor' ? SENSOR.y : b.target === 'window' ? WINDOW_TARGET.y : 0;
       m.position.set(b.x0 + (b.x1 - b.x0) * u, 1.3 * ELF_SCALE * (1 - u) + endY * u + 4 * (1 + dist * 0.12) * u * (1 - u), b.z0 + (b.z1 - b.z0) * u);
     });
     for (let k = splats.length - 1; k >= 0; k--) {
@@ -603,7 +633,7 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     if (establish === 0) {
       // 유나네를 찾은 뒤 앞마당 가까이 있으면: 유나 창가와 현관문도 늘 한 화면에(창가·문간의 유나가 보여야 숨는다)
       const near = state.found && state.players.some((p) => p.connected && toLane(p).s > YARD.front - 8);
-      const house = near ? [W(YARD.back + 7, YUNA_WINDOW.t + 1), W(YARD.back + 7, PORCH_T - 1)] : [];
+      const house = near ? [W(YARD.back + 11, YUNA_WINDOW.t + 1), W(YARD.back + 11, PORCH_T - 1)] : []; // 문 위 센서등까지(화면 위 안내 칸에 가리지 않게)
       want = frameFor([...state.players.filter((p) => p.connected), ...house], near ? null : goalOf(), aspect, CAMERA_YAW, CAMERA_PITCH);
       const held = deadZone(camTarget, want);
       // 사람 크기 집 사이 골목: 광장보다 조금 넓게 보여 둘레(우편함·화분)가 함께 들어오게
@@ -727,6 +757,15 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
       },
       gaze: () => gazeOf(state),
       fade: () => Number(fade.style.opacity),
+      /** 시험·촬영: 센서등을 눈으로 덮은 것으로 */
+      coverSensor: () => {
+        state = { ...state, sensorOff: SENSOR_MELT, lightOn: 0 };
+      },
+      /** 시험·촬영: 창문을 톡 친 것으로 */
+      tapWindow: () => {
+        const c = W(WINDOW_TARGET.s, WINDOW_TARGET.t);
+        state = { ...state, balls: [...(state.balls ?? []), { from: PLAYERS[1] ?? 'p0', x0: c.x, z0: c.z, x1: c.x, z1: c.z, t: 0, dur: 0.01, target: 'window' }] };
+      },
       /** 시험·촬영: 유나네를 찾은 것으로(사진기가 창가·현관을 앞세운다) */
       debugFound: () => {
         state = { ...state, found: true, gateOpen: true };
@@ -734,11 +773,12 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
       /** 시험·촬영: 초인종을 맞힌 것으로(유나가 현관으로 나온다) */
       hitDoorbell: () => {
         const c = W(DOORBELL.s, DOORBELL.t);
-        state = { ...state, balls: [...(state.balls ?? []), { from: PLAYERS[1] ?? 'p0', x0: c.x, z0: c.z, x1: c.x, z1: c.z, t: 0, dur: 0.01, hit: true }] };
+        state = { ...state, balls: [...(state.balls ?? []), { from: PLAYERS[1] ?? 'p0', x0: c.x, z0: c.z, x1: c.x, z1: c.z, t: 0, dur: 0.01, target: 'doorbell' }] };
       },
       doorstep: () => space.doorstep.map((v) => ({ ...toLane({ x: v.x, z: v.z }), y: v.y })),
       setTime: (t: number) => {
-        state = { ...state, time: t };
+        // 시험: 유나 시선 시계를 처음부터(센서등·창문 톡으로 밀린 것도 되돌린다)
+        state = { ...state, time: t, gazeShift: 0, peer: 0 };
       },
       ch1Events: () => events.map((e) => ({ ...e })),
       run: () => ({ ...run.state }),
