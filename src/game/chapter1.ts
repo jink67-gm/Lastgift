@@ -48,8 +48,8 @@ const ELF_SCALE = 1.2;
 /** 1장 화면 넓이 배율(광장 기준 구도 대비) */
 const VIEW_K = 1.3;
 const SIM_DT = 1 / 60;
-/** 처음 몇 초: 아치에서 골목 끝 유나네까지 한 화면(아치 사이로 물고기 우편함) */
-const ESTABLISH = { ...W(20, 1.5), viewH: 36, sec: 3.4 };
+/** 처음 몇 초: 갈림길 동네 전체를 한 화면(어느 집인지는 지도를 보고 가까이 가서 고른다) */
+const ESTABLISH = { ...W(19, -2), viewH: 52, sec: 3.6 };
 
 export function chapter1Checkpoint(roomId: string) {
   return (runId: string, seed: number) => ({
@@ -72,6 +72,7 @@ function iconOf(a: Ch1Action): ActionIcon {
   if (a.kind === 'signal') return a.up ? 'signal' : 'none';
   if (a.kind === 'blocked') return 'blocked';
   if (a.kind === 'map') return a.open ? 'map' : 'mapClose';
+  if (a.kind === 'gate') return 'latch'; // 유나네든 가짜 집이든 같은 그림(열어 봐야 안다)
   return 'none';
 }
 
@@ -96,7 +97,7 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
   setShadows(space.root, true);
   scene.add(space.root);
   // 배경: 밤하늘·달·먼 언덕·숲·이웃집(놀이 공간과 사진기 쪽은 비운다)
-  scene.add(createBackdrop(models, { center: W(25, 0), forest: [16, 95], trees: 460, keepOut: (p) => { const l = toLane(p); return l.s > -48 && l.s < 70 && Math.abs(l.t) < 20; } }));
+  scene.add(createBackdrop(models, { center: W(25, 0), forest: [16, 95], trees: 460, keepOut: (p) => { const l = toLane(p); return l.s > -48 && l.s < 75 && l.t > -40 && l.t < 36; } })); // 갈림길 동네 전체(먼 집·숲이 길을 덮지 않게)
   addHaze(scene);
 
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 700);
@@ -350,6 +351,8 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
   let acc = 0;
   let elapsed = 0;
   let foundAt = -1;
+  let gateK = 0;
+  const rattles = new Map<string, number>();
   applyQuality();
 
   requestAnimationFrame(function loop(now) {
@@ -414,6 +417,11 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     events.push(e);
     if (e.type === 'pick' || e.type === 'drop') actAt.set(e.playerId, elapsed);
     if (e.type === 'found') foundAt = elapsed;
+    if (e.type === 'gateLocked') rattles.set(e.gateId, elapsed);
+    if (e.type === 'gateOpened' || e.type === 'gateLocked') {
+      const i = PLAYERS.indexOf(e.playerId);
+      elves[i]?.act?.('Interact', { once: true });
+    }
     if (e.type === 'complete' && ending < 0) {
       run.dispatch({ type: 'completeChapter', at: performance.now(), chapterId: 1 });
       ending = 0;
@@ -495,6 +503,14 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     }
     controls.update(iconOf(mine));
     space.update(elapsed);
+    // 유나네 대문: 열리면 0.7초에 걸쳐 안쪽으로 활짝. 가짜 집 대문은 덜컹
+    gateK = state.gateOpen ? Math.min(1, gateK + frame / 0.7) : 0;
+    space.setGateOpen(gateK * gateK * (3 - 2 * gateK));
+    for (const [id, at0] of rattles) {
+      const rk = (elapsed - at0) / 0.5;
+      space.rattleGate(id, Math.min(1, rk));
+      if (rk >= 1) rattles.delete(id);
+    }
     const gz = gazeAt(state.time, state.seed);
     if (ending < 0) space.setGaze(gz.phase, gz.k, elapsed);
     else if (updateEnding(frame)) return;
@@ -629,9 +645,9 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
 
   /** 앞세워 보여 줄 곳: 골목 끝 유나네 담(아직 못 찾았으면), 찾았으면 앞마당 */
   function goalOf(): Pt | null {
+    // 찾기 전에는 사진기가 유나네 쪽을 앞세우지 않는다(어느 집인지 화면이 알려 주면 안 된다)
     if (state.found) return W((YARD.front + YARD.back) / 2, 0);
-    const far = Math.max(...state.players.map((p) => toLane(p).s));
-    return far > 20 ? W(YARD.front - 2, 4) : null;
+    return null;
   }
 
   if (import.meta.env.DEV || params.has('test') || isAdmin()) {

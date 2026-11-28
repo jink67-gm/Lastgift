@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createChapter1, planAction, SACK, step, type Ch1State } from '../../src/core/chapter1';
-import { ARCH, CH1_HOUSES, LANE_HALF, MAP_FEATURES, W, YARD, mailboxOf, toLane } from '../../src/data/chapter1';
+import { CH1_HOUSES, GATES, LANDMARKS, LANE_HALF, MAP_FEATURES, STREETS, W, YARD, gateById, mailboxOf, toLane } from '../../src/data/chapter1';
 
 const DT = 1 / 60;
 const idle = { move: { x: 0, y: 0 }, actionDown: false, actionHeld: false };
@@ -9,6 +9,21 @@ const toScreen = (gx: number, gz: number) => {
   const l = Math.hypot(gx, gz) || 1;
   return { x: (gx - gz) / Math.SQRT2 / l, y: -(gx + gz) / Math.SQRT2 / l };
 };
+
+/** p0을 골목 좌표 경유점들을 차례로 걷게 한다 */
+function walkPath(s0: Ch1State, pts: [number, number][], sec = 20): { state: Ch1State; events: string[] } {
+  let st = s0;
+  const ev: string[] = [];
+  for (const [s, t] of pts) {
+    const r = walkTo(st, s, t, sec);
+    st = r.state;
+    ev.push(...r.events);
+  }
+  return { state: st, events: ev };
+}
+const press = (st: Ch1State, id = 'p0') => step(st, { p0: { ...idle, actionDown: id === 'p0' }, p1: { ...idle, actionDown: id === 'p1' } }, DT);
+/** 아치 → 골목 → 우체통에서 왼쪽 → 끝에서 위로 → 윗길 오른쪽 → 유나네 대문 앞 */
+const ROUTE: [number, number][] = [[-4, 0], [18.6, 1.5], [19, -25], [38, -25], [38, 4], [41.0, 8.6]];
 
 /** p0을 골목 좌표 (s, t)까지 걸린다(최대 sec초) */
 function walkTo(s0: Ch1State, s: number, t: number, sec = 30): { state: Ch1State; events: string[] } {
@@ -34,33 +49,62 @@ describe('1장 공간', () => {
     expect(match.map((h) => h.id)).toEqual(['yuna']);
     // 미끼: 물고기 우편함인데 반대쪽, 풍차 화분만 같음, 물고기·왼쪽은 맞는데 화분이 다름
     expect(CH1_HOUSES.filter((h) => h.mail === 'fish').length).toBe(3);
-    expect(CH1_HOUSES.filter((h) => h.pot === 'windmill').length).toBe(2);
+    expect(CH1_HOUSES.filter((h) => h.pot === 'windmill').length).toBe(3);
+    // 낮은 담 + 대문 집이 넷(가짜 셋 + 유나네): 대문만 보고는 못 고른다
+    expect(CH1_HOUSES.filter((h) => h.lowWall).map((h) => h.id).sort()).toEqual(GATES.map((g) => g.id).sort());
   });
-  it('아치 사이로 유나네 물고기 우편함이 보인다(같은 골목 줄, 아치보다 위쪽)', () => {
-    const m = mailboxOf(CH1_HOUSES.find((h) => h.yuna)!);
-    expect(m.s).toBeGreaterThan(ARCH.s + 30);
-    expect(Math.abs(m.t)).toBeLessThan(ARCH.halfSpan + 3.5);
+  it('유나네는 골목 끝이 아니다: 아치에서 곧장 올라가면 우체통 갈림길에서 막힌다(유나네는 갈림길 왼쪽으로 돌아 윗길)', () => {
+    expect(LANDMARKS.postBox.s).toBeGreaterThan(STREETS.M.s1);
+    const yuna = gateById('yuna');
+    expect(yuna.s).toBeGreaterThan(STREETS.U.s0);
+    // 우편함은 모두 길(담 밖) 쪽에 있다
+    for (const h of CH1_HOUSES.filter((x) => x.lowWall)) {
+      const m = mailboxOf(h);
+      const inside = Object.values(STREETS).some((r) => m.s > r.s0 && m.s < r.s1 && m.t > r.t0 && m.t < r.t1);
+      expect(inside, h.id).toBe(true);
+    }
   });
 });
 
 describe('1장 규칙', () => {
-  it('골목을 걸어 올라가 낮은 담 오른쪽 끝을 돌아 들어가면 "찾았다"(한 번만)', () => {
-    let s = createChapter1(['p0', 'p1']);
-    let r = walkTo(s, 38, 0, 25);
+  it('골목 → 우체통에서 왼쪽 → 끝에서 위로 → 윗길 → 유나네 나무 대문: 닫힌 대문은 막고, 행동으로 열면 들어가 "찾았다"(한 번만)', () => {
+    let r = walkPath(createChapter1(['p0', 'p1']), ROUTE);
+    let s = r.state;
+    expect(Math.hypot(toLane(s.players[0]!).s - 41.0, toLane(s.players[0]!).t - 8.6)).toBeLessThan(0.5);
     expect(r.events).not.toContain('found');
-    // 담 앞에서 곧장 위로는 못 들어간다
-    s = walkTo(r.state, 46, 0, 3).state;
+    // 닫힌 대문: 곧장 위로 못 들어간다
+    s = walkTo(s, 46, 8.6, 3).state;
     expect(toLane(s.players[0]!).s).toBeLessThan(YARD.front);
-    r = walkTo(s, 40.5, 8.5, 8);
-    r = walkTo(r.state, 46, 8.4, 8);
+    // 자루를 멘 채로도 대문 앞에서 행동 → 빗장이 풀려 열린다(지도·내려놓기보다 먼저)
+    expect(planAction(s, 'p0')).toEqual({ kind: 'gate', gateId: 'yuna' });
+    const o = press(s);
+    expect(o.events).toEqual([{ type: 'gateOpened', playerId: 'p0' }]);
+    s = o.state;
+    expect(s.gateOpen).toBe(true);
+    expect(s.items.find((i) => i.id === SACK)!.carriedBy).toBe('p0');
+    expect(planAction(s, 'p0').kind).not.toBe('gate');
+    r = walkTo(s, 45.3, 9.1, 4);
     expect(r.events.filter((e) => e === 'found')).toEqual(['found']);
     expect(r.state.found).toBe(true);
     r = walkTo(r.state, 47, 4, 4);
     expect(r.events).not.toContain('found');
   });
+  it('가짜 집 대문(A·B·C)은 행동하면 덜컹거릴 뿐 열리지 않는다', () => {
+    let s = walkPath(createChapter1(['p0', 'p1']), [[-4, 0], [8.6, 0], [8.6, -16.6]]).state;
+    expect(planAction(s, 'p0')).toEqual({ kind: 'gate', gateId: 'A' });
+    const r = press(s);
+    expect(r.events).toEqual([{ type: 'gateLocked', playerId: 'p0', gateId: 'A' }]);
+    s = walkTo(r.state, 8.6, -22, 3).state;
+    expect(toLane(s.players[0]!).t).toBeGreaterThan(STREETS.D.t0);
+    expect(s.gateOpen).toBe(false);
+  });
   it('골목 울타리 밖으로 나가지 못한다', () => {
-    const s = walkTo(createChapter1(['p0', 'p1']), 10, -12, 6).state;
+    const s = walkTo(createChapter1(['p0', 'p1']), 2, -12, 6).state;
     expect(toLane(s.players[0]!).t).toBeGreaterThan(-LANE_HALF);
+  });
+  it('갈림길에서 곧장 위로는 못 간다(우체통 뒤는 울타리)', () => {
+    const s = walkPath(createChapter1(['p0', 'p1']), [[-4, 0], [18.6, 1.5], [30, 1.5]], 6).state;
+    expect(toLane(s.players[0]!).s).toBeLessThan(STREETS.X.s1);
   });
   it('빈손 요정(2P)은 지도를 편다. 편 동안은 움직이지 않고, 한 번 더 누르면 접는다', () => {
     let s = createChapter1(['p0', 'p1']);
@@ -90,7 +134,7 @@ describe('1장 규칙', () => {
 });
 
 import { gazeAt, hiddenFromWindow, lookoutAt, GAZE } from '../../src/core/chapter1';
-import { COVERS, LOOKOUTS, OUTSIDE_GATE, PORCH, YUNA_EYE, inPorch } from '../../src/data/chapter1';
+import { COVERS, GARDEN_PATH, LOOKOUTS, OUTSIDE_GATE, PORCH, YUNA_EYE, inPorch } from '../../src/data/chapter1';
 
 /** 골목 좌표에 요정을 세운 상태 */
 function at(s: Ch1State, id: string, ls: number, lt: number, facing = Math.PI * 1.25): Ch1State {
@@ -116,6 +160,15 @@ describe('1장 망보기(04-4b)', () => {
     expect(GAZE.turn).toBeGreaterThanOrEqual(0.8);
     expect(firstLook(7)).toBeCloseTo(firstLook(7));
     expect(firstLook(7)).not.toBeCloseTo(firstLook(8), 1);
+  });
+  it('대문 → 현관 정원길은 비어 있다: 길 위 어느 점도 엄폐물(눈사람·나무·덤불·장작)에 막히지 않는다', () => {
+    for (let i = 0; i + 1 < GARDEN_PATH.length; i++) {
+      const a = GARDEN_PATH[i]!, b = GARDEN_PATH[i + 1]!;
+      for (let k = 0; k <= 10; k++) {
+        const ps = a.s + ((b.s - a.s) * k) / 10, pt = a.t + ((b.t - a.t) * k) / 10;
+        for (const c of COVERS) expect(Math.hypot(ps - c.s, pt - c.t), `${c.id} @${ps.toFixed(1)},${pt.toFixed(1)}`).toBeGreaterThan(c.r * 0.8 + 0.35);
+      }
+    }
   });
   it('창에서 보이는가: 엄폐물 바로 뒤·창 바로 아래·앞마당 밖은 안 보이고, 앞마당 한가운데는 보인다', () => {
     const behind = (c: (typeof COVERS)[number]) => {
@@ -148,7 +201,7 @@ describe('1장 망보기(04-4b)', () => {
   });
   it('엄폐물 뒤에 숨었던 적이 있으면 그 자리로 돌아간다', () => {
     let s = createChapter1(['p0', 'p1'], 7);
-    const c = COVERS[1];
+    const c = COVERS[1]!;
     const ds = c.s - YUNA_EYE.s, dt = c.t - YUNA_EYE.t, l = Math.hypot(ds, dt);
     s = at(s, 'p0', c.s + (ds / l) * (c.r + 0.5), c.t + (dt / l) * (c.r + 0.5));
     s = { ...s, time: 0.1 };

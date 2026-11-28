@@ -17,7 +17,7 @@ async function hold(page: Page, keys: string[], ms: number) {
   for (const k of keys) await page.keyboard.up(k);
 }
 
-test('1장: 자루를 메고 골목을 올라가고, 빈손 E로 지도를 펴며, 담 끝을 돌아 앞마당에 들어서면 찾았다', async ({ page }) => {
+test('1장: 자루를 메고 골목을 올라가고, 빈손 E로 지도를 펴며, 유나네 나무 대문을 E로 열고 들어서면 찾았다', async ({ page }) => {
   test.setTimeout(120_000);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -49,13 +49,14 @@ test('1장: 자루를 메고 골목을 올라가고, 빈손 E로 지도를 펴�
   await page.keyboard.press('Enter');
   await page.waitForTimeout(400);
   expect((await g(page)).players[1]!.mapOpen).toBe(false);
-  // 담 앞에서는 곧장 못 들어가고, 오른쪽 끝(D)을 돌아 위(W)로 들어서면 찾았다
-  await place(page, 'p0', 39, 0);
+  // 유나네 나무 대문 앞: 닫힌 대문은 막는다 → E로 빗장을 풀면 열리고, 위(W)로 들어서면 찾았다
+  await place(page, 'p0', 40.6, 8.6);
   await page.waitForTimeout(500);
-  await hold(page, ['KeyW'], 1500);
+  await hold(page, ['KeyW'], 1200);
   expect((await g(page)).found).toBe(false);
-  await place(page, 'p0', 40.5, 8.5);
-  await page.waitForTimeout(500);
+  await page.keyboard.press('KeyE');
+  await page.waitForTimeout(400);
+  expect(((await g(page)) as S & { gateOpen: boolean }).gateOpen).toBe(true);
   await hold(page, ['KeyW'], 1500);
   expect((await g(page)).found).toBe(true);
   expect(errors).toEqual([]);

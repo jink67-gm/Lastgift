@@ -219,11 +219,13 @@ export function sfxForEvent(e: { type: string; event?: { type: string } }): SfxN
     case 'bite':
       return 'bark';
     case 'caught':
+    case 'gateLocked':
       return 'wrong';
     case 'peek':
       return 'click';
     case 'doorOpened':
     case 'doorClosed':
+    case 'gateOpened':
     case 'map':
       return 'click';
     case 'stockingChecked':

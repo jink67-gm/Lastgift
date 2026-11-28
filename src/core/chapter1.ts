@@ -5,6 +5,8 @@
 //   현관에 놓는다(빈 자루는 그대로 멘다). 자루를 멘 요정은 손이 차서 지도를 펴지 못한다.
 // - 지우의 그림 지도: 빈손이고 집을 것이 가까이 없을 때 행동 버튼 → 지도를 편다(편 동안은 서서 읽는다). 한 번 더 → 접는다.
 //   선물을 든 요정은 손이 차서 지도를 펴지 못한다 → 한 명은 지도를 읽고 한 명은 찾아 걷게 된다.
+// - 갈림길 동네(data/chapter1): 낮은 담 + 나무 대문 집이 넷. 대문 앞에서 행동 → 유나네 대문은 빗장이 풀려 열린다(계속 열림),
+//   가짜 집 대문은 덜컹거릴 뿐(잠김). 자루를 멘 요정도 연다(손은 비었다). 대문 앞에서는 지도·내려놓기보다 대문이 먼저.
 // - 유나네 앞마당(낮은 담 안)에 처음 들어서면 "찾았다"(한 번만).
 // - 망보기(04-4b): 유나는 창가에서 [그림 그리기 → 몸 돌리기(예고) → 창밖 보기 → 다시 그리기]를 되풀이한다(시드로 정한 순서).
 //   창밖을 보는 동안 앞마당 안에서 엄폐물 뒤(창 → 요정 선이 엄폐물에 막힘)나 창 바로 아래가 아닌 요정은 들킨다
@@ -19,6 +21,7 @@ import {
   CH1_BOUNDS,
   CH1_START,
   COVERS,
+  gateNear,
   LOOKOUT_R,
   LOOKOUTS,
   OUTSIDE_GATE,
@@ -62,6 +65,8 @@ export interface Ch1State {
   packed: boolean;
   /** 둘 다 놓고 물러났다 */
   complete: boolean;
+  /** 유나네 나무 대문을 열었다 */
+  gateOpen: boolean;
 }
 
 // ── 유나 시선 ────────────────────────────────────────────
@@ -121,6 +126,8 @@ export type Ch1Event =
   | { type: 'caught'; playerId: string }
   | { type: 'placed'; itemId: string }
   | { type: 'unpack'; playerId: string }
+  | { type: 'gateOpened'; playerId: string }
+  | { type: 'gateLocked'; playerId: string; gateId: string }
   | { type: 'complete' };
 
 export type Ch1Action =
@@ -130,10 +137,14 @@ export type Ch1Action =
   | { kind: 'map'; open: boolean }
   | { kind: 'signal'; up: boolean }
   | { kind: 'place'; itemId: string }
+  | { kind: 'gate'; gateId: string }
   | { kind: 'none' };
 
-const COLLIDERS = ch1Colliders();
-const WORLD: World = { colliders: COLLIDERS, bounds: CH1_BOUNDS, cameraYaw: CAMERA_YAW };
+const COLLIDERS_SHUT = ch1Colliders(false);
+const COLLIDERS_OPEN = ch1Colliders(true);
+const collidersOf = (s: Ch1State) => (s.gateOpen ? COLLIDERS_OPEN : COLLIDERS_SHUT);
+const WORLD_SHUT: World = { colliders: COLLIDERS_SHUT, bounds: CH1_BOUNDS, cameraYaw: CAMERA_YAW };
+const WORLD_OPEN: World = { colliders: COLLIDERS_OPEN, bounds: CH1_BOUNDS, cameraYaw: CAMERA_YAW };
 
 export function createChapter1(playerIds: readonly string[], seed = 1): Ch1State {
   return {
@@ -153,6 +164,7 @@ export function createChapter1(playerIds: readonly string[], seed = 1): Ch1State
     seed,
     placed: [],
     complete: false,
+    gateOpen: false,
   };
 }
 
@@ -161,9 +173,12 @@ export function planAction(s: Ch1State, playerId: string): Ch1Action {
   const p = s.players.find((q) => q.id === playerId);
   if (!p || !p.connected || s.complete) return { kind: 'none' };
   if (p.mapOpen) return { kind: 'map', open: false };
+  // 대문 앞: 유나네는 열기(닫혀 있을 때만), 가짜 집은 덜컹
+  const gate = gateNear(p);
+  if (gate && !(gate.id === 'yuna' && s.gateOpen)) return { kind: 'gate', gateId: gate.id };
   const held = s.items.find((i) => i.carriedBy === playerId);
   if (held) {
-    const a = planCarry(playerId, p, s.items, COLLIDERS, CH1_BOUNDS);
+    const a = planCarry(playerId, p, s.items, collidersOf(s), CH1_BOUNDS);
     if (a.kind === 'drop') return inPorch(a) ? { kind: 'place', itemId: a.itemId } : { kind: 'drop', itemId: a.itemId };
     return { kind: 'blocked', itemId: held.id };
   }
@@ -188,7 +203,7 @@ export function step(state: Ch1State, inputs: Record<string, SewingInput>, dt: n
       fx.push({ type: 'pick', playerId: p.id, itemId: a.itemId });
     } else if (a.kind === 'drop' || a.kind === 'place') {
       const me = s.players.find((q) => q.id === p.id)!;
-      const plan = planCarry(p.id, me, s.items, COLLIDERS, CH1_BOUNDS);
+      const plan = planCarry(p.id, me, s.items, collidersOf(s), CH1_BOUNDS);
       if (a.kind === 'place' && a.itemId === SACK && plan.kind === 'drop') {
         // 현관 발판: 자루에서 두 선물을 꺼내 발판 위에 나란히 놓는다(빈 자루는 그대로 멘다)
         if (s.packed) {
@@ -216,6 +231,11 @@ export function step(state: Ch1State, inputs: Record<string, SewingInput>, dt: n
           fx.push({ type: 'placed', itemId: a.itemId });
         }
       }
+    } else if (a.kind === 'gate') {
+      if (a.gateId === 'yuna') {
+        s = { ...s, gateOpen: true };
+        fx.push({ type: 'gateOpened', playerId: p.id });
+      } else fx.push({ type: 'gateLocked', playerId: p.id, gateId: a.gateId });
     } else if (a.kind === 'signal') {
       s = { ...s, players: s.players.map((q) => (q.id === p.id ? { ...q, handUp: a.up } : q)) };
       fx.push({ type: 'signal', playerId: p.id, up: a.up });
@@ -227,6 +247,7 @@ export function step(state: Ch1State, inputs: Record<string, SewingInput>, dt: n
     }
   }
   // 2) 이동(지도를 편 요정은 서서 읽는다)
+  const WORLD = s.gateOpen ? WORLD_OPEN : WORLD_SHUT;
   s = {
     ...s,
     players: s.players.map((p) => {

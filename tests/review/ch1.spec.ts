@@ -25,9 +25,14 @@ test('1장 장면', async ({ page }) => {
   // 골목을 따라
   const spots: [string, number, number][] = [
     ['c_arch', -4, 0],
-    ['d_alley10', 10, 0],
-    ['e_alley25', 25, 0],
-    ['f_yardfront', 39.5, 2],
+    ['d_alley8', 8, 0],
+    ['d2_deadendA', 8.6, -14],
+    ['e_postbox', 19, 0],
+    ['e2_leftUp', 27, -25],
+    ['e3_corner', 37.5, -22],
+    ['e4_neighborC', 39.5, -17],
+    ['e5_rightB', 33, 22],
+    ['f_yunaGate', 40.4, 7.4],
     ['g_inyard', 46, 8],
     ['h_lookout_logs', 44.0, -3.3],
     ['i_porch', 50.2, 2.4],
@@ -37,6 +42,13 @@ test('1장 장면', async ({ page }) => {
     await hook(page, 'debugPlace', 'p1', s - 1.2, t + 1.0, Math.PI);
     await page.waitForTimeout(1800);
     await page.screenshot({ path: `${OUT}/${name}.png` });
+    if (name === 'f_yunaGate') {
+      await hook(page, 'debugPlace', 'p0', 41.2, 8.6, Math.PI);
+      await page.waitForTimeout(300);
+      await page.keyboard.press('KeyE');
+      await page.waitForTimeout(1200);
+      await page.screenshot({ path: `${OUT}/f2_gateOpen.png` });
+    }
   }
   // 지우 지도: 빈손 2P가 집을 것 없는 데서 Enter(1P는 자루를 멨다)
   await hook(page, 'debugPlace', 'p0', 13.8, 0.8, Math.PI);

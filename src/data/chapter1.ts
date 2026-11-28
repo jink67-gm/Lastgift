@@ -1,8 +1,12 @@
 // 1장 · 유나의 첫 스케치북 — 공간(명세서 §3.2 "광장 → 우편함 골목 → 유나네 앞마당", §5 1장).
-// 고정 사진기(남동쪽 위)에서 보기 좋게 길을 "화면 위쪽"으로 낸다:
-//   화면 아래(광장 쪽)에서 돌 아치를 지나 우편함 골목을 올라가면, 골목 끝에 사진기 쪽을 보는 유나네가 있다.
-//   아치 사이로 유나네 물고기 우편함이 보인다. 골목 양옆 집들은 헷갈리는 조합(물고기 우편함이 반대편, 풍차 화분만 같음 등).
-//   유나네 앞마당은 낮은 담으로 둘러싸여 담 오른쪽 끝을 돌아 들어간다. 창가에 유나가 앉아 있다.
+// 고정 사진기(남동쪽 위)에서 보기 좋게 길을 "화면 위쪽"으로 낸다.
+// 갈림길 동네(2026-11-28 사용자: "유나네 찾기가 더 복잡하면 좋겠다, 입구 찾기도 어색하다"):
+//   돌 아치 → 우편함 골목(M) → 왼쪽 막다른 갈래(D, 끝에 가짜 집 A) → 빨간 우체통이 선 갈림길(X)
+//   → 왼쪽 끝에서 위로(LU) → 큰 트리 모퉁이에서 오른쪽 윗길(U): 이웃집 C, 그 옆이 유나네.
+//   X 오른쪽 끝에서 위로(RU) 가면 막다른 끝에 가짜 집 B.
+//   낮은 담 + 나무 대문이 있는 집이 넷(A·B·C·유나네). 지도 단서(물고기 우편함이 대문 왼쪽, 풍차 화분이 문 오른쪽)가
+//   모두 맞는 집은 유나네 하나. 유나네 대문은 E로 빗장을 풀어 연다(한 번 열면 계속 열림). 가짜 집 대문은 덜컹거릴 뿐 열리지 않는다.
+//   유나네 앞마당(담 안)·창가·엄폐물·망보는 자리 좌표는 그대로다(04-4b).
 // 좌표: 골목 기준(s = 화면 위쪽으로 골목을 따라, t = 화면 오른쪽) → 월드(x, z). 판정은 이 값만 쓴다.
 import type { Bounds, Collider } from '../core/collision';
 import { ELF_H, TT_HOUSE_SCALE, TOWN } from './townScale';
@@ -27,7 +31,7 @@ export interface Ch1House {
   /** 현관 옆 화분과 자리(집을 마주 보고 문 왼쪽·오른쪽) */
   pot: PotKind;
   potSide: 'left' | 'right';
-  /** 낮은 담으로 둘러싼 앞마당(유나네만) */
+  /** 낮은 돌담 + 나무 대문으로 둘러싼 앞마당(유나네·가짜 집 A·B·C). 대문 id = 집 id */
   lowWall?: boolean;
   yuna?: boolean;
 }
@@ -47,16 +51,65 @@ export const LANE_HALF = 3.4;
 /** 돌 아치(골목 입구) */
 export const ARCH = { s: -6, halfSpan: 3.2, height: 6.2 };
 
+/** 길(골목 좌표 사각형: s0~s1, t0~t1). 울타리는 STREET_FENCES */
+export const STREETS = {
+  /** 아치 ~ 갈림길: 우편함 골목 */
+  M: { s0: ARCH.s, s1: 16, t0: -LANE_HALF, t1: LANE_HALF },
+  /** 골목 왼쪽 막다른 갈래(끝에 가짜 집 A) */
+  D: { s0: 5.6, s1: 11.6, t0: -17.5, t1: -LANE_HALF },
+  /** 빨간 우체통 갈림길(옆으로 긴 길) */
+  X: { s0: 16, s1: 22, t0: -28, t1: 25 },
+  /** 갈림길 왼쪽 끝에서 위로 */
+  LU: { s0: 22, s1: 34, t0: -28, t1: -22 },
+  /** 갈림길 오른쪽 끝에서 위로(끝에 가짜 집 B) */
+  RU: { s0: 22, s1: 36, t0: 19, t1: 25 },
+  /** 윗길: 이웃집 C와 유나네 담 앞 */
+  U: { s0: 34, s1: 42.5, t0: -28, t1: 12.7 },
+} as const;
+
+/** 대문 반폭(기둥 사이 2.6) */
+export const GATE_HALF = 1.3;
+/** 대문 앞에서 행동 버튼이 닿는 거리 */
+export const GATE_REACH = 1.9;
+
+/** 낮은 담 대문: 가운데(s, t), 담이 뻗은 방향 axis('t' = s가 같은 가로 담, 's' = t가 같은 세로 담), out = 길 쪽(담 밖) 방향 부호 */
+export interface YardGate {
+  id: string;
+  s: number;
+  t: number;
+  axis: 's' | 't';
+  /** 담 밖(길 쪽)이 s(또는 t)가 작아지는 쪽이면 -1 */
+  out: -1 | 1;
+}
+
+/** 유나네 앞마당: 낮은 담(사람 허리, 요정 키보다 높다) 앞면 s=front, 왼쪽 t=left ~ 오른쪽 t=right, 나무 대문 t=gate */
+export const YARD = { front: 42.5, back: YUNA_S - HOUSE_HALF.d, left: -9.5, right: 10.5, gate: [7.3, 9.9] as const };
+export const LOW_WALL_H = 1.6 * ELF_H;
+
+export const GATES: readonly YardGate[] = [
+  { id: 'yuna', s: YARD.front, t: (YARD.gate[0] + YARD.gate[1]) / 2, axis: 't', out: -1 },
+  { id: 'A', s: 8.6, t: STREETS.D.t0, axis: 's', out: 1 },
+  { id: 'B', s: STREETS.RU.s1, t: 22, axis: 't', out: -1 },
+  { id: 'C', s: YARD.front, t: -18, axis: 't', out: -1 },
+];
+export const gateById = (id: string): YardGate => GATES.find((g) => g.id === id)!;
+
+/** 대문 문짝이 닫혀 있을 때 막는 벽 */
+export function gateCollider(g: YardGate): Collider {
+  return g.axis === 't' ? laneWall({ s: g.s, t: g.t - GATE_HALF }, { s: g.s, t: g.t + GATE_HALF }, 0.3) : laneWall({ s: g.s - GATE_HALF, t: g.t }, { s: g.s + GATE_HALF, t: g.t }, 0.3);
+}
+
 export const CH1_HOUSES: readonly Ch1House[] = [
-  // 아치 지나 왼쪽: 물고기 우편함이지만 대문 오른쪽, 튤립 화분 → 아니다
-  { id: 'L1', s: 6, t: -(LANE_HALF + YARD_DEPTH + HOUSE_HALF.d), faces: 'right', mail: 'fish', mailSide: 'right', pot: 'tulip', potSide: 'left' },
-  // 오른쪽: 새 우편함, 풍차 화분(화분만 같다) → 아니다
-  { id: 'R1', s: 13, t: LANE_HALF + YARD_DEPTH + HOUSE_HALF.d, faces: 'left', mail: 'bird', mailSide: 'left', pot: 'windmill', potSide: 'right' },
-  // 왼쪽: 별 우편함, 선인장
-  { id: 'L2', s: 26, t: -(LANE_HALF + YARD_DEPTH + HOUSE_HALF.d), faces: 'right', mail: 'star', mailSide: 'left', pot: 'cactus', potSide: 'right' },
-  // 오른쪽: 물고기 우편함이 대문 왼쪽(맞다)인데 화분이 튤립 → 아니다
-  { id: 'R2', s: 30, t: LANE_HALF + YARD_DEPTH + HOUSE_HALF.d, faces: 'left', mail: 'fish', mailSide: 'left', pot: 'tulip', potSide: 'right' },
-  // 골목 끝: 유나네. 물고기 우편함 대문 왼쪽, 풍차 화분 문 오른쪽, 낮은 담
+  // 우편함 골목 양옆(울타리 너머, 대문 없는 배경 집): 무늬가 달라 쉽게 아니다
+  { id: 'L1', s: -1.5, t: -(LANE_HALF + YARD_DEPTH + HOUSE_HALF.d), faces: 'right', mail: 'star', mailSide: 'left', pot: 'cactus', potSide: 'right' },
+  { id: 'R1', s: 4, t: LANE_HALF + YARD_DEPTH + HOUSE_HALF.d, faces: 'left', mail: 'bird', mailSide: 'left', pot: 'tulip', potSide: 'right' },
+  // 가짜 집 A(막다른 갈래 끝): 물고기 우편함인데 대문 오른쪽, 풍차 화분 → 아니다
+  { id: 'A', s: 8.6, t: STREETS.D.t0 - 3 - HOUSE_HALF.d, faces: 'right', mail: 'fish', mailSide: 'right', pot: 'windmill', potSide: 'right', lowWall: true },
+  // 가짜 집 B(오른쪽 윗길 끝): 물고기 우편함·대문 왼쪽(맞다)인데 튤립 화분 → 아니다
+  { id: 'B', s: STREETS.RU.s1 + 3 + HOUSE_HALF.d, t: 22, faces: 'back', mail: 'fish', mailSide: 'left', pot: 'tulip', potSide: 'right', lowWall: true },
+  // 이웃집 C(유나네 왼쪽 옆): 풍차 화분·문 오른쪽(맞다)인데 새 우편함 → 아니다
+  { id: 'C', s: YARD.front + 3 + HOUSE_HALF.d, t: -18, faces: 'back', mail: 'bird', mailSide: 'left', pot: 'windmill', potSide: 'right', lowWall: true },
+  // 유나네: 물고기 우편함 대문 왼쪽, 풍차 화분 문 오른쪽, 낮은 담 + 나무 대문
   { id: 'yuna', s: YUNA_S, t: 0, faces: 'back', mail: 'fish', mailSide: 'left', pot: 'windmill', potSide: 'right', lowWall: true, yuna: true },
 ];
 
@@ -79,20 +132,26 @@ export function doorOf(h: Ch1House): { s: number; t: number } {
   return housePoint(h, HOUSE_HALF.d, DOOR_OFF);
 }
 
-/** 대문(앞마당 울타리·담의 열린 곳) 가운데 */
+/** 대문 가운데: 낮은 담 집은 담의 나무 대문, 아니면 골목 울타리의 작은 대문 */
 export function gateOf(h: Ch1House): { s: number; t: number } {
-  if (h.lowWall) return { s: YARD.front, t: YARD.gate[0] + (YARD.gate[1] - YARD.gate[0]) / 2 };
+  if (h.lowWall) {
+    const g = gateById(h.id);
+    return { s: g.s, t: g.t };
+  }
   return housePoint(h, HOUSE_HALF.d + YARD_DEPTH, DOOR_OFF);
 }
 
-
-/** 유나네 앞마당: 낮은 담(사람 허리, 요정 키보다 높다) 앞면 s=front, 왼쪽 t=left ~ 오른쪽 t=right, 대문(열린 곳) t=gate */
-export const YARD = { front: 42.5, back: YUNA_S - HOUSE_HALF.d, left: -9.5, right: 10.5, gate: [6.4, 10.5] as const };
-export const LOW_WALL_H = 1.6 * ELF_H;
-
-/** 우편함 자리(골목 좌표): 대문 왼쪽·오른쪽 1.9 */
+/** 우편함 자리(골목 좌표): 대문 바깥(길 쪽) 왼쪽·오른쪽 */
 export function mailboxOf(h: Ch1House): { s: number; t: number } {
-  if (h.lowWall) return { s: YARD.front - 0.55, t: YARD.gate[0] - 0.9 };
+  if (h.lowWall) {
+    const g = gateById(h.id);
+    // 대문을 마주 본(담 밖에서 집 쪽을 보는) 사람의 왼쪽·오른쪽
+    const side = h.mailSide === 'left' ? -1 : 1;
+    const off = (GATE_HALF + 0.9) * side;
+    const look = g.axis === 't' ? { s: -g.out, t: 0 } : { s: 0, t: -g.out };
+    const right = { s: -look.t, t: look.s };
+    return { s: g.s + right.s * off + (g.axis === 't' ? g.out * 0.55 : 0), t: g.t + right.t * off + (g.axis === 's' ? g.out * 0.55 : 0) };
+  }
   return housePoint(h, HOUSE_HALF.d + YARD_DEPTH + 0.5, DOOR_OFF + (h.mailSide === 'left' ? -1.9 : 1.9));
 }
 
@@ -103,6 +162,12 @@ export function potOf(h: Ch1House): { s: number; t: number } {
 
 /** 유나 창가(돌출 창): 문 왼쪽, 사진기 쪽 앞면 */
 export const YUNA_WINDOW = { s: YUNA_S - HOUSE_HALF.d, t: -4.2, width: 3.4, sill: 2.3 * ELF_H, height: 2.6 * ELF_H };
+
+/** 길잡이: 갈림길의 빨간 우체통(골목에서 올라오면 정면), 윗길 모퉁이의 큰 트리 */
+export const LANDMARKS = {
+  postBox: { s: 20.6, t: 0 },
+  cornerTree: { s: 30.5, t: -18.5 },
+};
 
 /** 시작: 아치 아래쪽 눈길(광장에서 걸어 들어온 자리). 두 선물은 요정 발치에 */
 export const CH1_START = {
@@ -119,7 +184,24 @@ export function inYunasYard(p: { x: number; z: number }): boolean {
   return s > YARD.front + 0.4 && s < YARD.back && t > YARD.left && t < YARD.right;
 }
 
+/** 이 요정이 손 닿는 대문(없으면 null): 담 안·밖 어느 쪽에서든 */
+export function gateNear(p: { x: number; z: number }): YardGate | null {
+  const { s, t } = toLane(p);
+  let best: YardGate | null = null;
+  let bd = GATE_REACH;
+  for (const g of GATES) {
+    const d = Math.hypot(s - g.s, t - g.t);
+    if (d < bd) {
+      bd = d;
+      best = g;
+    }
+  }
+  return best;
+}
+
 const wall = laneWall;
+type LP = { s: number; t: number };
+const P = (s: number, t: number): LP => ({ s, t });
 
 /** 집 몸통(회전 사각형) */
 function houseBox(h: Ch1House): Collider {
@@ -128,20 +210,69 @@ function houseBox(h: Ch1House): Collider {
   return { kind: 'obb', x: c.x, z: c.z, yaw, ha: HOUSE_HALF.d + 0.2, hb: HOUSE_HALF.w + 0.2 };
 }
 
-/** 골목 양옆 울타리(앞마당 쪽은 닫혀 있다: 우편함·화분은 울타리 너머로 보인다), 아치 기둥, 유나네 낮은 담·집 */
+/** 길 둘레 울타리(그리기·판정 공용): [시작, 끝, 바깥 방향 부호(울타리 바깥 눈둑)] */
+const { M, D, X, LU, RU, U } = STREETS;
+export const STREET_FENCES: readonly [LP, LP][] = [
+  // 우편함 골목 왼쪽(막다른 갈래 입구는 열림), 오른쪽
+  [P(ARCH.s, M.t0), P(D.s0, M.t0)],
+  [P(D.s1, M.t0), P(X.s0, M.t0)],
+  [P(ARCH.s, M.t1), P(X.s0, M.t1)],
+  // 막다른 갈래 아래·위
+  [P(D.s0, M.t0), P(D.s0, D.t0)],
+  [P(D.s1, M.t0), P(D.s1, D.t0)],
+  // 갈림길 아래(골목 입구 양옆), 위(왼쪽 윗길 ~ 오른쪽 윗길 사이)
+  [P(X.s0, X.t0), P(X.s0, M.t0)],
+  [P(X.s0, M.t1), P(X.s0, X.t1)],
+  [P(X.s1, LU.t1), P(X.s1, RU.t0)],
+  // 왼쪽 끝: 갈림길 ~ 윗길까지 한 줄
+  [P(X.s0, X.t0), P(U.s1, X.t0)],
+  // 왼쪽 윗길 오른쪽, 윗길 아래
+  [P(LU.s0, LU.t1), P(LU.s1, LU.t1)],
+  [P(U.s0, LU.t1), P(U.s0, U.t1)],
+  // 윗길 오른쪽 끝
+  [P(U.s0, U.t1), P(U.s1, U.t1)],
+  // 오른쪽 끝: 갈림길 ~ 가짜 집 B 담까지, 오른쪽 윗길 왼쪽
+  [P(X.s0, X.t1), P(RU.s1, X.t1)],
+  [P(RU.s0, RU.t0), P(RU.s1, RU.t0)],
+  // 윗길 위쪽: 이웃집 C 담과 유나네 담 사이, 유나네 담 오른쪽 끝 ~ 윗길 끝
+  [P(U.s1, -12), P(U.s1, YARD.left)],
+  [P(U.s1, YARD.right), P(U.s1, U.t1)],
+];
+
+/** 낮은 돌담 조각(대문 자리는 비운다): [시작, 끝] */
+export const LOW_WALLS: readonly [LP, LP][] = (() => {
+  const g = (id: string) => gateById(id);
+  const w: [LP, LP][] = [];
+  // 유나네: 앞(대문 양옆), 왼쪽·오른쪽 옆(집까지)
+  w.push([P(YARD.front, YARD.left), P(YARD.front, g('yuna').t - GATE_HALF)]);
+  w.push([P(YARD.front, g('yuna').t + GATE_HALF), P(YARD.front, YARD.right)]);
+  w.push([P(YARD.front, YARD.left), P(YARD.back, YARD.left)]);
+  w.push([P(YARD.front, YARD.right), P(YARD.back, YARD.right)]);
+  // 가짜 집 A: 막다른 갈래 끝을 가로지르는 세로 담
+  w.push([P(D.s0, D.t0), P(g('A').s - GATE_HALF, D.t0)]);
+  w.push([P(g('A').s + GATE_HALF, D.t0), P(D.s1, D.t0)]);
+  // 가짜 집 B: 오른쪽 윗길 끝
+  w.push([P(RU.s1, RU.t0), P(RU.s1, g('B').t - GATE_HALF)]);
+  w.push([P(RU.s1, g('B').t + GATE_HALF), P(RU.s1, RU.t1)]);
+  // 이웃집 C: 윗길 위쪽 왼편
+  w.push([P(U.s1, U.t0), P(U.s1, g('C').t - GATE_HALF)]);
+  w.push([P(U.s1, g('C').t + GATE_HALF), P(U.s1, -12)]);
+  return w;
+})();
+
+/** 울타리·담·집·우편함·길잡이 + 가짜 집 대문(늘 닫힘). 유나네 대문은 따로(열리면 빠진다) */
 function buildWalls(): Collider[] {
   const c: Collider[] = [];
-  const end = YARD.front;
-  // 왼쪽 울타리(아치 ~ 골목 끝), 오른쪽 울타리(아치 ~ 담 오른쪽 끝 앞)
-  c.push(wall({ s: ARCH.s, t: -LANE_HALF }, { s: end, t: -LANE_HALF }, 0.3));
-  c.push(wall({ s: ARCH.s, t: LANE_HALF }, { s: end - 4.5, t: LANE_HALF }, 0.3));
-  // 골목 끝 오른쪽으로 꺾여 담 끝을 돌아 들어가는 길: 오른쪽 울타리가 바깥으로 벌어진다
-  c.push(wall({ s: end - 4.5, t: LANE_HALF }, { s: end - 4.5, t: YARD.right + 2.2 }, 0.3));
-  c.push(wall({ s: end - 4.5, t: YARD.right + 2.2 }, { s: YARD.back, t: YARD.right + 2.2 }, 0.3));
-  // 유나네 낮은 담: 앞면(대문 왼쪽까지), 왼쪽 옆, 오른쪽 옆(대문 오른쪽 기둥부터 집까지)
-  c.push(wall({ s: YARD.front, t: -LANE_HALF }, { s: YARD.front, t: YARD.gate[0] }, 0.5));
-  c.push(wall({ s: YARD.front, t: YARD.left }, { s: YARD.front, t: -LANE_HALF }, 0.5));
-  c.push(wall({ s: YARD.front, t: YARD.left }, { s: YARD.back, t: YARD.left }, 0.5));
+  for (const [a, b] of STREET_FENCES) c.push(wall(a, b, 0.3));
+  for (const [a, b] of LOW_WALLS) c.push(wall(a, b, 0.5));
+  for (const g of GATES) if (g.id !== 'yuna') c.push(gateCollider(g));
+  // 대문 기둥
+  for (const g of GATES) {
+    for (const k of [-1, 1]) {
+      const p = g.axis === 't' ? W(g.s, g.t + k * GATE_HALF) : W(g.s + k * GATE_HALF, g.t);
+      c.push({ kind: 'circle', x: p.x, z: p.z, r: 0.42 });
+    }
+  }
   // 아치 기둥
   for (const sgn of [-1, 1]) {
     const p = W(ARCH.s, sgn * ARCH.halfSpan);
@@ -151,25 +282,28 @@ function buildWalls(): Collider[] {
   c.push(wall({ s: -15, t: -LANE_HALF - 1 }, { s: -15, t: LANE_HALF + 1 }, 0.3));
   c.push(wall({ s: -15, t: -LANE_HALF - 1 }, { s: ARCH.s, t: -LANE_HALF }, 0.3));
   c.push(wall({ s: -15, t: LANE_HALF + 1 }, { s: ARCH.s, t: LANE_HALF }, 0.3));
-  // 유나네 집, 우편함 기둥
+  // 유나네 집, 우편함 기둥, 빨간 우체통
   c.push(houseBox(CH1_HOUSES.find((h) => h.yuna)!));
   for (const h of CH1_HOUSES) {
     const m = mailboxOf(h);
     const p = W(m.s, m.t);
     c.push({ kind: 'circle', x: p.x, z: p.z, r: 0.35 });
   }
+  const pb = W(LANDMARKS.postBox.s, LANDMARKS.postBox.t);
+  c.push({ kind: 'circle', x: pb.x, z: pb.z, r: 0.6 });
   return c;
 }
 
 export const CH1_WALLS: readonly Collider[] = buildWalls();
-/** 충돌: 울타리·담·집 + 앞마당 엄폐물 */
-export function ch1Colliders(): readonly Collider[] {
-  return [...CH1_WALLS, ...COVER_COLLIDERS];
+const YUNA_GATE_COLLIDER = gateCollider(gateById('yuna'));
+/** 충돌: 울타리·담·집 + 앞마당 엄폐물 (+ 유나네 대문이 닫혀 있으면 문짝) */
+export function ch1Colliders(gateOpen = false): readonly Collider[] {
+  return gateOpen ? [...CH1_WALLS, ...COVER_COLLIDERS] : [...CH1_WALLS, ...COVER_COLLIDERS, YUNA_GATE_COLLIDER];
 }
 
 /** 월드 경계(넉넉하게): 실제 움직임은 울타리·담이 막는다 */
 export const CH1_BOUNDS: Bounds = (() => {
-  const pts = [W(-16, -14), W(-16, 16), W(YUNA_S + 8, -14), W(YUNA_S + 8, 16)];
+  const pts = [W(-16, -32), W(-16, 29), W(YUNA_S + 8, -32), W(YUNA_S + 8, 29)];
   return {
     minX: Math.min(...pts.map((p) => p.x)),
     maxX: Math.max(...pts.map((p) => p.x)),
@@ -178,7 +312,7 @@ export const CH1_BOUNDS: Bounds = (() => {
   };
 })();
 
-/** 지도에 그린 것(지우의 그림 지도): 아치 → 골목 → 낮은 담을 오른쪽으로 돌아 → 물고기 우편함(대문 왼쪽)·풍차 화분(문 오른쪽)인 집 */
+/** 지도에 그린 것(지우의 그림 지도): 아치 → 골목 → 빨간 우체통에서 왼쪽 → 큰 트리 모퉁이에서 위·오른쪽 → 물고기 우편함(대문 왼쪽)·풍차 화분(문 오른쪽)인 집 */
 export const MAP_FEATURES = { mail: 'fish' as MailSymbol, mailSide: 'left' as const, pot: 'windmill' as PotKind, potSide: 'right' as const, lowWall: true };
 
 /** 사람 마을 치수 재확인(우편함·담 높이) */
@@ -189,14 +323,39 @@ export const CH1_SIZES = { mailbox: TOWN.mailbox, lowWall: LOW_WALL_H, fence: TO
 /** 유나 눈 자리(창 앞면 가운데, 골목 좌표) */
 export const YUNA_EYE = { s: YARD.back + 0.2, t: YUNA_WINDOW.t };
 
-/** 앞마당 엄폐물(골목 좌표, 반지름): 대문 → 눈사람 → 외바퀴 수레 → 덤불 → 현관. 요정보다 크다 */
-export const COVERS = [
-  { id: 'snowman', s: 45.0, t: 7.2, r: 0.8 },
-  { id: 'barrow', s: 47.2, t: 4.9, r: 0.85 },
-  { id: 'bush', s: 49.5, t: 4.5, r: 0.9 },
+/**
+ * 앞마당 정원길(디딤돌): 대문 → 오른쪽 담을 따라 위로 → 현관 앞에서 왼쪽으로. 길 위는 비워 둔다
+ * (2026-11-28 사용자: "유나네 집 앞에 눈사람이랑 수레로 길이 막혀 있는 건 어색하다").
+ */
+export const GARDEN_PATH: readonly { s: number; t: number }[] = [
+  { s: YARD.front - 0.4, t: 8.6 },
+  { s: 45.3, t: 9.1 },
+  { s: 48.2, t: 8.9 },
+  { s: 49.6, t: 8.6 },
+  { s: 49.9, t: 6.2 },
+  { s: 50.3, t: 5.0 },
+  { s: 49.0, t: 3.5 },
+  { s: YARD.back - 0.9, t: 1.8 },
+];
+
+/** 숨는 자리(정원길 위)와 그 앞을 가리는 것: 엄폐물은 숨는 자리에서 창 쪽으로 (반지름 + 0.7) 떨어진 길옆에 선다 */
+const HIDES = [
+  { id: 'snowman', s: 45.3, t: 9.1, r: 0.85 }, // 유나가 만든 눈사람(대문 안 왼쪽)
+  { id: 'tree', s: 48.2, t: 8.9, r: 0.95 }, // 작은 장식 나무
+  { id: 'bush', s: 50.3, t: 5.0, r: 0.9 }, // 현관 오른쪽 둥근 덤불: 그 뒤에서 현관까지 한달음
+] as const;
+const coverFor = (h: (typeof HIDES)[number]) => {
+  const eye = { s: YARD.back + 0.2, t: -4.2 };
+  const ds = eye.s - h.s, dt = eye.t - h.t, l = Math.hypot(ds, dt);
+  return { id: h.id, s: h.s + (ds / l) * (h.r + 0.7), t: h.t + (dt / l) * (h.r + 0.7), r: h.r };
+};
+
+/** 앞마당 엄폐물(골목 좌표, 반지름): 정원길 옆 눈사람 → 장식 나무 → 덤불, 창 앞 왼쪽 장작 더미. 요정보다 크다 */
+export const COVERS: readonly { id: 'snowman' | 'tree' | 'bush' | 'logs'; s: number; t: number; r: number }[] = [
+  ...HIDES.map(coverFor),
   // 창 앞 왼쪽 장작 더미: 그 뒤가 앞마당 안 망보는 자리(창을 정면에서 엿본다)
   { id: 'logs', s: 45.4, t: -3.6, r: 0.85 },
-] as const;
+];
 
 /** 창 바로 아래(유나가 내려다보지 못하는 곳) */
 export const BLIND = { s0: YARD.back - 1.5, t0: YUNA_WINDOW.t - 2.0, t1: YUNA_WINDOW.t + 2.0 };

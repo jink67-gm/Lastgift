@@ -1,7 +1,7 @@
-// 지우의 그림 지도(1장): 공책 한 장에 크레파스로 그린 길 그림. 글자 없이(명세서: 대사·설명 없음).
-//   아래 돌 아치 → 위로 뻗은 골목 → 낮은 담(벽돌)을 오른쪽 끝으로 돌아 들어가는 화살표 →
-//   물고기 우편함(대문 왼쪽)·풍차 화분(문 오른쪽)·창가에 웃는 얼굴이 있는 집.
-//   골목 옆 다른 집들은 무늬 없이 네모로만(세지 말고 생김새를 비교하게).
+// 지우의 그림 지도(1장): 공책 한 장에 크레파스로 그린 동네 길 그림. 글자 없이(명세서: 대사·설명 없음).
+//   아래 돌 아치 → 골목 → 빨간 우체통 갈림길에서 왼쪽 → 끝에서 위로 → 큰 트리 모퉁이에서 오른쪽 → 나무 대문으로(빨간 화살표).
+//   막다른 갈래·오른쪽 윗길도 길로만 그렸다. 유나네: 낮은 담·나무 대문, 대문 왼쪽 물고기 우편함, 문 오른쪽 풍차 화분, 창가에 웃는 얼굴.
+//   다른 집들은 무늬 없이 네모로만(가까이 가서 생김새를 비교하게).
 // 지도를 편 요정 쪽 아래 모서리에 펼쳐진다(1P 왼쪽, 2P 오른쪽). 테두리는 그 요정 모자 색.
 
 const CSS = `
@@ -63,72 +63,99 @@ export function drawJiuMap(g: CanvasRenderingContext2D, W = 400, H = 500): void 
   g.lineTo(34, H);
   g.stroke();
 
-  // 길(골목): 아래에서 위로, 담 앞에서 오른쪽으로 꺾여 들어간다
-  crayon(g, [[200, 480], [200, 230], [212, 200], [300, 196], [318, 170]], '#c9a27a', 26, 2);
-  // 돌 아치(아래)
-  crayon(g, [[150, 470], [150, 420], [160, 392], [200, 378], [240, 392], [250, 420], [250, 470]], '#8a7d6a', 9, 3);
-  // 골목 옆 다른 집들(무늬 없음)
-  for (const [x, y] of [[90, 330], [312, 300], [92, 250], [312, 236]] as const) {
-    crayon(g, [[x - 34, y + 26], [x - 34, y - 14], [x, y - 40], [x + 34, y - 14], [x + 34, y + 26], [x - 34, y + 26]], '#9aa7c4', 5, x + y);
+  // 동네 길(크레파스 넓은 줄): 아래 골목, 왼쪽 막다른 갈래, 가로로 긴 갈림길, 양 끝에서 위로, 윗길
+  const fx = (t: number) => 40 + (t + 30) * 6;
+  const fy = (s: number) => 478 - (s + 8) * 6.4;
+  const road = '#d9bf98';
+  const line = (pts: [number, number][], seed: number) => crayon(g, pts.map(([s, t]) => [fx(t), fy(s)] as [number, number]), road, 24, seed);
+  line([[-8, 0], [19, 0]], 2);
+  line([[8.6, -1], [8.6, -16]], 3);
+  line([[19, -25], [19, 22]], 4);
+  line([[19, -25], [38.2, -25]], 5);
+  line([[19, 22], [35, 22]], 6);
+  line([[38.2, -25], [38.2, 11]], 7);
+  // 돌 아치(맨 아래)
+  crayon(g, [[fx(-5), 486], [fx(-5), fy(-5.5)], [fx(-3), fy(-3.6)], [fx(0), fy(-2.8)], [fx(3), fy(-3.6)], [fx(5), fy(-5.5)], [fx(5), 486]], '#8a7d6a', 8, 3);
+  // 다른 집들(무늬 없이 네모 + 세모 지붕): 막다른 갈래 끝 A, 오른쪽 윗길 끝 B, 유나네 왼쪽 옆 C
+  for (const [s0, t0] of [[8.6, -24], [42.5, 22], [48, -18]] as const) {
+    const x = fx(t0), y = fy(s0);
+    crayon(g, [[x - 26, y + 18], [x - 26, y - 10], [x, y - 30], [x + 26, y - 10], [x + 26, y + 18], [x - 26, y + 18]], '#9aa7c4', 5, x + y);
   }
-  // 유나네 집(위): 지붕 + 벽
-  fill(g, '#f3dfc4', () => g.rect(110, 70, 180, 100));
-  crayon(g, [[100, 76], [200, 18], [300, 76]], '#c0623a', 9, 5);
-  crayon(g, [[110, 76], [110, 170], [290, 170], [290, 76]], '#8a5a3a', 6, 6);
-  // 창가에 웃는 얼굴(유나) — 왼쪽 창
-  fill(g, '#ffd27a', () => g.rect(128, 94, 64, 52));
-  crayon(g, [[128, 94], [192, 94], [192, 146], [128, 146], [128, 94]], '#2f6fd0', 5, 7);
+  // 갈림길 빨간 우체통(동그란 머리)
+  fill(g, '#d23a3a', () => g.rect(fx(0) - 8, fy(21.5) - 2, 16, 22));
+  fill(g, '#d23a3a', () => g.arc(fx(0), fy(21.5) - 2, 8, Math.PI, 0));
+  crayon(g, [[fx(0) - 8, fy(21.5) + 20], [fx(0) - 8, fy(21.5) - 2], [fx(0) + 8, fy(21.5) - 2], [fx(0) + 8, fy(21.5) + 20]], '#8a1c1c', 3, 21);
+  // 모퉁이 큰 트리(초록 세모 셋 + 노란 별)
+  const tx0 = fx(-18.5), ty0 = fy(30.5);
+  for (const [w, y] of [[22, 16], [17, 4], [12, -7]] as const) fill(g, '#2f8a4a', () => {
+    g.moveTo(tx0 - w, ty0 + y);
+    g.lineTo(tx0, ty0 + y - 18);
+    g.lineTo(tx0 + w, ty0 + y);
+  });
+  fill(g, '#f2c230', () => g.arc(tx0, ty0 - 27, 5, 0, Math.PI * 2));
+
+  // 유나네 집(맨 위 가운데): 지붕 + 벽, 창가의 웃는 얼굴, 문, 문 오른쪽 풍차 화분
+  const hx = fx(-7), hw = fx(9) - fx(-7), hy = 34, hh = 62;
+  fill(g, '#f3dfc4', () => g.rect(hx, hy, hw, hh));
+  crayon(g, [[hx - 8, hy + 4], [hx + hw / 2, hy - 24], [hx + hw + 8, hy + 4]], '#c0623a', 8, 5);
+  crayon(g, [[hx, hy + 4], [hx, hy + hh], [hx + hw, hy + hh], [hx + hw, hy + 4]], '#8a5a3a', 5, 6);
+  const wx = fx(-4.2);
+  fill(g, '#ffd27a', () => g.rect(wx - 18, hy + 14, 36, 30));
+  crayon(g, [[wx - 18, hy + 14], [wx + 18, hy + 14], [wx + 18, hy + 44], [wx - 18, hy + 44], [wx - 18, hy + 14]], '#2f6fd0', 4, 7);
   g.strokeStyle = '#5a3620';
-  g.lineWidth = 3;
+  g.lineWidth = 2.5;
   g.beginPath();
-  g.arc(160, 120, 13, 0, Math.PI * 2);
+  g.arc(wx, hy + 29, 8, 0, Math.PI * 2);
   g.stroke();
   g.beginPath();
-  g.arc(160, 123, 7, 0.2, Math.PI - 0.2);
+  g.arc(wx, hy + 31, 4, 0.2, Math.PI - 0.2);
   g.stroke();
+  g.fillStyle = '#5a3620';
   for (const sx of [-1, 1]) {
-    g.fillStyle = '#5a3620';
     g.beginPath();
-    g.arc(160 + sx * 5, 116, 1.8, 0, Math.PI * 2);
-    g.fill();
-    // 양 갈래 머리
-    g.beginPath();
-    g.arc(160 + sx * 16, 124, 4.5, 0, Math.PI * 2);
+    g.arc(wx + sx * 10, hy + 30, 3, 0, Math.PI * 2);
     g.fill();
   }
-  // 문(오른쪽) + 문 오른쪽 풍차 화분
-  fill(g, '#8c4a3a', () => g.rect(222, 112, 36, 58));
-  crayon(g, [[222, 170], [222, 112], [258, 112], [258, 170]], '#5a3620', 5, 8);
-  crayon(g, [[276, 170], [272, 152], [292, 152], [288, 170], [276, 170]], '#c0623a', 5, 9);
-  crayon(g, [[282, 152], [282, 128]], '#888', 3, 10);
+  const dx = fx(1.6);
+  fill(g, '#8c4a3a', () => g.rect(dx - 9, hy + hh - 30, 18, 30));
+  const px = dx + 22, py = hy + hh - 4;
+  crayon(g, [[px - 6, py], [px - 8, py - 10], [px + 8, py - 10], [px + 6, py], [px - 6, py]], '#c0623a', 4, 9);
+  crayon(g, [[px, py - 10], [px, py - 26]], '#888', 2.5, 10);
   const blades: [string, number][] = [['#d23a3a', 0], ['#f2c230', 1], ['#2f6fd0', 2], ['#2f9a4a', 3]];
   for (const [c, i] of blades) {
     const a = (i * Math.PI) / 2;
     fill(g, c, () => {
-      g.moveTo(282, 124);
-      g.lineTo(282 + Math.cos(a) * 13 - Math.sin(a) * 5, 124 + Math.sin(a) * 13 + Math.cos(a) * 5);
-      g.lineTo(282 + Math.cos(a + 0.6) * 13, 124 + Math.sin(a + 0.6) * 13);
+      g.moveTo(px, py - 28);
+      g.lineTo(px + Math.cos(a) * 10 - Math.sin(a) * 4, py - 28 + Math.sin(a) * 10 + Math.cos(a) * 4);
+      g.lineTo(px + Math.cos(a + 0.6) * 10, py - 28 + Math.sin(a + 0.6) * 10);
     });
   }
-  // 낮은 담(벽돌 무늬) — 집 앞을 가로막고, 오른쪽 끝이 열려 있다
-  fill(g, '#c9b9a2', () => g.rect(62, 196, 232, 22));
-  crayon(g, [[62, 196], [294, 196], [294, 218], [62, 218], [62, 196]], '#7a6a56', 5, 11);
-  for (let x = 82; x < 290; x += 26) crayon(g, [[x, 198], [x, 216]], '#7a6a56', 3, x);
-  // 담 오른쪽 끝을 돌아 들어가는 화살표(빨강)
-  crayon(g, [[236, 260], [318, 252], [336, 214], [318, 184]], '#e0342f', 7, 12);
-  crayon(g, [[306, 196], [318, 184], [332, 196]], '#e0342f', 7, 13);
-  // 물고기 우편함: 대문(담 오른쪽 끝) 왼쪽
-  crayon(g, [[282, 238], [282, 216]], '#8a5a3a', 5, 14);
-  fill(g, '#4a9be8', () => g.ellipse(278, 210, 16, 9, 0, 0, Math.PI * 2));
+  // 낮은 담(벽돌 무늬) + 나무 대문(오른쪽, 살 무늬)
+  const wy = fy(42.5) - 8;
+  const gx0 = fx(7.3), gx1 = fx(9.9);
+  fill(g, '#c9b9a2', () => g.rect(fx(-9.5), wy, gx0 - fx(-9.5), 14));
+  fill(g, '#c9b9a2', () => g.rect(gx1, wy, fx(10.5) - gx1, 14));
+  crayon(g, [[fx(-9.5), wy], [gx0, wy], [gx0, wy + 14], [fx(-9.5), wy + 14], [fx(-9.5), wy]], '#7a6a56', 4, 11);
+  for (let x = gx0 + 3; x < gx1 - 1; x += 5) crayon(g, [[x, wy - 2], [x, wy + 14]], '#a0703f', 2.5, x);
+  // 물고기 우편함: 대문 왼쪽
+  const mx = fx(5.6), my = wy + 16;
+  crayon(g, [[mx, my + 14], [mx, my]], '#8a5a3a', 4, 14);
+  fill(g, '#4a9be8', () => g.ellipse(mx - 2, my - 4, 12, 7, 0, 0, Math.PI * 2));
   fill(g, '#4a9be8', () => {
-    g.moveTo(292, 210);
-    g.lineTo(304, 202);
-    g.lineTo(304, 218);
+    g.moveTo(mx + 9, my - 4);
+    g.lineTo(mx + 18, my - 10);
+    g.lineTo(mx + 18, my + 2);
   });
   g.fillStyle = '#fff';
   g.beginPath();
-  g.arc(270, 207, 2.2, 0, Math.PI * 2);
+  g.arc(mx - 8, my - 6, 1.8, 0, Math.PI * 2);
   g.fill();
+
+  // 가는 길(빨간 화살표): 골목 → 우체통에서 왼쪽 → 끝에서 위로 → 트리 모퉁이에서 오른쪽 → 대문으로 쏙
+  const route: [number, number][] = [[-4, 1.8], [17.4, 1.8], [17.4, -26.6], [36.6, -26.6], [36.6, 8.6], [41.5, 8.6]];
+  crayon(g, route.map(([s0, t0]) => [fx(t0), fy(s0)] as [number, number]), '#e0342f', 5, 12);
+  const [ex, ey] = [fx(8.6), fy(41.5)];
+  crayon(g, [[ex - 8, ey + 8], [ex, ey], [ex + 8, ey + 8]], '#e0342f', 5, 13);
 }
 
 export interface MapView {
