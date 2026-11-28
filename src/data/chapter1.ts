@@ -163,9 +163,9 @@ export function potOf(h: Ch1House): { s: number; t: number } {
 /** 유나 창가(돌출 창): 문 왼쪽, 사진기 쪽 앞면 */
 export const YUNA_WINDOW = { s: YUNA_S - HOUSE_HALF.d, t: -4.2, width: 3.4, sill: 2.3 * ELF_H, height: 2.6 * ELF_H };
 
-/** 길잡이: 갈림길의 빨간 우체통(골목에서 올라오면 정면), 윗길 모퉁이의 큰 트리 */
+/** 길잡이: 갈림길의 빨간 우체통(울타리 앞), 윗길 모퉁이의 큰 트리(빈 땅 안) */
 export const LANDMARKS = {
-  postBox: { s: 20.6, t: 0 },
+  postBox: { s: 21.3, t: -4.8 }, // 갈림길 위쪽 울타리 앞(골목에서 올라오면 왼쪽 앞에 보인다: "여기서 왼쪽"). 길 한가운데는 비운다
   cornerTree: { s: 30.5, t: -18.5 },
 };
 
@@ -324,35 +324,25 @@ export const CH1_SIZES = { mailbox: TOWN.mailbox, lowWall: LOW_WALL_H, fence: TO
 export const YUNA_EYE = { s: YARD.back + 0.2, t: YUNA_WINDOW.t };
 
 /**
- * 앞마당 정원길(디딤돌): 대문 → 오른쪽 담을 따라 위로 → 현관 앞에서 왼쪽으로. 길 위는 비워 둔다
- * (2026-11-28 사용자: "유나네 집 앞에 눈사람이랑 수레로 길이 막혀 있는 건 어색하다").
+ * 앞마당 정원길(디딤돌): 대문 → 현관까지 비스듬히 곧게. 길 위·길목(대문 안쪽)은 비워 둔다
+ * (2026-11-28 사용자: "유나네 집 앞에 눈사람이랑 수레로 길이 막혀 있는 건 어색하다", "위치를 길목에 두지 마").
  */
 export const GARDEN_PATH: readonly { s: number; t: number }[] = [
   { s: YARD.front - 0.4, t: 8.6 },
-  { s: 45.3, t: 9.1 },
-  { s: 48.2, t: 8.9 },
-  { s: 49.6, t: 8.6 },
-  { s: 49.9, t: 6.2 },
-  { s: 50.3, t: 5.0 },
-  { s: 49.0, t: 3.5 },
+  { s: 45.0, t: 8.4 },
+  { s: 47.6, t: 6.4 },
+  { s: 49.3, t: 3.8 },
   { s: YARD.back - 0.9, t: 1.8 },
 ];
 
-/** 숨는 자리(정원길 위)와 그 앞을 가리는 것: 엄폐물은 숨는 자리에서 창 쪽으로 (반지름 + 0.7) 떨어진 길옆에 선다 */
-const HIDES = [
-  { id: 'snowman', s: 45.3, t: 9.1, r: 0.85 }, // 유나가 만든 눈사람(대문 안 왼쪽)
-  { id: 'tree', s: 48.2, t: 8.9, r: 0.95 }, // 작은 장식 나무
-  { id: 'bush', s: 50.3, t: 5.0, r: 0.9 }, // 현관 오른쪽 둥근 덤불: 그 뒤에서 현관까지 한달음
-] as const;
-const coverFor = (h: (typeof HIDES)[number]) => {
-  const eye = { s: YARD.back + 0.2, t: -4.2 };
-  const ds = eye.s - h.s, dt = eye.t - h.t, l = Math.hypot(ds, dt);
-  return { id: h.id, s: h.s + (ds / l) * (h.r + 0.7), t: h.t + (dt / l) * (h.r + 0.7), r: h.r };
-};
-
-/** 앞마당 엄폐물(골목 좌표, 반지름): 정원길 옆 눈사람 → 장식 나무 → 덤불, 창 앞 왼쪽 장작 더미. 요정보다 크다 */
+/**
+ * 앞마당 엄폐물(골목 좌표, 반지름). 정원길에서 2 m 넘게 떨어진 마당 안쪽에 선다: 숨으려면 길에서 벗어나 그 뒤(창 반대쪽)로 간다.
+ * 눈사람(대문에서 비스듬히 안쪽) → 장식 나무(마당 가운데) → 덤불(현관 오른쪽 집 벽 밑), 창 앞 왼쪽 장작 더미. 요정보다 크다
+ */
 export const COVERS: readonly { id: 'snowman' | 'tree' | 'bush' | 'logs'; s: number; t: number; r: number }[] = [
-  ...HIDES.map(coverFor),
+  { id: 'snowman', s: 45.2, t: 5.6, r: 0.85 },
+  { id: 'tree', s: 47.2, t: 3.4, r: 0.95 },
+  { id: 'bush', s: 50.4, t: 6.0, r: 0.9 },
   // 창 앞 왼쪽 장작 더미: 그 뒤가 앞마당 안 망보는 자리(창을 정면에서 엿본다)
   { id: 'logs', s: 45.4, t: -3.6, r: 0.85 },
 ];

@@ -82,9 +82,10 @@ export function drawJiuMap(g: CanvasRenderingContext2D, W = 400, H = 500): void 
     crayon(g, [[x - 26, y + 18], [x - 26, y - 10], [x, y - 30], [x + 26, y - 10], [x + 26, y + 18], [x - 26, y + 18]], '#9aa7c4', 5, x + y);
   }
   // 갈림길 빨간 우체통(동그란 머리)
-  fill(g, '#d23a3a', () => g.rect(fx(0) - 8, fy(21.5) - 2, 16, 22));
-  fill(g, '#d23a3a', () => g.arc(fx(0), fy(21.5) - 2, 8, Math.PI, 0));
-  crayon(g, [[fx(0) - 8, fy(21.5) + 20], [fx(0) - 8, fy(21.5) - 2], [fx(0) + 8, fy(21.5) - 2], [fx(0) + 8, fy(21.5) + 20]], '#8a1c1c', 3, 21);
+  const pbx = fx(-4.8), pby = fy(22.5);
+  fill(g, '#d23a3a', () => g.rect(pbx - 8, pby - 2, 16, 22));
+  fill(g, '#d23a3a', () => g.arc(pbx, pby - 2, 8, Math.PI, 0));
+  crayon(g, [[pbx - 8, pby + 20], [pbx - 8, pby - 2], [pbx + 8, pby - 2], [pbx + 8, pby + 20]], '#8a1c1c', 3, 21);
   // 모퉁이 큰 트리(초록 세모 셋 + 노란 별)
   const tx0 = fx(-18.5), ty0 = fy(30.5);
   for (const [w, y] of [[22, 16], [17, 4], [12, -7]] as const) fill(g, '#2f8a4a', () => {

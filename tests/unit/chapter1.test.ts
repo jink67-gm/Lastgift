@@ -55,6 +55,9 @@ describe('1장 공간', () => {
   });
   it('유나네는 골목 끝이 아니다: 아치에서 곧장 올라가면 우체통 갈림길에서 막힌다(유나네는 갈림길 왼쪽으로 돌아 윗길)', () => {
     expect(LANDMARKS.postBox.s).toBeGreaterThan(STREETS.M.s1);
+    // 우체통은 갈림길 한가운데가 아니라 위쪽 울타리 앞, 골목 입구 밖
+    expect(LANDMARKS.postBox.s).toBeGreaterThan(STREETS.X.s1 - 1);
+    expect(Math.abs(LANDMARKS.postBox.t)).toBeGreaterThan(LANE_HALF + 0.6);
     const yuna = gateById('yuna');
     expect(yuna.s).toBeGreaterThan(STREETS.U.s0);
     // 우편함은 모두 길(담 밖) 쪽에 있다
@@ -88,6 +91,10 @@ describe('1장 규칙', () => {
     expect(r.state.found).toBe(true);
     r = walkTo(r.state, 47, 4, 4);
     expect(r.events).not.toContain('found');
+    // 정원길을 따라 막힘 없이 현관 앞까지
+    const end = GARDEN_PATH[GARDEN_PATH.length - 1]!;
+    const g2 = walkPath(r.state, GARDEN_PATH.map((p) => [p.s, p.t] as [number, number]), 6).state;
+    expect(Math.hypot(toLane(g2.players[0]!).s - end.s, toLane(g2.players[0]!).t - end.t)).toBeLessThan(0.4);
   });
   it('가짜 집 대문(A·B·C)은 행동하면 덜컹거릴 뿐 열리지 않는다', () => {
     let s = walkPath(createChapter1(['p0', 'p1']), [[-4, 0], [8.6, 0], [8.6, -16.6]]).state;
@@ -166,7 +173,8 @@ describe('1장 망보기(04-4b)', () => {
       const a = GARDEN_PATH[i]!, b = GARDEN_PATH[i + 1]!;
       for (let k = 0; k <= 10; k++) {
         const ps = a.s + ((b.s - a.s) * k) / 10, pt = a.t + ((b.t - a.t) * k) / 10;
-        for (const c of COVERS) expect(Math.hypot(ps - c.s, pt - c.t), `${c.id} @${ps.toFixed(1)},${pt.toFixed(1)}`).toBeGreaterThan(c.r * 0.8 + 0.35);
+        // 길목에 두지 않는다: 엄폐물 가장자리에서 길까지 1 m 넘게
+        for (const c of COVERS) expect(Math.hypot(ps - c.s, pt - c.t) - c.r, `${c.id} @${ps.toFixed(1)},${pt.toFixed(1)}`).toBeGreaterThan(1.0);
       }
     }
   });
