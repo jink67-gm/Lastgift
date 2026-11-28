@@ -1,7 +1,7 @@
 // 행동 그림(직접 제작 SVG). 글 대신 그림으로 "지금 누르면 무슨 일이 일어나는지" 보여 준다.
 import type { Action } from '../core/carry';
 
-export type ActionIcon = 'pick' | 'drop' | 'tooHeavy' | 'blocked' | 'swap' | 'latch' | 'door' | 'map' | 'mapClose' | 'signal' | 'throw' | 'plug' | 'crank' | 'switch' | 'peek' | 'bag' | 'give' | 'bell' | 'none';
+export type ActionIcon = 'pick' | 'drop' | 'tooHeavy' | 'blocked' | 'swap' | 'latch' | 'door' | 'map' | 'mapClose' | 'signal' | 'throw' | 'plug' | 'crank' | 'switch' | 'peek' | 'bag' | 'give' | 'snowball' | 'none';
 
 const HAND =
   '<path d="M20 44c-5-5-9-11-9-15 0-2 2-3 4-2l5 5V13a3 3 0 0 1 6 0v12V9a3 3 0 0 1 6 0v16V11a3 3 0 0 1 6 0v14-9a3 3 0 0 1 6 0v18c0 7-4 12-10 13h-6c-4 0-6-1-8-3z" fill="#fff" stroke="#1b2433" stroke-width="2.5" stroke-linejoin="round"/>';
@@ -27,8 +27,8 @@ const SVG: Record<ActionIcon, string> = {
   mapClose: `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 10l14-4 14 4 14-4v30l-14 4-14-4-14 4z" fill="#fffdf3" stroke="#1b2433" stroke-width="2.5" stroke-linejoin="round" opacity="0.8"/><path d="M32 40v16m-7-7 7 7 7-7" fill="none" stroke="#ffd84a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   // 손 들기(망보기 신호 "지금 가"): 초록 동그라미 안 손
   signal: `<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="27" fill="#2f9a4a" stroke="#fff" stroke-width="3"/><g transform="translate(8 6) scale(0.75)">${HAND}</g></svg>`,
-  // 종 흔들기: 금색 종 + 흔들림 선(1장: 유나를 창가에서 떼어 놓는다)
-  bell: `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 10c-10 0-15 8-15 18v9l-5 7h40l-5-7v-9c0-10-5-18-15-18z" fill="#f2c230" stroke="#1b2433" stroke-width="2.5" stroke-linejoin="round"/><circle cx="32" cy="49" r="5" fill="#c8282e" stroke="#1b2433" stroke-width="2.5"/><path d="M8 22c-3 5-3 11 0 16M56 22c3 5 3 11 0 16" fill="none" stroke="#ffd84a" stroke-width="4" stroke-linecap="round"/></svg>`,
+  // 눈뭉치 만들기: 손 위 하얀 눈뭉치(1장: 깡통 탑을 맞혀 유나의 눈길을 끈다)
+  snowball: `<svg viewBox="0 0 64 64" aria-hidden="true">${HAND}<circle cx="44" cy="16" r="11" fill="#fbfdff" stroke="#1b2433" stroke-width="2.5"/><path d="M38 13c2-2 5-3 8-2" fill="none" stroke="#9fb6d6" stroke-width="2" stroke-linecap="round"/></svg>`,
   // 던지기: 공 + 포물선 화살표(손 든 친구에게)
   throw: `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M14 46C20 14 44 10 54 30" fill="none" stroke="#ffd84a" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 7"/><path d="M47 28l7 3 2-8" fill="none" stroke="#ffd84a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14" cy="46" r="10" fill="#fff" stroke="#1b2433" stroke-width="2.5"/><path d="M14 36v20M5 43h18" stroke="#d23a3a" stroke-width="3"/></svg>`,
   // 전선 끼우기: 꽂는 머리 + 아래 화살표 + 구멍

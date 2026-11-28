@@ -35,7 +35,7 @@ test('1장 장면', async ({ page }) => {
     ['f_yunaGate', 40.4, 7.4],
     ['g_inyard', 44.6, 5.6],
     ['g2_midyard', 50.5, -5.5],
-    ['h_bell', 41.0, -6.0],
+    ['h_bucket', 41.0, -7.0],
     ['i_porch', 56.6, -2.6],
   ];
   for (const [name, s, t] of spots) {
@@ -68,15 +68,26 @@ test('1장 장면', async ({ page }) => {
   await page.screenshot({ path: `${OUT}/g3_crouch.png` });
   await page.keyboard.up('KeyC');
   await page.keyboard.up('ShiftRight');
-  // 종: 2P가 담 밖 종 앞에서 Enter → 유나가 창가를 떠난다
+  // 눈뭉치: 2P가 담 밖 양동이에서 쥐고, 힘 모으기(떨어질 자리 표시) → 던지기 → 깡통 와르르
   await hook(page, 'debugPlace', 'p0', 40.2, -4.6, Math.PI);
-  await hook(page, 'debugPlace', 'p1', 41.3, -7.2, Math.PI * 1.25);
+  await hook(page, 'debugPlace', 'p1', 40.8, -8.6, Math.PI * 1.25);
   await page.waitForTimeout(800);
   await page.keyboard.press('Enter');
-  await page.waitForTimeout(300);
-  await page.screenshot({ path: `${OUT}/h2_bellRing.png` });
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${OUT}/h_snowball.png` });
+  await page.keyboard.down('Enter');
+  await page.waitForTimeout(450);
+  await page.screenshot({ path: `${OUT}/h2_charge.png` });
+  await page.keyboard.up('Enter');
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: `${OUT}/h2b_flying.png` });
   await page.waitForTimeout(1500);
-  await page.screenshot({ path: `${OUT}/h3_yunaGone.png` });
+  await page.screenshot({ path: `${OUT}/h3_afterThrow.png` });
+  // (빗나갔어도 촬영용으로 깡통을 쓰러뜨린 장면: 시험 창구 cansHit)
+  await page.evaluate(() => (window as unknown as { __lastgift: { hitCans?(): void } }).__lastgift.hitCans?.());
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: `${OUT}/h3b_cansDown.png` });
+  await page.waitForTimeout(7000);
   // 들킴: 유나가 창밖을 볼 때 앞마당에서 걷는다 → 검은 화면
   await page.waitForTimeout(7000);
   const look = await page.evaluate(() => {

@@ -141,8 +141,8 @@ describe('1장 규칙', () => {
   });
 });
 
-import { atBell, gazeAt, gazeOf, hiddenFromWindow, CAUGHT_PAUSE, GAZE, LOOK_GRACE, YUNA_AWAY } from '../../src/core/chapter1';
-import { BELL, COVERS, GARDEN_PATH, OUTSIDE_GATE, PORCH, YUNA_EYE, inPorch } from '../../src/data/chapter1';
+import { atBucket, gazeAt, gazeOf, hiddenFromWindow, throwTarget, CAUGHT_PAUSE, GAZE, LOOK_GRACE, YUNA_AWAY } from '../../src/core/chapter1';
+import { CANS, COVERS, GARDEN_PATH, OUTSIDE_GATE, PORCH, SNOW_BUCKET, THROW, YUNA_EYE, inPorch } from '../../src/data/chapter1';
 
 /** 골목 좌표에 요정을 세운 상태 */
 function at(s: Ch1State, id: string, ls: number, lt: number, facing = Math.PI * 1.25): Ch1State {
@@ -188,7 +188,7 @@ describe('1장 들키지 않기(무궁화 꽃이 피었습니다 + 종)', () => 
     expect(hiddenFromWindow(W(46, 0))).toBe(false);
     expect(hiddenFromWindow(W(YUNA_EYE.s - 0.9, YUNA_EYE.t + 0.5))).toBe(true);
     expect(hiddenFromWindow(W(40, 0))).toBe(true);
-    expect(hiddenFromWindow(W(BELL.s, BELL.t))).toBe(true); // 종은 담 밖
+    expect(hiddenFromWindow(W(SNOW_BUCKET.s - 0.8, SNOW_BUCKET.t))).toBe(true); // 눈뭉치 양동이는 담 밖
   });
   it('창밖을 보는 동안: 앞마당에서 움직이면 들키고, 멈춰 있으면 괜찮다', () => {
     let s = at(looking(), 'p0', 46, 0);
@@ -238,25 +238,68 @@ describe('1장 들키지 않기(무궁화 꽃이 피었습니다 + 종)', () => 
     expect(gazeOf(s).phase).toBe('away');
     expect(s.caughtIds).toEqual([]);
   });
-  it('담 밖 종을 울리면 유나가 창가를 떠나(창이 빈다) 그동안은 움직여도 안 들킨다. 떠나 있는 동안은 다시 울려도 소용없고, 돌아오면 그림부터', () => {
-    let s = at(looking(), 'p1', BELL.s - 0.6, BELL.t);
-    expect(atBell(s.players[1]!)).toBe(true);
-    expect(planAction(s, 'p1')).toEqual({ kind: 'bell' });
-    const r = step(s, { p0: idle, p1: { ...idle, actionDown: true } }, DT);
-    expect(r.events).toEqual([{ type: 'bell', playerId: 'p1' }]);
+  it('눈뭉치: 양동이 앞 행동으로 쥐고, 누르고 있으면 힘이 모이고, 떼면 던진다. 깡통 탑을 맞히면 와르르 → 유나가 창가를 떠나 창이 빈다(그동안 움직여도 안 들킨다), 돌아오면 깡통은 다시 쌓이고 유나는 그림부터', () => {
+    // 양동이 앞에서 깡통 쪽(위)을 본다
+    let s = at(looking(), 'p1', SNOW_BUCKET.s - 0.7, SNOW_BUCKET.t, Math.PI * 1.25);
+    expect(atBucket(s.players[1]!)).toBe(true);
+    expect(planAction(s, 'p1')).toEqual({ kind: 'snowball' });
+    let r = step(s, { p0: idle, p1: { ...idle, actionDown: true } }, DT);
+    expect(r.events).toEqual([{ type: 'snowball', playerId: 'p1' }]);
     s = r.state;
+    expect(s.players[1]!.snowball).toBe(true);
+    expect(planAction(s, 'p1')).toEqual({ kind: 'throw' });
+    // 깡통까지 거리에 맞는 힘을 계산해 그만큼 누르고 있다가 뗀다
+    const p1 = s.players[1]!;
+    const c = W(CANS.s, CANS.t);
+    const dist = Math.hypot(c.x - p1.x, c.z - p1.z);
+    const power = (dist - THROW.min) / (THROW.max - THROW.min);
+    const tg = throwTarget(p1, power);
+    expect(Math.hypot(tg.x - c.x, tg.z - c.z)).toBeLessThan(CANS.r * 0.5); // 대략 위쪽을 보면 깡통 쪽으로 맞춰 준다
+    const holdSteps = Math.round((power * THROW.chargeSec) / DT);
+    r = step(s, { p0: idle, p1: { ...idle, actionDown: true, actionHeld: true } }, DT);
+    s = r.state;
+    for (let i = 1; i < holdSteps; i++) s = step(s, { p0: idle, p1: { ...idle, actionHeld: true } }, DT).state;
+    r = step(s, { p0: idle, p1: idle }, DT);
+    expect(r.events.some((e) => e.type === 'throw')).toBe(true);
+    s = r.state;
+    expect(s.players[1]!.snowball).toBe(false);
+    let hit = false;
+    for (let i = 0; i < 120 && !hit; i++) {
+      r = step(s, { p0: idle, p1: idle }, DT);
+      s = r.state;
+      hit = r.events.some((e) => e.type === 'cansHit');
+    }
+    expect(hit).toBe(true);
+    expect(s.cansDown).toBe(true);
     expect(gazeOf(s).phase).toBe('gone');
-    expect(planAction(s, 'p1').kind).not.toBe('bell');
+    // 그동안 마당에서 움직여도 안 들킨다
     s = at(s, 'p0', 46, 0);
     let caught = false;
-    for (let i = 0; i < Math.round((YUNA_AWAY - 0.2) / DT); i++) {
+    for (let i = 0; i < Math.round((YUNA_AWAY - 1) / DT); i++) {
       const q = step(s, { p0: { ...idle, move: { x: i % 120 < 60 ? 1 : -1, y: 0 } }, p1: idle }, DT);
       s = q.state;
       if (q.events.some((e) => e.type === 'caught')) caught = true;
     }
     expect(caught).toBe(false);
-    for (let i = 0; i < 30; i++) s = step(s, { p0: idle, p1: idle }, DT).state;
+    for (let i = 0; i < 90; i++) s = step(s, { p0: idle, p1: idle }, DT).state;
     expect(gazeOf(s).phase).toBe('away');
+    expect(s.cansDown).toBe(false);
+  });
+  it('눈뭉치가 빗나가면 퍽(유나는 그대로), 살짝 누르면 가까이 떨어진다', () => {
+    let s = at(looking(), 'p1', SNOW_BUCKET.s - 0.7, SNOW_BUCKET.t, Math.PI * 1.25);
+    s = step(s, { p0: idle, p1: { ...idle, actionDown: true } }, DT).state;
+    s = step(s, { p0: idle, p1: { ...idle, actionDown: true, actionHeld: true } }, DT).state;
+    let r = step(s, { p0: idle, p1: idle }, DT);
+    s = r.state;
+    let splat = false;
+    for (let i = 0; i < 120 && !splat; i++) {
+      r = step(s, { p0: idle, p1: idle }, DT);
+      s = r.state;
+      splat = r.events.some((e) => e.type === 'splat');
+    }
+    expect(splat).toBe(true);
+    expect(s.cansDown).toBe(false);
+    expect(s.yunaAway).toBe(0);
   });
   it('현관 발판에서 자루를 열면 두 선물을 꺼내 놓고(다시 못 집음, 빈 자루는 그대로 멘다), 모두 앞마당 밖으로 물러나면 완료(한 번만)', () => {
     let s = createChapter1(['p0', 'p1'], 7);

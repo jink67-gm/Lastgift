@@ -15,7 +15,8 @@ import {
   YUNA_WINDOW,
   COVERS,
   GARDEN_PATH,
-  BELL,
+  SNOW_BUCKET,
+  CANS,
   GATES,
   GATE_HALF,
   LANDMARKS,
@@ -741,53 +742,100 @@ function logs(): THREE.Group {
   return g;
 }
 
-/** 종 기둥: 나무 기둥 + 위에서 앞으로 휜 쇠 팔 + 매달린 썰매 방울 다발(흔들림: swing) + 빨간 리본. 원점 = 기둥 밑 */
-function bellPost(): { group: THREE.Group; swing: THREE.Group } {
+/** 눈뭉치 양동이: 나무 양동이(쇠 테 둘, 손잡이) 위로 소복한 눈뭉치 */
+function snowBucket(): THREE.Group {
   const g = new THREE.Group();
-  const wood = std('#6b4428', { roughness: 0.9 });
-  const iron = std('#2a2a2e', { roughness: 0.5, metalness: 0.5 });
-  const gold = std('#e0b64e', { roughness: 0.3, metalness: 0.75 });
-  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.14, 2.6, 10), wood);
-  post.position.y = 1.3;
-  g.add(post);
-  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), snowMat);
-  cap.position.y = 2.6;
-  g.add(cap);
-  // 휜 팔(앞 = +z, 골목 쪽)
-  const arm = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.03, 6, 16, Math.PI / 2), iron);
-  arm.rotation.y = -Math.PI / 2;
-  arm.position.set(0, 2.15, 0.35);
-  g.add(arm);
-  const swing = new THREE.Group();
-  swing.position.set(0, 2.5, 0.7);
-  const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.4, 5), std('#c8282e'));
-  rope.position.y = -0.2;
-  swing.add(rope);
-  // 큰 종 하나 + 둘레 방울
-  const bellShape = new THREE.LatheGeometry(
-    [new THREE.Vector2(0.0, 0.0), new THREE.Vector2(0.26, 0.0), new THREE.Vector2(0.24, 0.06), new THREE.Vector2(0.17, 0.2), new THREE.Vector2(0.14, 0.36), new THREE.Vector2(0.08, 0.44), new THREE.Vector2(0.0, 0.46)],
-    18,
-  );
-  const big = new THREE.Mesh(bellShape, gold);
-  big.position.y = -0.88;
-  swing.add(big);
-  const clapper = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), iron);
-  clapper.position.y = -0.9;
-  swing.add(clapper);
-  for (let i = 0; i < 5; i++) {
-    const a = (i / 5) * Math.PI * 2;
-    const j = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), gold);
-    j.position.set(Math.cos(a) * 0.2, -0.36 - (i % 2) * 0.06, Math.sin(a) * 0.2);
-    swing.add(j);
+  const wood = std('#9c6a3f', { roughness: 0.85 });
+  const iron = std('#3b3f4a', { roughness: 0.5, metalness: 0.5 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.34, 0.62, 16, 1, true), wood);
+  body.position.y = 0.31;
+  g.add(body);
+  const bottom = new THREE.Mesh(new THREE.CircleGeometry(0.34, 16), wood);
+  bottom.rotation.x = -Math.PI / 2;
+  bottom.position.y = 0.02;
+  g.add(bottom);
+  for (const y of [0.12, 0.5]) {
+    const band = new THREE.Mesh(new THREE.TorusGeometry(y > 0.3 ? 0.41 : 0.36, 0.022, 6, 24), iron);
+    band.rotation.x = Math.PI / 2;
+    band.position.y = y;
+    g.add(band);
   }
-  const bow = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.035, 6, 12), std('#c8282e'));
-  bow.position.y = -0.4;
-  bow.scale.set(1.6, 1, 1);
-  swing.add(bow);
-  g.add(swing);
-  g.add(contactShadow(0.9, 0.9, 0.3));
-  g.userData.fadeable = true;
-  return { group: g, swing };
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.018, 6, 20, Math.PI), iron);
+  handle.position.y = 0.62;
+  handle.rotation.y = 0.4;
+  g.add(handle);
+  const ball = std('#fbfdff', { roughness: 0.9 });
+  for (const [x, y, z] of [[0, 0.62, 0], [0.2, 0.6, 0.12], [-0.18, 0.6, 0.14], [0.05, 0.6, -0.2], [-0.14, 0.78, -0.04], [0.12, 0.8, 0.02], [0.0, 0.94, 0.05]] as const) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 9), ball);
+    m.position.set(x, y, z);
+    g.add(m);
+  }
+  g.add(contactShadow(1.0, 1.0, 0.3));
+  return g;
+}
+
+/** 깡통 탑: 그루터기 위 깡통 여섯(3-2-1) + 꼭대기 빨간 리본. down(k): 무너지는 정도(0 쌓임 ~ 1 다 흩어짐) */
+function canTower(): { group: THREE.Group; topple(k: number): void } {
+  const g = new THREE.Group();
+  const bark = std('#6b4428', { roughness: 0.95 });
+  const ring = std('#d9b07a', { roughness: 0.9 });
+  const stump = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.65, 0.7, 14), bark);
+  stump.position.y = 0.35;
+  g.add(stump);
+  const top = new THREE.Mesh(new THREE.CircleGeometry(0.54, 18), ring);
+  top.rotation.x = -Math.PI / 2;
+  top.position.y = 0.705;
+  g.add(top);
+  const snowTop = new THREE.Mesh(new THREE.CircleGeometry(0.3, 14), snowMat);
+  snowTop.rotation.x = -Math.PI / 2;
+  snowTop.position.set(0.28, 0.71, 0.2);
+  g.add(snowTop);
+  const colors = ['#c8282e', '#2f8a4a', '#d9dde5', '#2f6fd0', '#e0b64e', '#c8282e'];
+  const rim = std('#b8bcc6', { roughness: 0.3, metalness: 0.8 });
+  const H = 0.36, R = 0.13;
+  const slots: [number, number][] = [[-0.29, 0], [0, 0], [0.29, 0], [-0.145, 1], [0.145, 1], [0, 2]];
+  const cans: { m: THREE.Group; home: THREE.Vector3; to: THREE.Vector3; spin: THREE.Vector3 }[] = [];
+  let r0 = 3;
+  const rnd = () => ((r0 = (r0 * 16807) % 2147483647) / 2147483647);
+  slots.forEach(([x, row], i) => {
+    const c = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(R, R, H, 14), std(colors[i]!, { roughness: 0.45, metalness: 0.35 }));
+    c.add(body);
+    for (const y of [H / 2, -H / 2]) {
+      const r = new THREE.Mesh(new THREE.TorusGeometry(R, 0.012, 5, 16), rim);
+      r.rotation.x = Math.PI / 2;
+      r.position.y = y;
+      c.add(r);
+    }
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.004, R + 0.004, 0.08, 14), std('#fffdf3', { roughness: 0.8 }));
+    c.add(band);
+    const home = new THREE.Vector3(x, 0.71 + H / 2 + row * H, 0);
+    c.position.copy(home);
+    g.add(c);
+    const a = rnd() * Math.PI * 2;
+    const d = 0.9 + rnd() * 0.9;
+    cans.push({ m: c, home, to: new THREE.Vector3(Math.cos(a) * d, R, Math.sin(a) * d), spin: new THREE.Vector3((rnd() - 0.5) * 6, rnd() * 4, Math.PI / 2) });
+  });
+  const bow = new THREE.Mesh(new THREE.TorusKnotGeometry(0.06, 0.02, 32, 5, 2, 3), std('#c8282e', { roughness: 0.5 }));
+  const topCan = cans[5]!.m;
+  bow.position.y = H / 2 + 0.05;
+  topCan.add(bow);
+  g.add(contactShadow(1.8, 1.8, 0.32));
+  return {
+    group: g,
+    topple(k) {
+      for (const c of cans) {
+        const u = Math.min(1, Math.max(0, k));
+        // 위로 튀었다가 떨어져 옆으로 누운다
+        c.m.position.set(
+          c.home.x + (c.to.x - c.home.x) * u,
+          c.home.y + (c.to.y - c.home.y) * u + Math.sin(u * Math.PI) * 0.6,
+          c.home.z + (c.to.z - c.home.z) * u,
+        );
+        c.m.rotation.set(c.spin.x * u * (u < 1 ? 1 : 0) + (u >= 1 ? 0 : 0), c.spin.y * u, c.spin.z * u);
+      }
+    },
+  };
 }
 
 export interface Ch1Scene {
@@ -805,8 +853,8 @@ export interface Ch1Scene {
   windowCenter: THREE.Vector3;
   /** 현관 계단 위 선물 두 자리(월드) */
   doorstep: THREE.Vector3[];
-  /** 종 흔들림(울린 뒤 지난 비율 0~1, 1이면 멈춤) */
-  ringBell(k: number): void;
+  /** 깡통 탑 무너짐 정도(0 쌓임 ~ 1 흩어짐) */
+  toppleCans(k: number): void;
   /** 유나네 대문 열림 정도(0 닫힘 ~ 1 활짝) */
   setGateOpen(k: number): void;
   /** 잠긴 대문 덜컹(k: 0~1, 지난 비율) */
@@ -999,12 +1047,15 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
       root.add(o);
     }
   }
-  // 종 기둥(담 밖, 윗길 쪽): 나무 기둥 + 휜 팔 + 썰매 방울 다발 + 빨간 리본
-  const bell = bellPost();
-  bell.group.position.copy(at(BELL.s, BELL.t));
-  bell.group.rotation.y = YAW.back;
-  bell.group.scale.setScalar(1.45); // 멀리서도 보이게(담보다 높이 솟은 금색 종)
-  root.add(bell.group);
+  // 눈뭉치 양동이(담 밖, 윗길 왼쪽)와 마당 왼쪽 구석 그루터기 위 깡통 탑
+  const bucket = snowBucket();
+  bucket.position.copy(at(SNOW_BUCKET.s, SNOW_BUCKET.t));
+  root.add(bucket);
+  const cans = canTower();
+  cans.group.position.copy(at(CANS.s, CANS.t));
+  cans.group.rotation.y = YAW.back;
+  cans.group.userData.fadeable = true;
+  root.add(cans.group);
   // 현관 계단 위 선물 자리: 집 모델의 계단 윗면 높이를 아래로 쏘아 재고, 문 앞 왼쪽·오른쪽 두 자리
   const yunaHouse = CH1_HOUSES.find((h) => h.yuna)!;
   const door = doorOf(yunaHouse);
@@ -1033,10 +1084,8 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
   return {
     root,
     doorstep,
-    ringBell(k) {
-      // 울린 직후 크게 흔들리다 잦아든다
-      const a = k >= 1 ? 0 : Math.sin(k * Math.PI * 7) * 0.5 * (1 - k);
-      bell.swing.rotation.z = a;
+    toppleCans(k) {
+      cans.topple(k);
     },
     yunaSeat,
     yunaPlaceholder: sil,

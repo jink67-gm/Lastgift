@@ -182,13 +182,17 @@ export const LANDMARKS = {
 };
 
 /**
- * 유나를 창가에서 떼어 놓는 종(2026-11-28 사용자: "유나의 시선을 돌릴 만한 미션을 하게 하자"):
- * 유나네 앞 담 왼쪽 바깥(윗길 쪽) 기둥에 매단 썰매 방울 종. 담 밖에서 울리면 유나가 소리 나는 쪽(옆방)으로 가 창이 잠시 빈다.
- * 한 명이 담 밖에서 울리고 나머지가 그 틈에 현관까지 — 혼자서도 울리고 뛰면 닿는 거리.
+ * 유나 이목 끌기(2026-11-28 사용자: "벨 누르는 미션보다 더 재밌을 만한 요소로"): **눈뭉치 던지기**.
+ * 담 밖(윗길 왼쪽) 눈뭉치 양동이에서 눈뭉치를 집고, 행동 버튼을 누르고 있으면 힘이 모이고(땅에 떨어질 자리 표시) 떼면 던진다.
+ * 마당 왼쪽 구석 그루터기 위 깡통 탑을 맞히면 와르르 → 유나가 소리 나는 쪽(옆방)으로 가 YUNA_AWAY초 창이 빈다.
  */
-export const BELL = { s: YARD.front - 0.6, t: -7.2 };
-/** 종 앞에서 행동 버튼이 닿는 거리 */
-export const BELL_REACH = 1.7;
+export const SNOW_BUCKET = { s: YARD.front - 1.0, t: -8.6 };
+/** 양동이 앞에서 행동 버튼이 닿는 거리 */
+export const BUCKET_REACH = 1.6;
+/** 깡통 탑(그루터기 위) 자리와 맞힘 반지름 */
+export const CANS = { s: 50.6, t: -9.2, r: 1.0 };
+/** 던지기: 힘 0이면 MIN m, 다 모으면(CHARGE_SEC초) MAX m. 깡통 쪽에서 ASSIST 라디안 안이면 깡통 쪽으로 */
+export const THROW = { min: 2.5, max: 13, chargeSec: 1.1, assist: 0.6 };
 
 /** 시작: 아치 아래쪽 눈길(광장에서 걸어 들어온 자리). 두 선물은 요정 발치에 */
 export const CH1_START = {
@@ -310,8 +314,10 @@ function buildWalls(): Collider[] {
     const p = W(m.s, m.t);
     c.push({ kind: 'circle', x: p.x, z: p.z, r: 0.35 });
   }
-  const bp = W(BELL.s, BELL.t);
-  c.push({ kind: 'circle', x: bp.x, z: bp.z, r: 0.28 }); // 종 기둥
+  const bp = W(SNOW_BUCKET.s, SNOW_BUCKET.t);
+  c.push({ kind: 'circle', x: bp.x, z: bp.z, r: 0.45 }); // 눈뭉치 양동이
+  const cp = W(CANS.s, CANS.t);
+  c.push({ kind: 'circle', x: cp.x, z: cp.z, r: 0.55 }); // 깡통 탑 그루터기
   const pb = W(LANDMARKS.postBox.s, LANDMARKS.postBox.t);
   c.push({ kind: 'circle', x: pb.x, z: pb.z, r: 0.6 });
   return c;

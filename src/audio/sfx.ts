@@ -12,6 +12,7 @@ export type SfxName =
   | 'wrong'
   | 'signal'
   | 'throw'
+  | 'clatter'
   | 'catch'
   | 'click'
   | 'switch'
@@ -129,6 +130,11 @@ const RECIPES: Record<SfxName, (c: Ctx, t: number) => void> = {
   },
   signal: (c, t) => tone(c, t, 880, 1320, 0.12, 'sine', 0.22),
   throw: (c, t) => noise(c, t, 0.32, 600, 1.2, 0.3, 2400),
+  // 깡통 와르르: 금속성 짧은 소리 셋
+  clatter: (c, t) => {
+    for (let i = 0; i < 3; i++) noise(c, t + i * 0.09, 0.12, 3200 - i * 500, 6, 0.32);
+    tone(c, t, 1200, 900, 0.18, 'square', 0.08);
+  },
   catch: (c, t) => tone(c, t, 300, 700, 0.08, 'sine', 0.35),
   click: (c, t) => noise(c, t, 0.05, 2500, 3, 0.35),
   switch: (c, t) => {
@@ -228,8 +234,12 @@ export function sfxForEvent(e: { type: string; event?: { type: string } }): SfxN
     case 'gateOpened':
     case 'map':
       return 'click';
-    case 'bell':
-      return 'chime';
+    case 'cansHit':
+      return 'clatter';
+    case 'snowball':
+      return 'pick';
+    case 'splat':
+      return 'drop';
     case 'stockingChecked':
     case 'opened':
     case 'handover':

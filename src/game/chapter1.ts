@@ -7,11 +7,11 @@ import * as THREE from 'three';
 import { isAdmin } from '../ui/admin';
 import { addHaze, createBackdrop } from '../scene/backdrop';
 import { baseViewH, deadZone, frameFor, type Pt } from '../core/framing';
-import { createChapter1, gazeOf, planAction, step, CAMERA_YAW, CAUGHT_PAUSE, SACK, type Ch1Action, type Ch1Event, type Ch1State, type GazePhase } from '../core/chapter1';
+import { createChapter1, gazeOf, planAction, step, throwTarget, CAMERA_YAW, CAUGHT_PAUSE, SACK, type Ch1Action, type Ch1Event, type Ch1State, type GazePhase } from '../core/chapter1';
 import { AutoQuality, effectiveQuality, snowCount, type Quality } from '../core/quality';
 import type { SewingInput } from '../core/sewing';
 import { chapter } from '../data/chapters';
-import { CH1_BOUNDS, CH1_START, W, YARD, YUNA_WINDOW, toLane } from '../data/chapter1';
+import { CANS as CANS_AT, CH1_BOUNDS, CH1_START, THROW, W, YARD, YUNA_WINDOW, toLane } from '../data/chapter1';
 import { ELF_LOOKS } from '../data/elves';
 import { attachKeyboard, KeyState, KEYMAP_P1, KEYMAP_P2 } from '../input/keyboard';
 import { mergeIntents } from '../input/merge';
@@ -48,6 +48,8 @@ const ELF_SCALE = 1.2;
 /** 1장 화면 넓이 배율(광장 기준 구도 대비) */
 const VIEW_K = 1.3;
 const SIM_DT = 1 / 60;
+/** 눈뭉치 힘을 다 모으는 초(data THROW.chargeSec) */
+const THROW_CHARGE = THROW.chargeSec;
 /** 사진기 쪽을 보는 방향(선물 앞면이 보이게) */
 const YAW_BACK = Math.PI / 4;
 /** 처음 몇 초: 갈림길 동네 전체를 한 화면(어느 집인지는 지도를 보고 가까이 가서 고른다) */
@@ -74,7 +76,8 @@ function iconOf(a: Ch1Action): ActionIcon {
   if (a.kind === 'blocked') return 'blocked';
   if (a.kind === 'map') return a.open ? 'map' : 'mapClose';
   if (a.kind === 'gate') return 'latch';
-  if (a.kind === 'bell') return 'bell'; // 유나네든 가짜 집이든 같은 그림(열어 봐야 안다)
+  if (a.kind === 'snowball') return 'snowball';
+  if (a.kind === 'throw') return 'throw';
   return 'none';
 }
 
@@ -322,7 +325,27 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
   let foundAt = -1;
   let gateK = 0;
   let lastPhase: GazePhase = 'away';
-  let bellAt = -9;
+  let cansAt = -9;
+  // 눈뭉치: 손에 쥔 것(요정마다), 날아가는 것, 떨어질 자리 표시(힘 모을 때), 떨어진 자국
+  const snowMat = new THREE.MeshStandardMaterial({ color: '#fbfdff', roughness: 0.9 });
+  const ballGeo = new THREE.SphereGeometry(0.16, 12, 9);
+  const inHand = PLAYERS.map(() => {
+    const m = new THREE.Mesh(ballGeo, snowMat);
+    m.visible = false;
+    scene.add(m);
+    return m;
+  });
+  const flyingBalls: THREE.Mesh[] = [];
+  const aimRings = PLAYERS.map(() => {
+    const m = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.6, 28), new THREE.MeshBasicMaterial({ color: '#ffd84a', transparent: true, opacity: 0.85, depthWrite: false }));
+    m.rotation.x = -Math.PI / 2;
+    m.renderOrder = 6;
+    m.visible = false;
+    scene.add(m);
+    return m;
+  });
+  const splats: { m: THREE.Mesh; at: number }[] = [];
+  const _hl = new THREE.Vector3(), _hr = new THREE.Vector3();
   const rattles = new Map<string, number>();
   applyQuality();
 
@@ -389,8 +412,20 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     if (e.type === 'pick' || e.type === 'drop') actAt.set(e.playerId, elapsed);
     if (e.type === 'found') foundAt = elapsed;
     if (e.type === 'gateLocked') rattles.set(e.gateId, elapsed);
-    if (e.type === 'bell') bellAt = elapsed;
-    if (e.type === 'gateOpened' || e.type === 'gateLocked' || e.type === 'bell') {
+    if (e.type === 'cansHit') cansAt = elapsed;
+    if (e.type === 'splat') {
+      const m = new THREE.Mesh(new THREE.CircleGeometry(0.45, 14), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9, depthWrite: false }));
+      m.rotation.x = -Math.PI / 2;
+      m.scale.set(1.3, 0.8, 1);
+      m.position.set(e.x, 0.03, e.z);
+      scene.add(m);
+      splats.push({ m, at: elapsed });
+    }
+    if (e.type === 'throw') {
+      const el = elves[PLAYERS.indexOf(e.playerId)];
+      if (!el?.act?.('Throw', { once: true, fade: 0.1 })) el?.act?.('Interact', { once: true });
+    }
+    if (e.type === 'gateOpened' || e.type === 'gateLocked' || e.type === 'snowball') {
       const i = PLAYERS.indexOf(e.playerId);
       elves[i]?.act?.('Interact', { once: true });
     }
@@ -493,7 +528,50 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     // 유나가 일어나 돌아서기 시작하면 짧은 소리(무궁화 꽃이… 의 "피었습니다")
     if (gz.phase === 'turn' && lastPhase !== 'turn' && ending < 0) playSfx('tick');
     lastPhase = gz.phase;
-    space.ringBell(Math.min(1, (elapsed - bellAt) / 0.9));
+    // 깡통 탑: 맞으면 와르르(0.7초), 유나가 돌아오면 다시 쌓여 있다
+    space.toppleCans(state.cansDown ? Math.min(1, (elapsed - cansAt) / 0.7) : 0);
+    // 눈뭉치: 손에 쥔 것 · 힘 모을 때 떨어질 자리 · 날아가는 것 · 떨어진 자국
+    state.players.forEach((p, i) => {
+      const e = elves[i]!;
+      const hb = inHand[i]!;
+      hb.visible = !!p.snowball;
+      if (p.snowball) {
+        const ps = shown.get(p.id) ?? p;
+        if (e.hands?.(_hl, _hr)) hb.position.copy(_hr).add(new THREE.Vector3(0, 0.08, 0));
+        else hb.position.set(ps.x, 1.2 * ELF_SCALE, ps.z);
+      }
+      const ar = aimRings[i]!;
+      ar.visible = p.charge !== undefined;
+      if (ar.visible) {
+        const power = Math.min(1, (p.charge ?? 0) / THROW_CHARGE);
+        const tg = throwTarget(p, power);
+        ar.position.set(tg.x, 0.04, tg.z);
+        ar.scale.setScalar(0.85 + Math.sin(elapsed * 10) * 0.08);
+      }
+    });
+    const balls = state.balls ?? [];
+    while (flyingBalls.length < balls.length) {
+      const m = new THREE.Mesh(ballGeo, snowMat);
+      scene.add(m);
+      flyingBalls.push(m);
+    }
+    flyingBalls.forEach((m, k) => {
+      const b = balls[k];
+      m.visible = !!b;
+      if (!b) return;
+      const u = Math.min(1, b.t / b.dur);
+      const dist = Math.hypot(b.x1 - b.x0, b.z1 - b.z0);
+      m.position.set(b.x0 + (b.x1 - b.x0) * u, 1.3 * ELF_SCALE * (1 - u) + 4 * (1 + dist * 0.12) * u * (1 - u), b.z0 + (b.z1 - b.z0) * u);
+    });
+    for (let k = splats.length - 1; k >= 0; k--) {
+      const sp = splats[k]!;
+      const age = elapsed - sp.at;
+      (sp.m.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.9 * (1 - age / 1.6));
+      if (age > 1.6) {
+        scene.remove(sp.m);
+        splats.splice(k, 1);
+      }
+    }
     if (ending < 0) space.setGaze(gz.phase, gz.k, elapsed);
     else if (updateEnding(frame)) return;
     // 들킴: 창 위 빨간 느낌표
@@ -628,6 +706,11 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
       },
       gaze: () => gazeOf(state),
       fade: () => Number(fade.style.opacity),
+      /** 시험·촬영: 깡통 탑을 맞힌 것으로(유나가 창가를 떠난다) */
+      hitCans: () => {
+        const c = W(CANS_AT.s, CANS_AT.t);
+        state = { ...state, balls: [...(state.balls ?? []), { from: PLAYERS[1] ?? 'p0', x0: c.x, z0: c.z, x1: c.x, z1: c.z, t: 0, dur: 0.01 }] };
+      },
       doorstep: () => space.doorstep.map((v) => ({ ...toLane({ x: v.x, z: v.z }), y: v.y })),
       setTime: (t: number) => {
         state = { ...state, time: t };

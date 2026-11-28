@@ -13,7 +13,9 @@
 //   **앉아 있거나**(앉기 키·단추, 앉으면 느리게 걷는다: 엄폐물 뒤에서 앉은 채 살금살금은 괜찮다), 창 바로 아래면 괜찮다. 돌아본 첫 LOOK_GRACE초는 봐준다(멈출 틈).
 //   들키면 화면이 잠깐 까맣게 바뀌고(CAUGHT_PAUSE초, 모두 멈춤) 들킨 요정은 대문 앞으로 돌아가 있다. 유나는 다시 그림을 그린다.
 //   든 것은 그대로, 팀 시계도 그대로. 예전 망보는 자리·손 신호·눈 표시·작은 엿보기 화면은 없앴다.
-// - 종(BELL, 담 밖): 행동 → 유나가 창가를 떠나 YUNA_AWAY초 동안 창이 빈다(그동안은 아무도 들키지 않는다). 돌아오면 다시 그림부터.
+// - 눈뭉치 던지기(담 밖 양동이 → 마당 왼쪽 구석 깡통 탑): 양동이 앞 행동 → 눈뭉치를 쥔다. 쥔 채 행동 버튼을 누르고 있으면 힘이 모이고
+//   떼면 바라보는 쪽(깡통 쪽 가까우면 깡통 쪽)으로 던진다. 깡통 탑을 맞히면 와르르 → 유나가 창가를 떠나 YUNA_AWAY초 동안 창이 빈다
+//   (그동안은 아무도 들키지 않는다). 돌아오면 깡통은 다시 쌓여 있고 유나는 그림부터. 빗나가면 퍽(다시 던지면 된다).
 // - 현관 발판에 선물을 내려놓으면 그 자리에 고정. 둘 다 놓고 모두 앞마당 밖으로 물러나면 1장 완료(한 번만).
 import { applyAction, chooseTarget, planAction as planCarry, PICK_RANGE, type Item } from './carry';
 import { stepPlayer, type PlayerState, type World } from './player';
@@ -24,8 +26,10 @@ import {
   CH1_START,
   COVERS,
   gateNear,
-  BELL,
-  BELL_REACH,
+  BUCKET_REACH,
+  CANS,
+  SNOW_BUCKET,
+  THROW,
   OUTSIDE_GATE,
   PORCH,
   W,
@@ -49,6 +53,10 @@ export interface Ch1Player extends PlayerState {
   mapOpen: boolean;
   /** 앉아 있다(엄폐물 뒤에서 숨는다, 걸음이 느리다) */
   crouching?: boolean;
+  /** 눈뭉치를 쥐고 있다 */
+  snowball?: boolean;
+  /** 던질 힘을 모으는 중(초). 없으면 모으지 않는다 */
+  charge?: number;
 
 }
 
@@ -76,6 +84,32 @@ export interface Ch1State {
   caughtPause: number;
   /** 암전 한가운데서 대문 앞으로 옮길 요정 */
   caughtIds: string[];
+  /** 날아가는 눈뭉치 */
+  balls: Snowball[];
+  /** 깡통 탑이 무너져 있다(유나가 돌아오면 다시 쌓인다) */
+  cansDown: boolean;
+}
+
+/** 날아가는 눈뭉치: 출발(x0,z0) → 떨어질 곳(x1,z1), t/dur 지남 */
+export interface Snowball {
+  from: string;
+  x0: number;
+  z0: number;
+  x1: number;
+  z1: number;
+  t: number;
+  dur: number;
+}
+
+/** 이 요정이 힘 power(0~1)로 던지면 떨어질 곳(바라보는 쪽, 깡통 쪽에 가까우면 깡통 쪽으로 맞춰 준다) */
+export function throwTarget(p: { x: number; z: number; facing: number }, power: number): { x: number; z: number; dist: number } {
+  const dist = THROW.min + (THROW.max - THROW.min) * Math.min(1, Math.max(0, power));
+  const c = W(CANS.s, CANS.t);
+  const toC = Math.atan2(c.x - p.x, c.z - p.z);
+  let d = toC - p.facing;
+  d = Math.atan2(Math.sin(d), Math.cos(d));
+  const yaw = Math.abs(d) < THROW.assist ? toC : p.facing;
+  return { x: p.x + Math.sin(yaw) * dist, z: p.z + Math.cos(yaw) * dist, dist };
 }
 
 // ── 유나 시선 ────────────────────────────────────────────
@@ -124,10 +158,10 @@ function toNextAway(s: Ch1State): number {
   return s.time - gt;
 }
 
-/** 이 요정이 종 앞에 있는가 */
-export function atBell(p: { x: number; z: number }): boolean {
+/** 이 요정이 눈뭉치 양동이 앞에 있는가 */
+export function atBucket(p: { x: number; z: number }): boolean {
   const { s, t } = toLane(p);
-  return Math.hypot(s - BELL.s, t - BELL.t) <= BELL_REACH;
+  return Math.hypot(s - SNOW_BUCKET.s, t - SNOW_BUCKET.t) <= BUCKET_REACH;
 }
 
 /** 앉아 걷는 빠르기(서서 걷기의 배) */
@@ -165,7 +199,10 @@ export type Ch1Event =
   | { type: 'unpack'; playerId: string }
   | { type: 'gateOpened'; playerId: string }
   | { type: 'gateLocked'; playerId: string; gateId: string }
-  | { type: 'bell'; playerId: string }
+  | { type: 'snowball'; playerId: string }
+  | { type: 'throw'; playerId: string; power: number }
+  | { type: 'cansHit'; playerId: string }
+  | { type: 'splat'; x: number; z: number }
   | { type: 'complete' };
 
 export type Ch1Action =
@@ -175,7 +212,8 @@ export type Ch1Action =
   | { kind: 'map'; open: boolean }
   | { kind: 'place'; itemId: string }
   | { kind: 'gate'; gateId: string }
-  | { kind: 'bell' }
+  | { kind: 'snowball' }
+  | { kind: 'throw' }
   | { kind: 'none' };
 
 const COLLIDERS_SHUT = ch1Colliders(false);
@@ -207,6 +245,8 @@ export function createChapter1(playerIds: readonly string[], seed = 1): Ch1State
     yunaAway: 0,
     caughtPause: 0,
     caughtIds: [],
+    balls: [],
+    cansDown: false,
   };
 }
 
@@ -218,8 +258,9 @@ export function planAction(s: Ch1State, playerId: string): Ch1Action {
   // 대문 앞: 유나네는 열기(닫혀 있을 때만), 가짜 집은 덜컹
   const gate = gateNear(p);
   if (gate && !(gate.id === 'yuna' && s.gateOpen)) return { kind: 'gate', gateId: gate.id };
-  // 종: 유나가 창가에 있을 때만(떠나 있는 동안은 울려도 소용없다)
-  if (atBell(p) && !s.yunaAway) return { kind: 'bell' };
+  // 눈뭉치: 쥐고 있으면 던지기(누르고 있으면 힘이 모인다), 양동이 앞이면 집기
+  if (p.snowball) return { kind: 'throw' };
+  if (atBucket(p)) return { kind: 'snowball' };
   const held = s.items.find((i) => i.carriedBy === playerId);
   if (held) {
     const a = planCarry(playerId, p, s.items, collidersOf(s), CH1_BOUNDS);
@@ -299,11 +340,12 @@ export function step(state: Ch1State, inputs: Record<string, SewingInput>, dt: n
         s = { ...s, gateOpen: true };
         fx.push({ type: 'gateOpened', playerId: p.id });
       } else fx.push({ type: 'gateLocked', playerId: p.id, gateId: a.gateId });
-    } else if (a.kind === 'bell') {
-      // 유나가 소리 나는 쪽으로 간다: 창이 빈다. 돌아오면 그림 그리기부터
-      s = { ...s, yunaAway: YUNA_AWAY };
-      s = { ...s, gazeShift: toNextAway(s) };
-      fx.push({ type: 'bell', playerId: p.id });
+    } else if (a.kind === 'snowball') {
+      s = { ...s, players: s.players.map((q) => (q.id === p.id ? { ...q, snowball: true, mapOpen: false } : q)) };
+      fx.push({ type: 'snowball', playerId: p.id });
+    } else if (a.kind === 'throw') {
+      // 힘 모으기 시작(떼는 순간 던진다)
+      if (p.charge === undefined) s = { ...s, players: s.players.map((q) => (q.id === p.id ? { ...q, charge: 0 } : q)) };
     } else if (a.kind === 'blocked') {
       fx.push({ type: 'blocked', playerId: p.id, itemId: a.itemId });
     } else if (a.kind === 'map') {
@@ -323,6 +365,42 @@ export function step(state: Ch1State, inputs: Record<string, SewingInput>, dt: n
       return { ...p, ...stepPlayer(p, move, dt, WORLD), crouching };
     }),
   };
+  // 2-1) 눈뭉치: 누르고 있는 동안 힘을 모으고, 떼면 던진다
+  for (const p of s.players) {
+    if (p.charge === undefined) continue;
+    const inp = inputs[p.id];
+    if (inp?.actionHeld && p.connected) {
+      s = { ...s, players: s.players.map((q) => (q.id === p.id ? { ...q, charge: Math.min(THROW.chargeSec, (q.charge ?? 0) + dt) } : q)) };
+      continue;
+    }
+    const power = Math.min(1, (p.charge ?? 0) / THROW.chargeSec);
+    const tg = throwTarget(p, power);
+    s = {
+      ...s,
+      players: s.players.map((q) => (q.id === p.id ? { ...q, charge: undefined, snowball: false } : q)),
+      balls: [...(s.balls ?? []), { from: p.id, x0: p.x, z0: p.z, x1: tg.x, z1: tg.z, t: 0, dur: 0.45 + tg.dist * 0.045 }],
+    };
+    fx.push({ type: 'throw', playerId: p.id, power });
+  }
+  // 2-2) 날아가는 눈뭉치: 떨어지면 깡통 탑을 맞혔나 본다
+  if (s.balls?.length) {
+    const c = W(CANS.s, CANS.t);
+    const flying: Snowball[] = [];
+    for (const b of s.balls) {
+      const n = { ...b, t: b.t + dt };
+      if (n.t < n.dur) {
+        flying.push(n);
+        continue;
+      }
+      if (Math.hypot(n.x1 - c.x, n.z1 - c.z) <= CANS.r && !s.cansDown && !s.yunaAway) {
+        // 와르르: 유나가 소리 나는 쪽으로 간다(창이 빈다). 돌아오면 그림 그리기부터
+        s = { ...s, cansDown: true, yunaAway: YUNA_AWAY };
+        s = { ...s, gazeShift: toNextAway(s) };
+        fx.push({ type: 'cansHit', playerId: n.from });
+      } else fx.push({ type: 'splat', x: n.x1, z: n.z1 });
+    }
+    s = { ...s, balls: flying };
+  }
   // 3) 든 선물은 든 요정을 따라간다
   s = {
     ...s,
@@ -345,6 +423,7 @@ export function step(state: Ch1State, inputs: Record<string, SewingInput>, dt: n
   if (s.yunaAway > 0) {
     // 종 소리에 창가를 떠나 있다: 시선 시계는 멈춘 채(돌아오면 그림 그리기부터)
     s = { ...s, yunaAway: Math.max(0, s.yunaAway - dt), gazeShift: s.gazeShift + dt };
+    if (s.yunaAway === 0) s = { ...s, cansDown: false }; // 돌아오는 사이 깡통이 다시 쌓여 있다
   } else if (!s.complete) {
     const gaze = gazeOf(s);
     if (gaze.phase === 'look') {
