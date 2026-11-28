@@ -121,8 +121,10 @@ export const CH1_HOUSES: readonly Ch1House[] = [
 /** 집 배율·반 크기·문 위치(유나네만 크다) */
 export const houseScaleOf = (h: Ch1House): number => HOUSE_SCALE * (h.yuna ? YUNA_HOUSE_K : 1);
 export const halfOf = (h: Ch1House): { w: number; d: number } => (h.yuna ? YUNA_HALF : HOUSE_HALF);
+/** 문 가운데(모델 단위): 집 모델의 문 마디 x 0.81은 경첩 쪽이라 문 가운데는 약 0.28(계단 가운데와 같다) */
+const DOOR_MID = 0.28 * HOUSE_SCALE;
 /** 유나네는 좌우를 뒤집어 세운다(문이 가운데 왼쪽, 창가가 오른쪽) */
-const doorOff = (h: Ch1House): number => (h.yuna ? -DOOR_OFF * YUNA_HOUSE_K : DOOR_OFF);
+const doorOff = (h: Ch1House): number => (h.yuna ? -DOOR_MID * YUNA_HOUSE_K : DOOR_OFF);
 
 export function houseById(id: string): Ch1House {
   return CH1_HOUSES.find((h) => h.id === id)!;
@@ -168,7 +170,7 @@ export function mailboxOf(h: Ch1House): { s: number; t: number } {
 
 /** 화분 자리: 문 왼쪽·오른쪽 1.7, 앞면에서 0.7 앞 */
 export function potOf(h: Ch1House): { s: number; t: number } {
-  return housePoint(h, halfOf(h).d + 0.7, doorOff(h) + (h.potSide === 'left' ? -1.7 : 1.7) * (h.yuna ? 1.6 : 1));
+  return housePoint(h, halfOf(h).d + 0.7, doorOff(h) + (h.potSide === 'left' ? -1.7 : 1.7) * (h.yuna ? 2.3 : 1));
 }
 
 /** 유나 창가(돌출 창): 문 왼쪽, 사진기 쪽 앞면 */
@@ -182,17 +184,11 @@ export const LANDMARKS = {
 };
 
 /**
- * 유나 이목 끌기(2026-11-28 사용자: "벨 누르는 미션보다 더 재밌을 만한 요소로"): **눈뭉치 던지기**.
- * 담 밖(윗길 왼쪽) 눈뭉치 양동이에서 눈뭉치를 집고, 행동 버튼을 누르고 있으면 힘이 모이고(땅에 떨어질 자리 표시) 떼면 던진다.
- * 마당 왼쪽 구석 나무틀에 매단 큰 종을 맞히면 댕그랑 → 유나가 소리 나는 쪽(옆방)으로 가 YUNA_AWAY초 창이 빈다.
- * (깡통 탑을 맞히는 안은 "실패하면 다시 쌓이는 게 어색하다"(2026-11-28 사용자)로 종으로 바꿨다. 종은 매달려 있어 몇 번이든 맞힐 수 있다)
+ * 유나 이목 끌기(2026-11-28 사용자): **눈뭉치로 초인종 맞히기**. 유나네 앞마당에서 빈손 행동 → 눈을 뭉쳐 눈뭉치를 쥔다.
+ * 행동 버튼을 누르고 있으면 힘이 모이고(땅에 떨어질 자리 표시) 떼면 던진다. 현관문 옆 초인종을 맞히면 띵동 → 유나가 창가를 떠나
+ * 현관으로 와 문을 열고 두리번거리다 들어간다(DOOR_TRIP). 선물을 다 놓은 뒤 초인종을 맞히면 유나가 문을 열고 선물을 발견한다(1장 끝).
+ * (종 누르기 → 깡통 탑 → 매단 종 → "종이 울린다고 자리를 비우는 게 이상하다" → 초인종)
  */
-export const SNOW_BUCKET = { s: YARD.front - 1.0, t: -8.6 };
-/** 양동이 앞에서 행동 버튼이 닿는 거리 */
-export const BUCKET_REACH = 1.6;
-/** 눈뭉치로 맞히는 종(나무틀) 자리, 맞힘 반지름, 종이 매달린 높이 */
-export const BELL_TARGET = { s: 50.6, t: -9.2, r: 1.0, y: 2.4 };
-/** 던지기: 힘 0이면 MIN m, 다 모으면(CHARGE_SEC초) MAX m. 종 쪽에서 ASSIST 라디안 안이면 종 쪽으로 */
 export const THROW = { min: 2.5, max: 13, chargeSec: 1.1, assist: 0.6 };
 
 /** 시작: 아치 아래쪽 눈길(광장에서 걸어 들어온 자리). 두 선물은 요정 발치에 */
@@ -315,10 +311,6 @@ function buildWalls(): Collider[] {
     const p = W(m.s, m.t);
     c.push({ kind: 'circle', x: p.x, z: p.z, r: 0.35 });
   }
-  const bp = W(SNOW_BUCKET.s, SNOW_BUCKET.t);
-  c.push({ kind: 'circle', x: bp.x, z: bp.z, r: 0.45 }); // 눈뭉치 양동이
-  const cp = W(BELL_TARGET.s, BELL_TARGET.t);
-  c.push({ kind: 'circle', x: cp.x, z: cp.z, r: 0.75 }); // 종 나무틀
   const pb = W(LANDMARKS.postBox.s, LANDMARKS.postBox.t);
   c.push({ kind: 'circle', x: pb.x, z: pb.z, r: 0.6 });
   return c;
@@ -364,7 +356,7 @@ export const GARDEN_PATH: readonly { s: number; t: number }[] = [
   { s: 48.8, t: -6.0 },
   { s: 52.6, t: -8.6 },
   { s: 56.0, t: -7.4 },
-  { s: YARD.back - 2.5, t: -3.4 },
+  { s: YARD.back - 2.5, t: -1.8 },
 ];
 
 /** 엄폐물 생김새 */
@@ -389,7 +381,14 @@ export const COVERS: readonly { id: string; kind: CoverKind; s: number; t: numbe
 export const BLIND = { s0: YARD.back - 1.5, t0: YUNA_WINDOW.t - 2.0, t1: YUNA_WINDOW.t + 2.0 };
 
 /** 현관 발판(선물을 놓는 곳): 문 앞 */
-export const PORCH = { s: YARD.back - 1.9, t: -DOOR_OFF * YUNA_HOUSE_K, hs: 1.2, ht: 1.8 };
+export const PORCH = { s: YARD.back - 1.9, t: -DOOR_MID * YUNA_HOUSE_K, hs: 1.2, ht: 1.8 };
+
+/** 초인종: 현관문 오른쪽 벽(창가 쪽), 버튼 높이 y. 눈뭉치가 떨어질 곳이 반지름 r 안이면 맞힌다 */
+export const DOORBELL = { s: YARD.back - 0.1, t: PORCH.t + 1.9, y: 3.2, r: 1.1 };
+/** 현관에 나온 유나의 눈(문간): 두리번거릴 때 여기서 마당을 본다 */
+export const DOOR_EYE = { s: YARD.back - 1.2, t: PORCH.t };
+/** 초인종에 유나가 나왔다 들어가는 시간표(초): 현관으로 걸어감 → 문 열고 두리번 → 문 닫고 창가로 */
+export const DOOR_TRIP = { toDoor: 2.5, atDoor: 3.5, back: 3.5 };
 
 /** 들킨 요정이 돌아가는 곳: 엄폐물에 숨은 적이 없으면 대문 밖 */
 export const OUTSIDE_GATE = { s: YARD.front - 1.4, t: (YARD.gate[0] + YARD.gate[1]) / 2 };

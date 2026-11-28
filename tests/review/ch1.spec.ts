@@ -35,8 +35,8 @@ test('1장 장면', async ({ page }) => {
     ['f_yunaGate', 40.4, 7.4],
     ['g_inyard', 44.6, 5.6],
     ['g2_midyard', 50.5, -5.5],
-    ['h_bucket', 41.0, -7.0],
-    ['i_porch', 56.6, -2.6],
+    ['h_yardWide', 49.0, 0.0],
+    ['i_porch', 56.6, -0.8],
   ];
   for (const [name, s, t] of spots) {
     await hook(page, 'debugPlace', 'p0', s, t, Math.PI);
@@ -68,26 +68,30 @@ test('1장 장면', async ({ page }) => {
   await page.screenshot({ path: `${OUT}/g3_crouch.png` });
   await page.keyboard.up('KeyC');
   await page.keyboard.up('ShiftRight');
-  // 눈뭉치: 2P가 담 밖 양동이에서 쥐고, 힘 모으기(떨어질 자리 표시) → 던지기 → 종 댕그랑
-  await hook(page, 'debugPlace', 'p0', 40.2, -4.6, Math.PI);
-  await hook(page, 'debugPlace', 'p1', 40.8, -8.6, Math.PI * 1.25);
+  // 초인종: 2P가 앞마당 가운데에서 눈을 뭉쳐(Enter), 누르고 있다(떨어질 자리 표시) 떼어 던진다. 1P는 개집 뒤에 앉아 있다
+  await hook(page, 'debugPlace', 'p0', 46.3, 1.3, Math.PI * 1.25);
+  await hook(page, 'debugPlace', 'p1', 50, 2, Math.PI * 1.25);
   await page.waitForTimeout(800);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(400);
   await page.screenshot({ path: `${OUT}/h_snowball.png` });
   await page.keyboard.down('Enter');
-  await page.waitForTimeout(450);
+  await page.waitForTimeout(500);
   await page.screenshot({ path: `${OUT}/h2_charge.png` });
   await page.keyboard.up('Enter');
   await page.waitForTimeout(250);
   await page.screenshot({ path: `${OUT}/h2b_flying.png` });
-  await page.waitForTimeout(1500);
-  await page.screenshot({ path: `${OUT}/h3_afterThrow.png` });
-  // (빗나갔어도 촬영용으로 종을 맞힌 장면: 시험 창구 hitBell)
-  await page.evaluate(() => (window as unknown as { __lastgift: { hitBell?(): void } }).__lastgift.hitBell?.());
-  await page.waitForTimeout(500);
-  await page.screenshot({ path: `${OUT}/h3b_bellRing.png` });
-  await page.waitForTimeout(7000);
+  // (빗나갔어도 촬영용으로 초인종을 맞힌 장면: 시험 창구 hitDoorbell) → 유나가 현관으로 → 문 열고 두리번
+  await hook(page, 'debugPlace', 'p1', 41.5, -1.5, Math.PI * 1.25); // 2P는 담 밖으로
+  await page.keyboard.down('KeyC');
+  await page.evaluate(() => (window as unknown as { __lastgift: { hitDoorbell?(): void } }).__lastgift.hitDoorbell?.());
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${OUT}/h3_doorbell.png` });
+  await page.waitForFunction(() => (window as unknown as { __lastgift: { gaze(): { phase: string } } }).__lastgift.gaze().phase === 'door', null, { timeout: 15_000 });
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: `${OUT}/h3b_atDoor.png` });
+  await page.keyboard.up('KeyC');
+  await page.waitForTimeout(8000);
   // 들킴: 유나가 창밖을 볼 때 앞마당에서 걷는다 → 검은 화면
   await page.waitForTimeout(7000);
   const look = await page.evaluate(() => {
@@ -112,7 +116,7 @@ test('1장 장면', async ({ page }) => {
   await page.screenshot({ path: `${OUT}/h6_backAtGate.png` });
   // 현관 발판에서 자루를 풀어 두 선물을 꺼낸다
   await hook(page, 'setTime', 0.1);
-  await hook(page, 'debugPlace', 'p0', 56.8, -2.1, Math.PI * 1.25);
+  await hook(page, 'debugPlace', 'p0', 56.8, -0.8, Math.PI * 1.25);
   await hook(page, 'debugPlace', 'p1', 55.4, -6.0, Math.PI * 1.25);
   await page.waitForTimeout(1200);
   await page.keyboard.press('KeyE');

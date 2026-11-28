@@ -141,8 +141,8 @@ describe('1장 규칙', () => {
   });
 });
 
-import { atBucket, gazeAt, gazeOf, hiddenFromWindow, throwTarget, CAUGHT_PAUSE, GAZE, LOOK_GRACE, YUNA_AWAY } from '../../src/core/chapter1';
-import { BELL_TARGET, COVERS, GARDEN_PATH, OUTSIDE_GATE, PORCH, SNOW_BUCKET, THROW, YUNA_EYE, inPorch } from '../../src/data/chapter1';
+import { gazeAt, gazeOf, hiddenFromDoor, hiddenFromWindow, throwTarget, CAUGHT_PAUSE, DOOR_GRACE, GAZE, LOOK_GRACE, YUNA_AWAY } from '../../src/core/chapter1';
+import { COVERS, DOOR_EYE, DOOR_TRIP, DOORBELL, GARDEN_PATH, OUTSIDE_GATE, PORCH, THROW, YUNA_EYE, inPorch } from '../../src/data/chapter1';
 
 /** 골목 좌표에 요정을 세운 상태 */
 function at(s: Ch1State, id: string, ls: number, lt: number, facing = Math.PI * 1.25): Ch1State {
@@ -160,6 +160,30 @@ function looking(seed = 7): Ch1State {
   return { ...s, gateOpen: true, time: firstLook(seed) + LOOK_GRACE + 0.05 };
 }
 const walkRight = { ...idle, move: { x: 1, y: 0 } };
+/** 눈뭉치를 쥔 요정이 초인종까지 거리에 맞게 누르고 있다가 뗀다 */
+function throwAt(s0: Ch1State, id: 'p0' | 'p1'): Ch1State {
+  let s = s0;
+  const p = s.players.find((q) => q.id === id)!;
+  const c = W(DOORBELL.s, DOORBELL.t);
+  const power = (Math.hypot(c.x - p.x, c.z - p.z) - THROW.min) / (THROW.max - THROW.min);
+  const tg = throwTarget(p, power);
+  expect(Math.hypot(tg.x - c.x, tg.z - c.z)).toBeLessThan(DOORBELL.r * 0.5); // 대략 집 쪽을 보면 초인종 쪽으로 맞춰 준다
+  const held = { ...idle, actionHeld: true };
+  const inp = (x: typeof idle) => (id === 'p0' ? { p0: x, p1: idle } : { p0: idle, p1: x });
+  s = step(s, inp({ ...held, actionDown: true }), DT).state;
+  for (let i = 1; i < Math.round((power * THROW.chargeSec) / DT); i++) s = step(s, inp(held), DT).state;
+  return step(s, inp(idle), DT).state;
+}
+/** 날아가는 눈뭉치가 떨어질 때까지(그 사건이 나오면 hit) */
+function flyUntil(s0: Ch1State, type: string): { state: Ch1State; hit: boolean } {
+  let s = s0;
+  for (let i = 0; i < 180; i++) {
+    const r = step(s, { p0: idle, p1: idle }, DT);
+    s = r.state;
+    if (r.events.some((e) => e.type === type)) return { state: s, hit: true };
+  }
+  return { state: s, hit: false };
+}
 const behind = (c: (typeof COVERS)[number]) => {
   const ds = c.s - YUNA_EYE.s, dt = c.t - YUNA_EYE.t, l = Math.hypot(ds, dt);
   return { s: c.s + (ds / l) * (c.r + 0.5), t: c.t + (dt / l) * (c.r + 0.5) };
@@ -188,7 +212,7 @@ describe('1장 들키지 않기(무궁화 꽃이 피었습니다 + 종)', () => 
     expect(hiddenFromWindow(W(46, 0))).toBe(false);
     expect(hiddenFromWindow(W(YUNA_EYE.s - 0.9, YUNA_EYE.t + 0.5))).toBe(true);
     expect(hiddenFromWindow(W(40, 0))).toBe(true);
-    expect(hiddenFromWindow(W(SNOW_BUCKET.s - 0.8, SNOW_BUCKET.t))).toBe(true); // 눈뭉치 양동이는 담 밖
+    expect(hiddenFromWindow(W(41, -8))).toBe(true); // 담 밖
   });
   it('창밖을 보는 동안: 앞마당에서 움직이면 들키고, 멈춰 있으면 괜찮다', () => {
     let s = at(looking(), 'p0', 46, 0);
@@ -238,67 +262,65 @@ describe('1장 들키지 않기(무궁화 꽃이 피었습니다 + 종)', () => 
     expect(gazeOf(s).phase).toBe('away');
     expect(s.caughtIds).toEqual([]);
   });
-  it('눈뭉치: 양동이 앞 행동으로 쥐고, 누르고 있으면 힘이 모이고, 떼면 던진다. 종을 맞히면 댕그랑 → 유나가 창가를 떠나 창이 빈다(그동안 움직여도 안 들킨다), 돌아오면 유나는 그림부터', () => {
-    // 양동이 앞에서 종 쪽(위)을 본다
-    let s = at(looking(), 'p1', SNOW_BUCKET.s - 0.7, SNOW_BUCKET.t, Math.PI * 1.25);
-    expect(atBucket(s.players[1]!)).toBe(true);
+  it('초인종: 앞마당 빈손 행동으로 눈을 뭉치고, 누르고 있다 떼어 던져 초인종을 맞히면 띵동 → 유나가 현관으로(창이 빔) → 문을 열고 두리번(엄폐물 뒤에 앉지 않으면 멈춰 있어도 들킴) → 들어가 창가에서 그림부터', () => {
+    // p1: 앞마당 가운데에서 집 쪽(위)을 본다
+    let s = at(looking(), 'p1', 50, 2, Math.PI * 1.25);
+    s = at(s, 'p0', 40, -2); // 담 밖
     expect(planAction(s, 'p1')).toEqual({ kind: 'snowball' });
-    let r = step(s, { p0: idle, p1: { ...idle, actionDown: true } }, DT);
-    expect(r.events).toEqual([{ type: 'snowball', playerId: 'p1' }]);
-    s = r.state;
+    s = step(s, { p0: idle, p1: { ...idle, actionDown: true } }, DT).state;
     expect(s.players[1]!.snowball).toBe(true);
-    expect(planAction(s, 'p1')).toEqual({ kind: 'throw' });
-    // 종까지 거리에 맞는 힘을 계산해 그만큼 누르고 있다가 뗀다
-    const p1 = s.players[1]!;
-    const c = W(BELL_TARGET.s, BELL_TARGET.t);
-    const dist = Math.hypot(c.x - p1.x, c.z - p1.z);
-    const power = (dist - THROW.min) / (THROW.max - THROW.min);
-    const tg = throwTarget(p1, power);
-    expect(Math.hypot(tg.x - c.x, tg.z - c.z)).toBeLessThan(BELL_TARGET.r * 0.5); // 대략 위쪽을 보면 종 쪽으로 맞춰 준다
-    const holdSteps = Math.round((power * THROW.chargeSec) / DT);
-    r = step(s, { p0: idle, p1: { ...idle, actionDown: true, actionHeld: true } }, DT);
+    s = throwAt(s, 'p1');
+    let r = flyUntil(s, 'doorbell');
     s = r.state;
-    for (let i = 1; i < holdSteps; i++) s = step(s, { p0: idle, p1: { ...idle, actionHeld: true } }, DT).state;
-    r = step(s, { p0: idle, p1: idle }, DT);
-    expect(r.events.some((e) => e.type === 'throw')).toBe(true);
-    s = r.state;
-    expect(s.players[1]!.snowball).toBe(false);
-    let hit = false;
-    for (let i = 0; i < 120 && !hit; i++) {
-      r = step(s, { p0: idle, p1: idle }, DT);
-      s = r.state;
-      hit = r.events.some((e) => e.type === 'bellHit');
-    }
-    expect(hit).toBe(true);
+    expect(r.hit).toBe(true);
     expect(gazeOf(s).phase).toBe('gone');
-    // 그동안 마당에서 움직여도 안 들킨다
-    s = at(s, 'p0', 46, 0);
+    // 현관까지 걸어오는 동안(창이 빔) 마당에서 움직여도 괜찮다
     let caught = false;
-    for (let i = 0; i < Math.round((YUNA_AWAY - 1) / DT); i++) {
-      const q = step(s, { p0: { ...idle, move: { x: i % 120 < 60 ? 1 : -1, y: 0 } }, p1: idle }, DT);
+    for (let i = 0; i < Math.round((DOOR_TRIP.toDoor - 0.2) / DT); i++) {
+      const q = step(s, { p0: idle, p1: { ...idle, move: { x: i % 60 < 30 ? 1 : -1, y: 0 } } }, DT);
       s = q.state;
       if (q.events.some((e) => e.type === 'caught')) caught = true;
     }
     expect(caught).toBe(false);
-    for (let i = 0; i < 90; i++) s = step(s, { p0: idle, p1: idle }, DT).state;
+    // 문을 연다: p1이 마당 한가운데 서 있으면(멈춰 있어도) 두리번거리다 들킨다
+    const ev: string[] = [];
+    for (let i = 0; i < Math.round((0.4 + DOOR_GRACE + 0.2) / DT); i++) {
+      const q = step(s, { p0: idle, p1: idle }, DT);
+      s = q.state;
+      ev.push(...q.events.map((e) => e.type));
+    }
+    expect(ev).toContain('doorOpen');
+    expect(ev).toContain('caught');
+  });
+  it('문간에서 두리번거릴 때 엄폐물 뒤에 앉아 있으면 안 들킨다. 다 끝나면 창가에서 그림부터', () => {
+    let s = looking();
+    // 문간에서 본 엄폐물 바로 뒤(창 쪽 엄폐물 중 문간에서도 가리는 것)를 찾는다
+    const spot = COVERS.map((c) => {
+      const ds = c.s - DOOR_EYE.s, dt = c.t - DOOR_EYE.t, l = Math.hypot(ds, dt);
+      return { s: c.s + (ds / l) * (c.r + 0.5), t: c.t + (dt / l) * (c.r + 0.5) };
+    }).find((b) => hiddenFromDoor({ ...W(b.s, b.t), crouching: true }))!;
+    expect(spot).toBeTruthy();
+    s = at(s, 'p0', spot.s, spot.t);
+    s = at(s, 'p1', 40, -2);
+    s = { ...s, yunaAway: YUNA_AWAY, gazeShift: s.time }; // 방금 초인종이 울렸다
+    let caught = false;
+    for (let i = 0; i < Math.round((YUNA_AWAY + 0.5) / DT); i++) {
+      const q = step(s, { p0: { ...idle, crouch: true }, p1: idle }, DT);
+      s = q.state;
+      if (q.events.some((e) => e.type === 'caught')) caught = true;
+    }
+    expect(caught).toBe(false);
     expect(gazeOf(s).phase).toBe('away');
   });
   it('눈뭉치가 빗나가면 퍽(유나는 그대로), 살짝 누르면 가까이 떨어진다', () => {
-    let s = at(looking(), 'p1', SNOW_BUCKET.s - 0.7, SNOW_BUCKET.t, Math.PI * 1.25);
+    let s = at(looking(), 'p1', 50, 2, Math.PI * 1.25);
     s = step(s, { p0: idle, p1: { ...idle, actionDown: true } }, DT).state;
     s = step(s, { p0: idle, p1: { ...idle, actionDown: true, actionHeld: true } }, DT).state;
-    let r = step(s, { p0: idle, p1: idle }, DT);
-    s = r.state;
-    let splat = false;
-    for (let i = 0; i < 120 && !splat; i++) {
-      r = step(s, { p0: idle, p1: idle }, DT);
-      s = r.state;
-      splat = r.events.some((e) => e.type === 'splat');
-    }
-    expect(splat).toBe(true);
-    expect(s.yunaAway).toBe(0);
+    const r = flyUntil(step(s, { p0: idle, p1: idle }, DT).state, 'splat');
+    expect(r.hit).toBe(true);
+    expect(r.state.yunaAway).toBe(0);
   });
-  it('현관 발판에서 자루를 열면 두 선물을 꺼내 놓고(다시 못 집음, 빈 자루는 그대로 멘다), 모두 앞마당 밖으로 물러나면 완료(한 번만)', () => {
+  it('현관 발판에서 자루를 열면 두 선물을 한 번에 꺼내 놓고(다시 못 집음, 빈 자루는 그대로 멘다), 그 뒤 초인종을 울리면 유나가 문을 열고 발견 → 완료(한 번만)', () => {
     let s = createChapter1(['p0', 'p1'], 7);
     s = { ...s, time: 0 };
     const facePorch = Math.PI * 1.25; // 화면 위(집 쪽)를 본다
@@ -313,11 +335,21 @@ describe('1장 들키지 않기(무궁화 꽃이 피었습니다 + 종)', () => 
     expect(s.items.find((i) => i.id === SACK)!.carriedBy).toBe('p0');
     // 한 번 더 눌러도 다시 꺼내지 않는다
     expect(step(s, { p0: { ...idle, actionDown: true }, p1: idle }, DT).events.some((e) => e.type === 'placed')).toBe(false);
-    expect(s.complete).toBe(false); // 아직 앞마당 안
+    // 물러나기만 해서는 끝나지 않는다
     s = at(s, 'p0', 40, 8);
     s = at(s, 'p1', 40, 9.5);
     r = step(s, { p0: idle, p1: idle }, DT);
-    expect(r.events.filter((e) => e.type === 'complete').length).toBe(1);
-    expect(step(r.state, { p0: idle, p1: idle }, DT).events.some((e) => e.type === 'complete')).toBe(false);
+    expect(r.events.some((e) => e.type === 'complete')).toBe(false);
+    // 초인종 → 문을 열고 발견 → 완료(한 번만)
+    s = { ...r.state, yunaAway: YUNA_AWAY, gazeShift: r.state.time };
+    const ev: { type: string; found?: boolean }[] = [];
+    for (let i = 0; i < Math.round((DOOR_TRIP.toDoor + 0.5) / DT); i++) {
+      const q = step(s, { p0: idle, p1: idle }, DT);
+      s = q.state;
+      ev.push(...(q.events as { type: string; found?: boolean }[]));
+    }
+    expect(ev.filter((e) => e.type === 'complete').length).toBe(1);
+    expect(ev.find((e) => e.type === 'doorOpen')!.found).toBe(true);
+    expect(s.complete).toBe(true);
   });
 });

@@ -13,9 +13,12 @@
 //   **앉아 있거나**(앉기 키·단추, 앉으면 느리게 걷는다: 엄폐물 뒤에서 앉은 채 살금살금은 괜찮다), 창 바로 아래면 괜찮다. 돌아본 첫 LOOK_GRACE초는 봐준다(멈출 틈).
 //   들키면 화면이 잠깐 까맣게 바뀌고(CAUGHT_PAUSE초, 모두 멈춤) 들킨 요정은 대문 앞으로 돌아가 있다. 유나는 다시 그림을 그린다.
 //   든 것은 그대로, 팀 시계도 그대로. 예전 망보는 자리·손 신호·눈 표시·작은 엿보기 화면은 없앴다.
-// - 눈뭉치 던지기(담 밖 양동이 → 마당 왼쪽 구석 나무틀의 종): 양동이 앞 행동 → 눈뭉치를 쥔다. 쥔 채 행동 버튼을 누르고 있으면 힘이 모이고
-//   떼면 바라보는 쪽(종 쪽 가까우면 종 쪽)으로 던진다. 종을 맞히면 댕그랑 → 유나가 창가를 떠나 YUNA_AWAY초 동안 창이 빈다
-//   (그동안은 아무도 들키지 않는다, 떠나 있을 때 맞히면 종만 울린다). 돌아오면 유나는 그림부터. 빗나가면 퍽(다시 던지면 된다).
+// - 초인종(2026-11-28 사용자 결정): 유나네 앞마당에서 빈손(자루를 멘 요정도) 행동 → 눈을 뭉쳐 눈뭉치를 쥔다. 쥔 채 누르고 있으면 힘이 모이고
+//   떼면 바라보는 쪽(초인종 쪽 가까우면 초인종 쪽)으로 던진다. 현관문 옆 초인종을 맞히면 띵동 → 유나가 창가를 떠나(DOOR_TRIP)
+//   현관으로 걸어와(창이 빈다) → 문을 열고 두리번거린다(이때는 앞마당에서 엄폐물 뒤에 앉아 있지 않으면 멈춰 있어도 들킨다)
+//   → 문을 닫고 창가로 돌아간다(창이 빈다). 빗나가면 퍽(다시 던지면 된다).
+// - 두 선물은 자루째 현관에서 한 번에 꺼내 놓는다(하나만 놓인 채 들킬 일이 없다). 선물을 다 놓은 뒤 초인종을 울리면
+//   유나가 문을 열고 선물을 발견한다 → 1장 완료(예전 "모두 앞마당 밖으로 물러나면 완료"는 없앴다).
 // - 현관 발판에 선물을 내려놓으면 그 자리에 고정. 둘 다 놓고 모두 앞마당 밖으로 물러나면 1장 완료(한 번만).
 import { applyAction, chooseTarget, planAction as planCarry, PICK_RANGE, type Item } from './carry';
 import { stepPlayer, type PlayerState, type World } from './player';
@@ -26,9 +29,9 @@ import {
   CH1_START,
   COVERS,
   gateNear,
-  BUCKET_REACH,
-  BELL_TARGET,
-  SNOW_BUCKET,
+  DOORBELL,
+  DOOR_EYE,
+  DOOR_TRIP,
   THROW,
   OUTSIDE_GATE,
   PORCH,
@@ -97,14 +100,14 @@ export interface Snowball {
   z1: number;
   t: number;
   dur: number;
-  /** 종에 맞는다(떨어지는 곳이 종 아래): 그림은 종 높이에서 끝난다 */
+  /** 초인종에 맞는다(떨어지는 곳이 초인종 아래): 그림은 초인종 높이에서 끝난다 */
   hit: boolean;
 }
 
-/** 이 요정이 힘 power(0~1)로 던지면 떨어질 곳(바라보는 쪽, 종 쪽에 가까우면 종 쪽으로 맞춰 준다) */
+/** 이 요정이 힘 power(0~1)로 던지면 떨어질 곳(바라보는 쪽, 초인종 쪽에 가까우면 초인종 쪽으로 맞춰 준다) */
 export function throwTarget(p: { x: number; z: number; facing: number }, power: number): { x: number; z: number; dist: number } {
   const dist = THROW.min + (THROW.max - THROW.min) * Math.min(1, Math.max(0, power));
-  const c = W(BELL_TARGET.s, BELL_TARGET.t);
+  const c = W(DOORBELL.s, DOORBELL.t);
   const toC = Math.atan2(c.x - p.x, c.z - p.z);
   let d = toC - p.facing;
   d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -113,10 +116,13 @@ export function throwTarget(p: { x: number; z: number; facing: number }, power: 
 }
 
 // ── 유나 시선 ────────────────────────────────────────────
-/** away: 등지고 그림, turn: 일어나 돌아서기(예고), look: 창밖 보기, back: 다시 앉기, gone: 종 소리에 창가를 떠남 */
-export type GazePhase = 'away' | 'turn' | 'look' | 'back' | 'gone';
-/** 종 소리에 창가를 비우는 초 */
-export const YUNA_AWAY = 8;
+/** away: 등지고 그림, turn: 일어나 돌아서기(예고), look: 창밖 보기, back: 다시 앉기,
+ *  gone: 초인종에 현관으로 가거나 돌아가는 중(창이 빈다), door: 현관문을 열고 두리번(문간에서 마당을 본다) */
+export type GazePhase = 'away' | 'turn' | 'look' | 'back' | 'gone' | 'door';
+/** 초인종에 창가를 비우는 모두의 초(현관까지 + 문간 + 돌아가기) */
+export const YUNA_AWAY = DOOR_TRIP.toDoor + DOOR_TRIP.atDoor + DOOR_TRIP.back;
+/** 문간에서 두리번거리기 시작한 뒤 봐주는 시간(초) */
+export const DOOR_GRACE = 0.4;
 /** 들킴 암전: 어두워짐 → 깜깜(이때 대문 앞으로) → 밝아짐 */
 export const CAUGHT_PAUSE = 1.6;
 const CAUGHT_SWAP = 0.8; // 남은 시간이 이만큼이면(가장 깜깜할 때) 옮긴다
@@ -143,7 +149,14 @@ export function gazeAt(t: number, seed: number): { phase: GazePhase; k: number; 
 
 /** 지금 유나 시선(종 소리에 떠나 있으면 gone) */
 export function gazeOf(s: Pick<Ch1State, 'time' | 'seed' | 'gazeShift' | 'yunaAway'>): { phase: GazePhase; k: number; left: number } {
-  if (s.yunaAway > 0) return { phase: 'gone', k: 1 - s.yunaAway / YUNA_AWAY, left: s.yunaAway };
+  if (s.yunaAway > 0) {
+    const u = YUNA_AWAY - s.yunaAway; // 초인종 뒤 지난 초
+    if (u >= DOOR_TRIP.toDoor && u < DOOR_TRIP.toDoor + DOOR_TRIP.atDoor) {
+      const k = (u - DOOR_TRIP.toDoor) / DOOR_TRIP.atDoor;
+      return { phase: 'door', k, left: DOOR_TRIP.toDoor + DOOR_TRIP.atDoor - u };
+    }
+    return { phase: 'gone', k: 1 - s.yunaAway / YUNA_AWAY, left: s.yunaAway };
+  }
   return gazeAt(s.time - (s.gazeShift ?? 0), s.seed);
 }
 
@@ -158,16 +171,10 @@ function toNextAway(s: Ch1State): number {
   return s.time - gt;
 }
 
-/** 떨어질 곳이 종 아래(맞힘 반지름 안)인가 */
-export function isBellHit(p: { x: number; z: number }): boolean {
-  const c = W(BELL_TARGET.s, BELL_TARGET.t);
-  return Math.hypot(p.x - c.x, p.z - c.z) <= BELL_TARGET.r;
-}
-
-/** 이 요정이 눈뭉치 양동이 앞에 있는가 */
-export function atBucket(p: { x: number; z: number }): boolean {
-  const { s, t } = toLane(p);
-  return Math.hypot(s - SNOW_BUCKET.s, t - SNOW_BUCKET.t) <= BUCKET_REACH;
+/** 떨어질 곳이 초인종 아래(맞힘 반지름 안)인가 */
+export function isDoorbellHit(p: { x: number; z: number }): boolean {
+  const c = W(DOORBELL.s, DOORBELL.t);
+  return Math.hypot(p.x - c.x, p.z - c.z) <= DOORBELL.r;
 }
 
 /** 앉아 걷는 빠르기(서서 걷기의 배) */
@@ -178,14 +185,26 @@ export function hiddenFromWindow(p: { x: number; z: number; crouching?: boolean 
   if (!inYunasYard(p)) return true;
   const { s, t } = toLane(p);
   if (s >= BLIND.s0 && t >= BLIND.t0 && t <= BLIND.t1) return true;
-  // 창 → 요정 선이 엄폐물을 지나고, 요정이 그 엄폐물 바로 뒤에 앉아 있다(서 있으면 머리가 보인다)
-  if (!p.crouching) return false;
+  return behindCover(s, t, YUNA_EYE, !!p.crouching);
+}
+
+/** 현관문간(두리번거리는 유나)에서 이 요정이 보이지 않는가(엄폐물 뒤에서 앉아 있음, 앞마당 밖) */
+export function hiddenFromDoor(p: { x: number; z: number; crouching?: boolean }): boolean {
+  if (!inYunasYard(p)) return true;
+  const { s, t } = toLane(p);
+  return behindCover(s, t, DOOR_EYE, !!p.crouching);
+}
+
+/** 눈(eye) → 요정 선이 엄폐물을 지나고, 요정이 그 엄폐물 바로 뒤에 앉아 있다 */
+function behindCover(s: number, t: number, eye: { s: number; t: number }, crouching: boolean): boolean {
+  // 서 있으면 머리가 보인다
+  if (!crouching) return false;
+  const ds = s - eye.s, dt = t - eye.t;
+  const len2 = ds * ds + dt * dt;
   for (const c of COVERS) {
-    const ds = s - YUNA_EYE.s, dt = t - YUNA_EYE.t;
-    const len2 = ds * ds + dt * dt;
-    const u = ((c.s - YUNA_EYE.s) * ds + (c.t - YUNA_EYE.t) * dt) / len2;
+    const u = ((c.s - eye.s) * ds + (c.t - eye.t) * dt) / len2;
     if (u <= 0 || u >= 1) continue;
-    const px = YUNA_EYE.s + ds * u - c.s, pt = YUNA_EYE.t + dt * u - c.t;
+    const px = eye.s + ds * u - c.s, pt = eye.t + dt * u - c.t;
     const behind = Math.hypot(s - c.s, t - c.t);
     if (Math.hypot(px, pt) < c.r && behind < c.r + 1.9) return true;
   }
@@ -207,7 +226,8 @@ export type Ch1Event =
   | { type: 'gateLocked'; playerId: string; gateId: string }
   | { type: 'snowball'; playerId: string }
   | { type: 'throw'; playerId: string; power: number }
-  | { type: 'bellHit'; playerId: string }
+  | { type: 'doorbell'; playerId: string }
+  | { type: 'doorOpen'; found: boolean }
   | { type: 'splat'; x: number; z: number }
   | { type: 'complete' };
 
@@ -263,17 +283,22 @@ export function planAction(s: Ch1State, playerId: string): Ch1Action {
   // 대문 앞: 유나네는 열기(닫혀 있을 때만), 가짜 집은 덜컹
   const gate = gateNear(p);
   if (gate && !(gate.id === 'yuna' && s.gateOpen)) return { kind: 'gate', gateId: gate.id };
-  // 눈뭉치: 쥐고 있으면 던지기(누르고 있으면 힘이 모인다), 양동이 앞이면 집기
+  // 눈뭉치: 쥐고 있으면 던지기(누르고 있으면 힘이 모인다)
   if (p.snowball) return { kind: 'throw' };
-  if (atBucket(p)) return { kind: 'snowball' };
+  const yard = inYunasYard(p);
   const held = s.items.find((i) => i.carriedBy === playerId);
   if (held) {
     const a = planCarry(playerId, p, s.items, collidersOf(s), CH1_BOUNDS);
-    if (a.kind === 'drop') return inPorch(a) ? { kind: 'place', itemId: a.itemId } : { kind: 'drop', itemId: a.itemId };
+    if (a.kind === 'drop' && inPorch(a)) return { kind: 'place', itemId: a.itemId };
+    // 등에 멘 자루는 손이 비어 있다: 앞마당에서는 눈을 뭉친다(현관에서는 꺼내기)
+    if (held.id === SACK && yard) return { kind: 'snowball' };
+    if (a.kind === 'drop') return { kind: 'drop', itemId: a.itemId };
     return { kind: 'blocked', itemId: held.id };
   }
   const t = chooseTarget(p, s.items.filter((i) => !s.placed.includes(i.id) && !(s.packed && i.id !== SACK)));
   if (t && Math.hypot(t.x - p.x, t.z - p.z) <= PICK_RANGE) return { kind: 'pick', itemId: t.id };
+  // 유나네 앞마당: 빈손이면 눈을 뭉친다(지도는 앞마당 밖에서)
+  if (yard) return { kind: 'snowball' };
   // 빈손이고 집을 것이 없다 → 지도를 편다
   return { kind: 'map', open: true };
 }
@@ -383,7 +408,7 @@ export function step(state: Ch1State, inputs: Record<string, SewingInput>, dt: n
     s = {
       ...s,
       players: s.players.map((q) => (q.id === p.id ? { ...q, charge: undefined, snowball: false } : q)),
-      balls: [...(s.balls ?? []), { from: p.id, x0: p.x, z0: p.z, x1: tg.x, z1: tg.z, t: 0, dur: 0.45 + tg.dist * 0.045, hit: isBellHit(tg) }],
+      balls: [...(s.balls ?? []), { from: p.id, x0: p.x, z0: p.z, x1: tg.x, z1: tg.z, t: 0, dur: 0.45 + tg.dist * 0.045, hit: isDoorbellHit(tg) }],
     };
     fx.push({ type: 'throw', playerId: p.id, power });
   }
@@ -397,12 +422,12 @@ export function step(state: Ch1State, inputs: Record<string, SewingInput>, dt: n
         continue;
       }
       if (n.hit) {
-        // 댕그랑: 유나가 소리 나는 쪽으로 간다(창이 빈다). 이미 떠나 있으면 종만 울린다. 돌아오면 그림 그리기부터
+        // 띵동: 유나가 창가를 떠나 현관으로 온다. 이미 나와 있으면 초인종만 울린다. 돌아가면 그림 그리기부터
         if (!s.yunaAway) {
           s = { ...s, yunaAway: YUNA_AWAY };
           s = { ...s, gazeShift: toNextAway(s) };
         }
-        fx.push({ type: 'bellHit', playerId: n.from });
+        fx.push({ type: 'doorbell', playerId: n.from });
       } else fx.push({ type: 'splat', x: n.x1, z: n.z1 });
     }
     s = { ...s, balls: flying };
@@ -427,8 +452,29 @@ export function step(state: Ch1State, inputs: Record<string, SewingInput>, dt: n
   // 5) 유나 시선(무궁화 꽃이 피었습니다): 창밖을 보는 동안 앞마당에서 움직인 요정은 들킨다(멈춰 있거나 엄폐물 뒤면 괜찮다)
   s = { ...s, time: s.time + dt };
   if (s.yunaAway > 0) {
-    // 종 소리에 창가를 떠나 있다: 시선 시계는 멈춘 채(돌아오면 그림 그리기부터)
+    // 초인종에 창가를 떠나 있다: 시선 시계는 멈춘 채(돌아오면 그림 그리기부터)
+    const before = gazeOf(s);
     s = { ...s, yunaAway: Math.max(0, s.yunaAway - dt), gazeShift: s.gazeShift + dt };
+    const now = gazeOf(s);
+    if (now.phase === 'door' && before.phase !== 'door' && !s.complete) {
+      // 문을 열었다: 선물이 다 놓여 있으면 발견 → 1장 완료
+      const found = s.placed.length === CH1_START.items.length;
+      fx.push({ type: 'doorOpen', found });
+      if (found) {
+        s = { ...s, complete: true };
+        fx.push({ type: 'complete' });
+      }
+    }
+    if (now.phase === 'door' && !s.complete && now.k * DOOR_TRIP.atDoor >= DOOR_GRACE) {
+      // 문간에서 두리번: 앞마당에서 엄폐물 뒤에 앉아 있지 않으면(멈춰 있어도) 들킨다
+      const caught = s.players.filter((p) => p.connected && !hiddenFromDoor(p)).map((p) => p.id);
+      if (caught.length) {
+        for (const id of caught) fx.push({ type: 'caught', playerId: id });
+        // 유나는 문을 닫고 들어간다(다시 밝아지면 창가에서 그림부터)
+        s = { ...s, caughtPause: CAUGHT_PAUSE, caughtIds: caught, yunaAway: 0 };
+        s = { ...s, gazeShift: toNextAway(s) };
+      }
+    }
   } else if (!s.complete) {
     const gaze = gazeOf(s);
     if (gaze.phase === 'look') {
@@ -444,11 +490,6 @@ export function step(state: Ch1State, inputs: Record<string, SewingInput>, dt: n
         }
       }
     }
-  }
-  // 6) 두 선물을 현관에 놓고 모두 앞마당 밖으로 물러나면 완료
-  if (!s.complete && s.placed.length === CH1_START.items.length && !s.players.some((p) => p.connected && inYunasYard(p))) {
-    s = { ...s, complete: true };
-    fx.push({ type: 'complete' });
   }
   return { state: s, events: fx };
 }

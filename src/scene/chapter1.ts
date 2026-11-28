@@ -15,8 +15,8 @@ import {
   YUNA_WINDOW,
   COVERS,
   GARDEN_PATH,
-  SNOW_BUCKET,
-  BELL_TARGET,
+  DOORBELL,
+  PORCH,
   GATES,
   GATE_HALF,
   LANDMARKS,
@@ -742,113 +742,71 @@ function logs(): THREE.Group {
   return g;
 }
 
-/** 눈뭉치 양동이: 나무 양동이(쇠 테 둘, 손잡이) 위로 소복한 눈뭉치 */
-function snowBucket(): THREE.Group {
+/** 초인종: 금색 판 + 빨간 단추 + 위에 작은 종 그림, 아래 작은 등. press(k): 눌린 뒤 지난 비율(단추가 빛난다) */
+function doorbellPlate(): { group: THREE.Group; press(k: number): void } {
   const g = new THREE.Group();
-  const wood = std('#9c6a3f', { roughness: 0.85 });
-  const iron = std('#3b3f4a', { roughness: 0.5, metalness: 0.5 });
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.34, 0.62, 16, 1, true), wood);
-  body.position.y = 0.31;
-  g.add(body);
-  const bottom = new THREE.Mesh(new THREE.CircleGeometry(0.34, 16), wood);
-  bottom.rotation.x = -Math.PI / 2;
-  bottom.position.y = 0.02;
-  g.add(bottom);
-  for (const y of [0.12, 0.5]) {
-    const band = new THREE.Mesh(new THREE.TorusGeometry(y > 0.3 ? 0.41 : 0.36, 0.022, 6, 24), iron);
-    band.rotation.x = Math.PI / 2;
-    band.position.y = y;
-    g.add(band);
-  }
-  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.018, 6, 20, Math.PI), iron);
-  handle.position.y = 0.62;
-  handle.rotation.y = 0.4;
-  g.add(handle);
-  const ball = std('#fbfdff', { roughness: 0.9 });
-  for (const [x, y, z] of [[0, 0.62, 0], [0.2, 0.6, 0.12], [-0.18, 0.6, 0.14], [0.05, 0.6, -0.2], [-0.14, 0.78, -0.04], [0.12, 0.8, 0.02], [0.0, 0.94, 0.05]] as const) {
-    const m = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 9), ball);
-    m.position.set(x, y, z);
-    g.add(m);
-  }
-  g.add(contactShadow(1.0, 1.0, 0.3));
-  return g;
-}
-
-/** 눈뭉치로 맞히는 종: 나무 기둥 둘 + 지붕 얹은 가로대 + 매달린 큰 금색 종(+ 빨간 리본·호랑가시). ring(k): 울린 뒤 지난 비율 0~1 */
-function bellFrame(): { group: THREE.Group; ring(k: number): void } {
-  const g = new THREE.Group();
-  const wood = std('#7a4a2a', { roughness: 0.9 });
-  const dark = std('#5a3620', { roughness: 0.9 });
   const gold = std('#e0b64e', { roughness: 0.3, metalness: 0.75 });
-  const H = 3.2, half = 0.85;
-  for (const sx of [-1, 1]) {
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, H, 0.2), wood);
-    post.position.set(sx * half, H / 2, 0);
-    g.add(post);
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.12, 0.5), dark);
-    foot.position.set(sx * half, 0.06, 0);
-    g.add(foot);
-    // 비스듬한 버팀대
-    const brace = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.7, 0.1), dark);
-    brace.position.set(sx * (half - 0.22), H - 0.38, 0);
-    brace.rotation.z = sx * 0.6;
-    g.add(brace);
-  }
-  const beam = new THREE.Mesh(new THREE.BoxGeometry(half * 2 + 0.5, 0.2, 0.26), wood);
-  beam.position.y = H;
-  g.add(beam);
-  // 작은 박공 지붕 + 눈
-  for (const sx of [-1, 1]) {
-    const roof = new THREE.Mesh(roundedBox(0.62, 0.07, half * 2 + 0.8), std('#b8322e', { roughness: 0.7 }));
-    roof.position.set(0, H + 0.3, sx * 0.24);
-    roof.rotation.order = 'YXZ';
-    roof.rotation.set(sx * 0.55, Math.PI / 2, 0);
-    g.add(roof);
-    const sn = new THREE.Mesh(roundedBox(0.5, 0.04, half * 2 + 0.6), snowMat);
-    sn.rotation.order = 'YXZ';
-    sn.rotation.set(sx * 0.55, Math.PI / 2, 0);
-    sn.position.set(0, H + 0.36, sx * 0.22);
-    g.add(sn);
-  }
-  // 매단 종(흔들리는 축 = 가로대 아래)
-  const swing = new THREE.Group();
-  swing.position.y = H - 0.1;
-  const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3, 6), dark);
-  rope.position.y = -0.15;
-  swing.add(rope);
-  const shape = new THREE.LatheGeometry(
-    [new THREE.Vector2(0.0, 0.0), new THREE.Vector2(0.5, 0.0), new THREE.Vector2(0.47, 0.08), new THREE.Vector2(0.34, 0.32), new THREE.Vector2(0.28, 0.6), new THREE.Vector2(0.16, 0.74), new THREE.Vector2(0.0, 0.76)],
-    22,
-  );
-  const bell = new THREE.Mesh(shape, gold);
-  bell.position.y = -1.06;
-  swing.add(bell);
-  const lip = new THREE.Mesh(new THREE.TorusGeometry(0.49, 0.035, 6, 22), gold);
-  lip.rotation.x = Math.PI / 2;
-  lip.position.y = -1.05;
-  swing.add(lip);
-  const clapper = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), dark);
-  clapper.position.y = -1.08;
-  swing.add(clapper);
-  // 빨간 리본 + 호랑가시 잎
-  const bow = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.04, 6, 12), std('#c8282e', { roughness: 0.5 }));
-  bow.scale.set(1.7, 1, 1);
-  bow.position.set(0, -0.36, 0.17);
-  swing.add(bow);
-  for (const sx of [-1, 1]) {
-    const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), std('#2f7a4a'));
-    leaf.scale.set(1.6, 0.5, 0.4);
-    leaf.position.set(sx * 0.2, -0.42, 0.16);
-    leaf.rotation.z = sx * 0.4;
-    swing.add(leaf);
-  }
-  g.add(swing);
-  g.add(contactShadow(2.4, 1.2, 0.32));
+  const plate = new THREE.Mesh(roundedBox(0.8, 1.05, 0.1), gold);
+  g.add(plate);
+  const buttonMat = new THREE.MeshStandardMaterial({ color: '#c8282e', roughness: 0.4, emissive: '#ff3b30', emissiveIntensity: 0 });
+  const button = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.21, 0.12, 20), buttonMat);
+  button.rotation.x = Math.PI / 2;
+  button.position.set(0, -0.12, 0.08);
+  g.add(button);
+  // 위: 작은 종 그림(금색 반구 + 추)
+  const bell = new THREE.Mesh(new THREE.SphereGeometry(0.15, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), std('#f2c230', { roughness: 0.3, metalness: 0.6 }));
+  bell.position.set(0, 0.26, 0.07);
+  g.add(bell);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), std('#5a3620'));
+  knob.position.set(0, 0.25, 0.1);
+  g.add(knob);
+  const glow = new THREE.Mesh(new THREE.CircleGeometry(0.42, 20), new THREE.MeshBasicMaterial({ color: '#ffe08a', transparent: true, opacity: 0, depthWrite: false }));
+  glow.position.z = 0.14;
+  g.add(glow);
   return {
     group: g,
-    ring(k) {
-      const a = k >= 1 || k < 0 ? 0 : Math.sin(k * Math.PI * 6) * 0.55 * (1 - k);
-      swing.rotation.x = a;
+    press(k) {
+      const on = k >= 0 && k < 1 ? 1 - k : 0;
+      buttonMat.emissiveIntensity = 1.2 * on;
+      (glow.material as THREE.MeshBasicMaterial).opacity = 0.7 * on;
+      button.position.z = 0.08 - 0.05 * on;
+    },
+  };
+}
+
+/** 현관에 나온 유나(그림책 화풍 세움판, 발끝까지): look -1·0·1 세 장(두리번) */
+function doorYuna(): { group: THREE.Group; look(i: number, smile?: boolean): void } {
+  const g = new THREE.Group();
+  // 두리번(왼·가운데·오른쪽) 셋 + 선물을 발견해 웃는 얼굴 하나
+  const mats = [[-1, 0], [0, 0], [1, 0], [0, 1]].map(([look, mood]) => {
+    const c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 512;
+    const x = c.getContext('2d')!;
+    // 아래: 바지·신발(스웨터 아래로 이어진다)
+    x.fillStyle = '#2b3a67';
+    x.fillRect(84, 250, 40, 200);
+    x.fillRect(132, 250, 40, 200);
+    x.fillStyle = '#5a3620';
+    x.beginPath();
+    x.ellipse(100, 460, 30, 14, 0, 0, Math.PI * 2);
+    x.ellipse(156, 460, 30, 14, 0, 0, Math.PI * 2);
+    x.fill();
+    // 몸통(스웨터 아랫단)
+    x.fillStyle = YUNA_2D.sweater;
+    x.fillRect(70, 230, 116, 40);
+    drawPerson(x, YUNA_2D, 128, 260, 0.95, { mood, look });
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return new THREE.MeshBasicMaterial({ map: t, transparent: true, alphaTest: 0.5 });
+  });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 3.4), mats[1]);
+  m.position.y = 1.7;
+  g.add(m);
+  return {
+    group: g,
+    look(i, smile) {
+      m.material = smile ? mats[3]! : mats[Math.max(0, Math.min(2, i + 1))]!;
     },
   };
 }
@@ -863,13 +821,17 @@ export interface Ch1Scene {
   /** 창 성에(끝 장면에서 걷는다) */
   frost: THREE.Object3D;
   /** 창가 유나 자리 모습(사용자 에셋이 오기 전 실루엣): 유나 시선 단계 */
-  setGaze(phase: 'away' | 'turn' | 'look' | 'back' | 'gone', k: number, t: number): void;
+  setGaze(phase: 'away' | 'turn' | 'look' | 'back' | 'gone' | 'door', k: number, t: number): void;
   /** 창 가운데(월드, 망보는 작은 화면이 보는 곳) */
   windowCenter: THREE.Vector3;
   /** 현관 계단 위 선물 두 자리(월드) */
   doorstep: THREE.Vector3[];
-  /** 종 흔들림(맞은 뒤 지난 비율 0~1, 1이면 멈춤) */
+  /** 초인종이 눌린 뒤 지난 비율(0~1, 단추가 빛난다) */
   ringBell(k: number): void;
+  /** 현관문 가운데(월드, 끝 장면 사진기가 먼저 보는 곳) */
+  doorCenter: THREE.Vector3;
+  /** 현관문: open 0(닫힘)~1(열림), yunaLook: 문간 유나가 보는 쪽(-1·0·1), null이면 유나 없음 */
+  setDoor(open: number, yunaLook: number | null, smile?: boolean): void;
   /** 유나네 대문 열림 정도(0 닫힘 ~ 1 활짝) */
   setGateOpen(k: number): void;
   /** 잠긴 대문 덜컹(k: 0~1, 지난 비율) */
@@ -1058,19 +1020,10 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
       const l = models.clone('lantern');
       if (!l) break;
       const o = fitHeight(l, 0.9);
-      o.position.copy(at(d.s - 0.5 * YUNA_HOUSE_K, d.t + k * YUNA_HOUSE_K));
+      o.position.copy(at(d.s - 0.5 * YUNA_HOUSE_K, d.t + k * 1.75 * YUNA_HOUSE_K));
       root.add(o);
     }
   }
-  // 눈뭉치 양동이(담 밖, 윗길 왼쪽)와 마당 왼쪽 구석 나무틀에 매단 종
-  const bucket = snowBucket();
-  bucket.position.copy(at(SNOW_BUCKET.s, SNOW_BUCKET.t));
-  root.add(bucket);
-  const bellT = bellFrame();
-  bellT.group.position.copy(at(BELL_TARGET.s, BELL_TARGET.t));
-  bellT.group.rotation.y = YAW.back; // 종 앞면이 사진기 쪽(대문 밖에서 던지는 쪽)
-  bellT.group.userData.fadeable = true;
-  root.add(bellT.group);
   // 현관 계단 위 선물 자리: 집 모델의 계단 윗면 높이를 아래로 쏘아 재고, 문 앞 왼쪽·오른쪽 두 자리
   const yunaHouse = CH1_HOUSES.find((h) => h.yuna)!;
   const door = doorOf(yunaHouse);
@@ -1089,9 +1042,28 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
   const kk = YUNA_HOUSE_K;
   const doorstep = [-0.55, 0.55].map((k) => {
     const s0 = door.s - 0.8 * kk;
-    const t0 = -0.6 * kk + k; // 뒤집어 세운 집: 계단 윗단은 문 앞(가운데 왼쪽)
+    const t0 = PORCH.t + k; // 뒤집어 세운 집: 계단 윗단은 문 앞(가운데 왼쪽)
     return at(s0, t0, stepTop(s0, t0) + 0.01);
   });
+  // 초인종(문 오른쪽 벽, 창가 쪽)
+  const bellPlate = doorbellPlate();
+  bellPlate.group.position.copy(at(DOORBELL.s - 0.06, DOORBELL.t, DOORBELL.y));
+  bellPlate.group.rotation.y = YAW.back;
+  root.add(bellPlate.group);
+  // 현관문이 열리면: 문간에 따뜻한 방 빛 + 문간에 선 유나(두리번)
+  const stoopY = stepTop(door.s - 0.6 * kk, PORCH.t);
+  const doorway = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.9, 6.0),
+    new THREE.MeshBasicMaterial({ color: '#ffd59a', transparent: true, opacity: 0, depthWrite: false }),
+  );
+  doorway.position.copy(at(door.s + 0.55, PORCH.t, stoopY + 3.0)); // 문짝 바로 앞(현관 기둥 사이)
+  doorway.rotation.y = YAW.back;
+  root.add(doorway);
+  const dy = doorYuna();
+  dy.group.position.copy(at(door.s - 1.3, PORCH.t, stoopY)); // 문을 열고 계단 윗단 앞쪽에 나와 선다(현관 지붕에 머리가 가리지 않게)
+  dy.group.rotation.y = YAW.back;
+  dy.group.visible = false;
+  root.add(dy.group);
   const windowCenter = win.group.localToWorld(new THREE.Vector3(0, YUNA_WINDOW.sill + YUNA_WINDOW.height / 2, 1.5));
   const sil = win.silhouette;
   const baseY = sil.position.y;
@@ -1099,15 +1071,26 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
   return {
     root,
     doorstep,
+    doorCenter: at(door.s, PORCH.t, stoopY + 2.0),
     ringBell(k) {
-      bellT.ring(k);
+      bellPlate.press(k);
+    },
+    setDoor(open, yunaLook, smile) {
+      (doorway.material as THREE.MeshBasicMaterial).opacity = 0.95 * open;
+      dy.group.visible = yunaLook !== null && open > 0.3;
+      if (yunaLook !== null) dy.look(Math.round(yunaLook), smile);
     },
     yunaSeat,
     yunaPlaceholder: sil,
     frost: win.frost,
     windowCenter,
     setGaze(phase, k, t) {
-      // gone: 종 소리에 일어나 옆으로 걸어 나가 창이 빈다(처음 0.08·끝 0.08 동안 나가고 들어온다)
+      // door: 현관에 나가 있다(창은 비어 있다)
+      if (phase === 'door') {
+        sil.visible = false;
+        return;
+      }
+      // gone: 초인종에 일어나 옆으로 걸어 나가 창이 빈다(처음 0.08·끝 0.08 동안 나가고 들어온다)
       if (phase === 'gone') {
         const out = Math.min(1, k / 0.08, (1 - k) / 0.08);
         sil.rotation.y = Math.PI * 0.5;

@@ -11,7 +11,7 @@ import { createChapter1, gazeOf, planAction, step, throwTarget, CAMERA_YAW, CAUG
 import { AutoQuality, effectiveQuality, snowCount, type Quality } from '../core/quality';
 import type { SewingInput } from '../core/sewing';
 import { chapter } from '../data/chapters';
-import { BELL_TARGET, CH1_BOUNDS, CH1_START, THROW, W, YARD, YUNA_WINDOW, toLane } from '../data/chapter1';
+import { DOORBELL, DOOR_TRIP, PORCH, CH1_BOUNDS, CH1_START, THROW, W, YARD, YUNA_WINDOW, toLane } from '../data/chapter1';
 import { ELF_LOOKS } from '../data/elves';
 import { attachKeyboard, KeyState, KEYMAP_P1, KEYMAP_P2 } from '../input/keyboard';
 import { mergeIntents } from '../input/merge';
@@ -50,6 +50,10 @@ const VIEW_K = 1.3;
 const SIM_DT = 1 / 60;
 /** 눈뭉치 힘을 다 모으는 초(data THROW.chargeSec) */
 const THROW_CHARGE = THROW.chargeSec;
+/** 초인종에 나온 유나가 문간에 서 있는 초 */
+const DOOR_AT = DOOR_TRIP.atDoor;
+/** 현관문(가운데 왼쪽) 골목 좌표 t */
+const PORCH_T = PORCH.t;
 /** 사진기 쪽을 보는 방향(선물 앞면이 보이게) */
 const YAW_BACK = Math.PI / 4;
 /** 처음 몇 초: 갈림길 동네 전체를 한 화면(어느 집인지는 지도를 보고 가까이 가서 고른다) */
@@ -412,7 +416,7 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     if (e.type === 'pick' || e.type === 'drop') actAt.set(e.playerId, elapsed);
     if (e.type === 'found') foundAt = elapsed;
     if (e.type === 'gateLocked') rattles.set(e.gateId, elapsed);
-    if (e.type === 'bellHit') bellAt = elapsed;
+    if (e.type === 'doorbell') bellAt = elapsed;
     if (e.type === 'splat') {
       const m = new THREE.Mesh(new THREE.CircleGeometry(0.45, 14), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9, depthWrite: false }));
       m.rotation.x = -Math.PI / 2;
@@ -528,8 +532,8 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     // 유나가 일어나 돌아서기 시작하면 짧은 소리(무궁화 꽃이… 의 "피었습니다")
     if (gz.phase === 'turn' && lastPhase !== 'turn' && ending < 0) playSfx('tick');
     lastPhase = gz.phase;
-    // 종: 눈뭉치에 맞으면 크게 흔들리다 잦아든다(1.6초)
-    space.ringBell(Math.min(1, (elapsed - bellAt) / 1.6));
+    // 초인종: 눈뭉치에 맞으면 단추가 잠깐 빛난다
+    space.ringBell(Math.min(1, (elapsed - bellAt) / 1.2));
     // 눈뭉치: 손에 쥔 것 · 힘 모을 때 떨어질 자리 · 날아가는 것 · 떨어진 자국
     state.players.forEach((p, i) => {
       const e = elves[i]!;
@@ -561,8 +565,8 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
       if (!b) return;
       const u = Math.min(1, b.t / b.dur);
       const dist = Math.hypot(b.x1 - b.x0, b.z1 - b.z0);
-      // 종에 맞는 눈뭉치는 종 높이에서 끝난다(빗나가면 땅까지)
-      const endY = b.hit ? BELL_TARGET.y : 0;
+      // 초인종에 맞는 눈뭉치는 초인종 높이에서 끝난다(빗나가면 땅까지)
+      const endY = b.hit ? DOORBELL.y : 0;
       m.position.set(b.x0 + (b.x1 - b.x0) * u, 1.3 * ELF_SCALE * (1 - u) + endY * u + 4 * (1 + dist * 0.12) * u * (1 - u), b.z0 + (b.z1 - b.z0) * u);
     });
     for (let k = splats.length - 1; k >= 0; k--) {
@@ -574,8 +578,15 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
         splats.splice(k, 1);
       }
     }
-    if (ending < 0) space.setGaze(gz.phase, gz.k, elapsed);
-    else if (updateEnding(frame)) return;
+    if (ending < 0) {
+      space.setGaze(gz.phase, gz.k, elapsed);
+      // 현관문: 초인종에 나온 유나가 문을 열고 두리번(왼쪽·가운데·오른쪽), 들어가며 닫는다
+      if (gz.phase === 'door') {
+        const sec = gz.k * DOOR_AT;
+        const open = Math.min(1, sec / 0.3, (DOOR_AT - sec) / 0.3);
+        space.setDoor(open, Math.round(Math.sin(sec * 2.4)));
+      } else space.setDoor(0, null);
+    } else if (updateEnding(frame)) return;
     // 들킴: 창 위 빨간 느낌표
     const bk = elapsed - caughtAt;
     bang.visible = bk >= 0 && bk < 1.3;
@@ -590,7 +601,10 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     establish = Math.max(0, establish - frame);
     let want = { x: ESTABLISH.x, z: ESTABLISH.z, viewH: ESTABLISH.viewH };
     if (establish === 0) {
-      want = frameFor(state.players.filter((p) => p.connected), goalOf(), aspect, CAMERA_YAW, CAMERA_PITCH);
+      // 유나네를 찾은 뒤 앞마당 가까이 있으면: 유나 창가와 현관문도 늘 한 화면에(창가·문간의 유나가 보여야 숨는다)
+      const near = state.found && state.players.some((p) => p.connected && toLane(p).s > YARD.front - 8);
+      const house = near ? [W(YARD.back + 7, YUNA_WINDOW.t + 1), W(YARD.back + 7, PORCH_T - 1)] : [];
+      want = frameFor([...state.players.filter((p) => p.connected), ...house], near ? null : goalOf(), aspect, CAMERA_YAW, CAMERA_PITCH);
       const held = deadZone(camTarget, want);
       // 사람 크기 집 사이 골목: 광장보다 조금 넓게 보여 둘레(우편함·화분)가 함께 들어오게
       want = { ...want, x: held.x, z: held.z, viewH: want.viewH * VIEW_K };
@@ -646,37 +660,42 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
    */
   function updateEnding(frame: number): boolean {
     ending += frame;
-    if (ending > 9) sto.next(); // 이야기 모드: 끝 장면 뒤 2장으로
+    if (ending > 9.6) sto.next(); // 이야기 모드: 끝 장면 뒤 2장으로
     const t = ending;
     const sg = (a: number, b: number) => Math.min(1, Math.max(0, (t - a) / (b - a)));
     const ez = (x: number) => x * x * (3 - 2 * x);
     // 성에 걷힘
     const frost = space.frost as THREE.Mesh;
     (frost.material as THREE.MeshBasicMaterial).opacity = FROST_OPACITY * (1 - sg(0, 1.2));
-    // 현관 선물: 사라진다(들여감)
-    const take = sg(0.8, 1.6);
+    // 현관: 유나가 문을 열고 선물을 발견해 들여간다(문간 유나가 내려다본다) → 문을 닫는다
+    space.setDoor(t < 2.0 ? 1 : Math.max(0, 1 - (t - 2.0) / 0.4), t < 2.0 ? 0 : null, t > 0.5); // 내려다보다가 활짝 웃는다
+    const take = sg(0.9, 1.7);
     for (const [id, g] of gifts) if (id !== SACK) g.v.scale.setScalar(Math.max(0.001, (1 - take) * (g.v.userData.baseScale as number)));
     fade.style.opacity = '0';
     fader.update([], frame); // 놀이 중 흐려 둔 담·집을 되돌린다(끝 장면 화면 옆에 반투명 유령이 남지 않게)
     document.body.classList.add('cutscene');
-    // 유나: 창가로 돌아와 앉는다 → 그린다 → 든다
-    space.setGaze(t < 1.6 ? 'away' : t < 2.4 ? 'turn' : 'look', t < 1.6 ? 0 : sg(1.6, 2.4), t);
-    book.visible = t > 2.0;
+    // 유나: 선물을 들고 창가로 돌아와 → 다 그린 고래를 펼쳐 보인다
+    space.setGaze(t < 2.4 ? 'door' : t < 3.2 ? 'turn' : 'look', t < 2.4 ? 0 : sg(2.4, 3.2), t);
+    book.visible = t > 2.8;
     drawBook(1); // 다 그린 고래
     // 책상에 눕혀 둔 스케치북을 세워 가슴 앞에 펼쳐 보인다(얼굴을 가리지 않게 턱 아래까지만: 웃는 얼굴 + 다 그린 고래)
-    const lift = ez(sg(3.6, 4.4));
+    const lift = ez(sg(4.2, 5.0));
     const base = space.yunaPlaceholder.position;
     book.position.set(0, base.y + 0.28 + lift * 0.06, 1.5 * 0.75 + 0.05);
     book.rotation.set(-1.0 * (1 - lift), 0, 0);
-    book.scale.setScalar(0.55 + 0.25 * ez(sg(2.0, 2.6)) + 0.06 * lift);
+    book.scale.setScalar(0.55 + 0.25 * ez(sg(2.8, 3.4)) + 0.06 * lift);
     if (lift > 0) space.yunaPlaceholder.position.y = base.y + Math.abs(Math.sin(t * 7)) * 0.12 * lift;
-    // 사진기: 지금 화면에서 창 앞으로
+    // 사진기: 지금 화면에서 현관 앞으로(유나가 선물을 발견) → 2.2~3.2초에 창 앞으로 옮겨 간다
     const k = ez(sg(0, 1.4));
+    const toWin = ez(sg(2.2, 3.2));
     const wc = space.windowCenter;
-    const front = W(toLane(wc).s - 7.5, toLane(wc).t + 0.6);
+    const dc = space.doorCenter;
+    const look = new THREE.Vector3().lerpVectors(dc, wc, toWin);
+    const lane = toLane(look);
+    const front = W(lane.s - 7.5 - 1.5 * (1 - toWin), lane.t + 0.6);
     const from = camera.position;
-    endCam.position.set(from.x + (front.x - from.x) * k, from.y + (3.4 - from.y) * k, from.z + (front.z - from.z) * k);
-    endCam.lookAt(wc.x, wc.y - 0.3 * k, wc.z);
+    endCam.position.set(from.x + (front.x - from.x) * k, from.y + (3.4 + 0.6 * (1 - toWin) - from.y) * k, from.z + (front.z - from.z) * k);
+    endCam.lookAt(look.x, look.y - 0.3 * k, look.z);
     endCam.aspect = aspect;
     endCam.updateProjectionMatrix();
     renderer.render(scene, endCam);
@@ -708,9 +727,13 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
       },
       gaze: () => gazeOf(state),
       fade: () => Number(fade.style.opacity),
-      /** 시험·촬영: 종을 맞힌 것으로(유나가 창가를 떠난다) */
-      hitBell: () => {
-        const c = W(BELL_TARGET.s, BELL_TARGET.t);
+      /** 시험·촬영: 유나네를 찾은 것으로(사진기가 창가·현관을 앞세운다) */
+      debugFound: () => {
+        state = { ...state, found: true, gateOpen: true };
+      },
+      /** 시험·촬영: 초인종을 맞힌 것으로(유나가 현관으로 나온다) */
+      hitDoorbell: () => {
+        const c = W(DOORBELL.s, DOORBELL.t);
         state = { ...state, balls: [...(state.balls ?? []), { from: PLAYERS[1] ?? 'p0', x0: c.x, z0: c.z, x1: c.x, z1: c.z, t: 0, dur: 0.01, hit: true }] };
       },
       doorstep: () => space.doorstep.map((v) => ({ ...toLane({ x: v.x, z: v.z }), y: v.y })),

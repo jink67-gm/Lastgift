@@ -90,7 +90,7 @@ test('1장 시작 그림책: 그동안 시계가 멈춰 있고, 건너뛰면 바
   expect((await H(page, (h) => h.run())).phase).toBe('play');
 });
 
-test('1장 들키지 않기: 유나가 창밖을 볼 때 움직이면 화면이 까매졌다가 대문 앞, 앉기 키, 담 밖에서 눈뭉치를 던진다', async ({ page }) => {
+test('1장 들키지 않기: 유나가 창밖을 볼 때 움직이면 화면이 까매졌다가 대문 앞, 앉기 키, 앞마당에서 눈뭉치를 던져 초인종', async ({ page }) => {
   test.setTimeout(90_000);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -129,8 +129,8 @@ test('1장 들키지 않기: 유나가 창밖을 볼 때 움직이면 화면이 
   await page.keyboard.up('ShiftRight');
   await page.waitForTimeout(300);
   expect((await H(page, (h) => h.ch1())).players[0]!).toMatchObject({ crouching: false });
-  // 2P가 담 밖 눈뭉치 양동이 앞(위쪽을 본다)에서 Enter → 눈뭉치, Enter 누르고 있다가 떼면 던진다
-  await page.evaluate(() => (window as unknown as { __lastgift: Hook }).__lastgift.debugPlace('p1', 40.8, -8.6, Math.PI * 1.25));
+  // 2P가 앞마당 가운데(집 쪽을 본다)에서 Enter → 눈을 뭉친다, Enter 누르고 있다가 떼면 던진다
+  await page.evaluate(() => (window as unknown as { __lastgift: Hook }).__lastgift.debugPlace('p1', 50, 2, Math.PI * 1.25));
   await page.waitForTimeout(400);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(300);
@@ -138,15 +138,15 @@ test('1장 들키지 않기: 유나가 창밖을 볼 때 움직이면 화면이 
   await page.keyboard.down('Enter');
   await page.waitForTimeout(500);
   await page.keyboard.up('Enter');
-  await page.waitForFunction(() => (window as unknown as { __lastgift: Hook }).__lastgift.ch1Events().some((e) => e.type === 'bellHit' || e.type === 'splat'), null, { timeout: 10_000 });
+  await page.waitForFunction(() => (window as unknown as { __lastgift: Hook }).__lastgift.ch1Events().some((e) => e.type === 'doorbell' || e.type === 'splat'), null, { timeout: 10_000 });
   expect((await H(page, (h) => h.ch1Events())).some((e) => e.type === 'throw' && e.playerId === 'p1')).toBe(true);
-  // 맞히면 유나가 창가를 떠난다(시험 창구로 바로 맞힌 경우도 확인)
+  // 맞히면 유나가 창가를 떠나 현관으로 온다
   const ev = await H(page, (h) => h.ch1Events());
-  if (ev.some((e) => e.type === 'bellHit')) expect((await H(page, (h) => h.gaze())).phase).toBe('gone');
+  if (ev.some((e) => e.type === 'doorbell')) expect(['gone', 'door']).toContain((await H(page, (h) => h.gaze())).phase);
   expect(errors).toEqual([]);
 });
 
-test('1장 배달: 현관에서 자루를 풀어 두 선물을 놓고 모두 물러나면 기억 1 → 끝 장면', async ({ page }) => {
+test('1장 배달: 현관에서 자루를 풀어 두 선물을 한 번에 놓고, 초인종 → 유나가 발견하면 기억 1 → 끝 장면', async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto('/?chapter=1&test&noshadow&noestablish');
   await page.waitForFunction(() => !!(window as unknown as { __lastgift?: { ch1?: unknown } }).__lastgift?.ch1, null, { timeout: 30_000 });
@@ -156,8 +156,8 @@ test('1장 배달: 현관에서 자루를 풀어 두 선물을 놓고 모두 물
   await page.evaluate(() => {
     const h = (window as unknown as { __lastgift: Hook }).__lastgift;
     h.setTime(0.1);
-    h.debugPlace('p0', 56.8, -2.8, Math.PI * 1.25);
-    h.debugPlace('p1', 56.8, -1.4, Math.PI * 1.25);
+    h.debugPlace('p0', 56.8, -0.8, Math.PI * 1.25);
+    h.debugPlace('p1', 55.6, 1.0, Math.PI * 1.25);
   });
   await page.waitForTimeout(500);
   await page.keyboard.press('KeyE');
@@ -165,11 +165,12 @@ test('1장 배달: 현관에서 자루를 풀어 두 선물을 놓고 모두 물
   expect((await H(page, (h) => h.ch1Events())).some((e) => e.type === 'unpack' && e.playerId === 'p0')).toBe(true);
   expect((await H(page, (h) => h.ch1())).placed.sort()).toEqual(['pencils', 'sketchbook']);
   expect((await H(page, (h) => h.run())).phase).toBe('play');
-  // 물러나면 완료
+  // 물러나서 초인종(시험 창구로 맞힘) → 유나가 문을 열고 발견하면 완료
   await page.evaluate(() => {
-    const h = (window as unknown as { __lastgift: Hook }).__lastgift;
+    const h = (window as unknown as { __lastgift: Hook & { hitDoorbell(): void } }).__lastgift;
     h.debugPlace('p0', 40, 8, 0);
     h.debugPlace('p1', 40, 9.5, 0);
+    h.hitDoorbell();
   });
   await page.waitForFunction(() => (window as unknown as { __lastgift: Hook }).__lastgift.ending() > 1, null, { timeout: 30_000 });
   expect(await H(page, (h) => h.run())).toMatchObject({ phase: 'cutscene', chapterId: 2, memories: [1], cutscene: 'chapter1End' });
