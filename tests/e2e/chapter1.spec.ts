@@ -109,7 +109,7 @@ test('1장 들키지 않기: 유나가 창밖을 볼 때 움직이면 화면이 
   await page.evaluate((t) => {
     const h = (window as unknown as { __lastgift: Hook }).__lastgift;
     h.setTime(t + 0.4);
-    h.debugPlace('p0', 46.5, 0, Math.PI * 1.25);
+    h.debugPlace('p0', 49.7, 0, Math.PI * 1.25);
   }, look);
   await page.keyboard.down('KeyD');
   await page.waitForFunction(() => (window as unknown as { __lastgift: Hook }).__lastgift.ch1Events().some((e) => e.type === 'caught'), null, { timeout: 10_000 });

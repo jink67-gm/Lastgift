@@ -34,6 +34,8 @@ import {
   COVERS,
   gateNear,
   DOORBELL,
+  HEDGES,
+  HEDGE_THICK,
   DOOR_EYE,
   DOOR_TRIP,
   PEER,
@@ -264,7 +266,30 @@ function behindCover(s: number, t: number, eye: { s: number; t: number }, crouch
     const behind = Math.hypot(s - c.s, t - c.t);
     if (Math.hypot(px, pt) < c.r && behind < c.r + 1.9) return true;
   }
+  // 생울타리: 눈 → 요정 선이 생울타리를 가로지르고, 요정이 생울타리 바로 뒤(1.6 안)에 있다
+  for (const h of HEDGES) {
+    if (!segmentsCross(eye.s, eye.t, s, t, h.a.s, h.a.t, h.b.s, h.b.t)) continue;
+    if (distToSeg(s, t, h.a.s, h.a.t, h.b.s, h.b.t) < HEDGE_THICK / 2 + 1.6) return true;
+  }
   return false;
+}
+
+/** 두 선분(골목 좌표)이 서로 가로지르는가 */
+function segmentsCross(a1: number, a2: number, b1: number, b2: number, c1: number, c2: number, d1: number, d2: number): boolean {
+  const cr = (x1: number, y1: number, x2: number, y2: number) => x1 * y2 - y1 * x2;
+  const r1 = b1 - a1, r2 = b2 - a2, q1 = d1 - c1, q2 = d2 - c2;
+  const den = cr(r1, r2, q1, q2);
+  if (Math.abs(den) < 1e-9) return false;
+  const u = cr(c1 - a1, c2 - a2, q1, q2) / den;
+  const v = cr(c1 - a1, c2 - a2, r1, r2) / den;
+  return u > 0 && u < 1 && v >= 0 && v <= 1;
+}
+
+/** 점에서 선분까지 거리(골목 좌표) */
+function distToSeg(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax, dy = by - ay;
+  const u = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)));
+  return Math.hypot(ax + u * dx - px, ay + u * dy - py);
 }
 
 /** 창밖을 보기 시작한 뒤 봐주는 시간(초): 돌아서는 걸 보고 멈출 틈 */

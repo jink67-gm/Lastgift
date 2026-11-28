@@ -213,6 +213,10 @@ describe('1장 들키지 않기(무궁화 꽃이 피었습니다 + 종)', () => 
     expect(hiddenFromWindow(W(YUNA_EYE.s - 0.9, YUNA_EYE.t + 0.5))).toBe(true);
     expect(hiddenFromWindow(W(40, 0))).toBe(true);
     expect(hiddenFromWindow(W(41, -8))).toBe(true); // 담 밖
+    // 생울타리 바로 뒤(창 반대쪽)에 앉으면 창·문간에서 안 보인다, 서 있으면 보인다
+    expect(hiddenFromWindow({ ...W(51.6, 0), crouching: true })).toBe(true);
+    expect(hiddenFromWindow({ ...W(51.6, 0), crouching: false })).toBe(false);
+    expect(hiddenFromDoor({ ...W(51.6, 0), crouching: true })).toBe(true);
   });
   it('창밖을 보는 동안: 앞마당에서 움직이면 들키고, 멈춰 있으면 괜찮다', () => {
     let s = at(looking(), 'p0', 46, 0);
@@ -235,11 +239,14 @@ describe('1장 들키지 않기(무궁화 꽃이 피었습니다 + 종)', () => 
     const r = step(s, { p0: { ...tiny, crouch: true }, p1: walkRight }, DT);
     expect(r.events.some((e) => e.type === 'caught')).toBe(false);
     expect(r.state.players[0]!.crouching).toBe(true);
-    const moved = Math.hypot(r.state.players[0]!.x - s.players[0]!.x, r.state.players[0]!.z - s.players[0]!.z);
     const r2 = step(s, { p0: tiny, p1: idle }, DT);
-    const moved2 = Math.hypot(r2.state.players[0]!.x - s.players[0]!.x, r2.state.players[0]!.z - s.players[0]!.z);
-    expect(moved).toBeLessThan(moved2 * 0.7); // 앉으면 느리다
     expect(r2.events.some((e) => e.type === 'caught' && (e as { playerId: string }).playerId === 'p0')).toBe(true);
+    // 앉으면 느리다(트인 곳에서 잰다)
+    const open = at({ ...s, time: 0.5 }, 'p0', 49.7, 0);
+    const a1 = step(open, { p0: { ...walkRight, crouch: true }, p1: idle }, DT).state.players[0]!;
+    const a2 = step(open, { p0: walkRight, p1: idle }, DT).state.players[0]!;
+    const o = open.players[0]!;
+    expect(Math.hypot(a1.x - o.x, a1.z - o.z)).toBeLessThan(Math.hypot(a2.x - o.x, a2.z - o.z) * 0.7);
   });
   it('들키면 검은 화면 동안 모두 멈추고, 가장 깜깜할 때 들킨 요정은 (멘 자루와 함께) 대문 앞으로. 밝아지면 유나는 다시 그림부터', () => {
     let s = at(looking(), 'p0', 46, 0);

@@ -1,6 +1,7 @@
 // 1장 공간 그리기: 돌 아치 → 우편함 골목(양옆 집·우편함 무늬·화분) → 낮은 담 안 유나네 앞마당·창가.
 // 배치는 src/data/chapter1.ts만 따른다(판정과 같은 값). 사람(유나·지우)은 사용자 에셋을 받아 넣는다(지금은 창가에 실루엣 자리만).
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { drawPerson, YUNA_2D } from '../ui/people2d';
 import {
   ARCH,
@@ -18,6 +19,7 @@ import {
   DOORBELL,
   PORCH,
   SENSOR,
+  HEDGES,
   GATES,
   GATE_HALF,
   LANDMARKS,
@@ -656,6 +658,52 @@ function gardenTree(models: Models): THREE.Group {
   return g;
 }
 
+/** 생울타리(상록, 다듬은 둥근 덩이를 길게 이어 붙임 + 위에 눈 + 빨간 열매), 길이 len·두께 1·높이 1.6(요정보다 높다). 덩이를 한 덩어리로 합친다 */
+function hedgeRow(len: number, seed: number): THREE.Group {
+  const g = new THREE.Group();
+  let r0 = seed * 7919 + 13;
+  const rnd = () => ((r0 = (r0 * 16807) % 2147483647) / 2147483647);
+  const greens: THREE.BufferGeometry[] = [];
+  const snows: THREE.BufferGeometry[] = [];
+  const berries: THREE.BufferGeometry[] = [];
+  const n = Math.max(2, Math.round(len / 0.75));
+  for (let i = 0; i <= n; i++) {
+    const x = -len / 2 + (i / n) * len;
+    const r = 0.62 + rnd() * 0.12;
+    const geo = new THREE.IcosahedronGeometry(r, 2);
+    const pos = geo.attributes.position as THREE.BufferAttribute;
+    const v = new THREE.Vector3();
+    for (let k = 0; k < pos.count; k++) {
+      v.fromBufferAttribute(pos, k);
+      v.multiplyScalar(1 + 0.06 * Math.sin(v.x * 9 + i) * Math.cos(v.z * 8 + v.y * 5));
+      pos.setXYZ(k, v.x, v.y, v.z);
+    }
+    geo.scale(1, 1.25, 0.85);
+    geo.translate(x, 0.85 + rnd() * 0.08, 0);
+    geo.computeVertexNormals();
+    greens.push(geo);
+    const cap = new THREE.SphereGeometry(r * 0.92, 12, 6, 0, Math.PI * 2, 0, Math.PI / 3.2);
+    cap.scale(1, 1, 0.85);
+    cap.translate(x, 0.85 + r * 0.55, 0);
+    snows.push(cap);
+    for (let b = 0; b < 2; b++) {
+      const bg = new THREE.SphereGeometry(0.055, 6, 5);
+      bg.translate(x + (rnd() - 0.5) * 0.8, 0.5 + rnd() * 0.8, (rnd() < 0.5 ? -1 : 1) * 0.52);
+      berries.push(bg);
+    }
+  }
+  const strip = (arr: THREE.BufferGeometry[]) => arr.map((x) => {
+    const y = x.index ? x.toNonIndexed() : x;
+    y.deleteAttribute('uv');
+    return y;
+  });
+  g.add(new THREE.Mesh(mergeGeometries(strip(greens))!, std('#2f5e40', { roughness: 0.95 })));
+  g.add(new THREE.Mesh(mergeGeometries(strip(snows))!, std('#f8fbff', { roughness: 1 })));
+  g.add(new THREE.Mesh(mergeGeometries(strip(berries))!, std('#c8282e', { roughness: 0.4 })));
+  g.add(contactShadow(len + 0.8, 1.6, 0.3));
+  return g;
+}
+
 /** 둥글게 다듬은 상록 덤불: 울퉁불퉁한 공 몇 개 + 그 위 눈 + 빨간 열매 */
 function gardenBush(): THREE.Group {
   const g = new THREE.Group();
@@ -1048,6 +1096,15 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
     root.add(tr);
   }
 
+  // 앞마당 생울타리 둘(길을 세 갈래로 나누는 긴 엄폐물)
+  HEDGES.forEach((h, i) => {
+    const pa = at(h.a.s, h.a.t), pb = at(h.b.s, h.b.t);
+    const row = hedgeRow(pa.distanceTo(pb), i + 1);
+    row.position.copy(pa).add(pb).multiplyScalar(0.5);
+    row.rotation.y = Math.atan2(pb.x - pa.x, pb.z - pa.z) - Math.PI / 2;
+    row.userData.fadeable = true;
+    root.add(row);
+  });
   // 앞마당: 대문 → 현관 디딤돌 정원길(비워 둔다), 길옆 엄폐물(눈사람·장식 나무·덤불), 장작 더미, 현관 등
   root.add(steppingStones(GARDEN_PATH));
   const makers = { snowman: () => gardenSnowman(models), tree: () => gardenTree(models), bush: gardenBush, logs, doghouse } as const;

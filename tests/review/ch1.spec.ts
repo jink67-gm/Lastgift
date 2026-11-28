@@ -60,8 +60,8 @@ test('1장 장면', async ({ page }) => {
   await page.screenshot({ path: `${OUT}/j_map.png` });
   await page.keyboard.press('Enter');
   // 앉아서 숨기: 개집 뒤에서 1P가 C를 누르고 있다
-  await hook(page, 'debugPlace', 'p0', 46.3, 1.3, Math.PI * 1.25);
-  await hook(page, 'debugPlace', 'p1', 44.4, 6.3, Math.PI * 1.25);
+  await hook(page, 'debugPlace', 'p0', 51.6, 0, Math.PI * 1.25);
+  await hook(page, 'debugPlace', 'p1', 44.5, 6.0, Math.PI * 1.25);
   await page.keyboard.down('KeyC');
   await page.keyboard.down('ShiftRight');
   await page.waitForTimeout(1500);
@@ -69,8 +69,8 @@ test('1장 장면', async ({ page }) => {
   await page.keyboard.up('KeyC');
   await page.keyboard.up('ShiftRight');
   // 초인종: 2P가 앞마당 가운데에서 눈을 뭉쳐(Enter), 누르고 있다(떨어질 자리 표시) 떼어 던진다. 1P는 개집 뒤에 앉아 있다
-  await hook(page, 'debugPlace', 'p0', 46.3, 1.3, Math.PI * 1.25);
-  await hook(page, 'debugPlace', 'p1', 50, 2, Math.PI * 1.25);
+  await hook(page, 'debugPlace', 'p0', 51.6, 0, Math.PI * 1.25);
+  await hook(page, 'debugPlace', 'p1', 49.7, 3, Math.PI * 1.25);
   await page.waitForTimeout(800);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(400);
@@ -104,7 +104,7 @@ test('1장 장면', async ({ page }) => {
     return -1;
   });
   await hook(page, 'setTime', look - 0.6);
-  await hook(page, 'debugPlace', 'p0', 46.5, 0, Math.PI);
+  await hook(page, 'debugPlace', 'p0', 49.7, 0, Math.PI);
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${OUT}/h4_yunaLooks.png` });
   await page.keyboard.down('KeyD');

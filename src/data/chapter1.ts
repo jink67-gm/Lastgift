@@ -321,7 +321,7 @@ export const CH1_WALLS: readonly Collider[] = buildWalls();
 const YUNA_GATE_COLLIDER = gateCollider(gateById('yuna'));
 /** 충돌: 울타리·담·집 + 앞마당 엄폐물 (+ 유나네 대문이 닫혀 있으면 문짝) */
 export function ch1Colliders(gateOpen = false): readonly Collider[] {
-  return gateOpen ? [...CH1_WALLS, ...COVER_COLLIDERS] : [...CH1_WALLS, ...COVER_COLLIDERS, YUNA_GATE_COLLIDER];
+  return gateOpen ? [...CH1_WALLS, ...COVER_COLLIDERS, ...HEDGE_COLLIDERS] : [...CH1_WALLS, ...COVER_COLLIDERS, ...HEDGE_COLLIDERS, YUNA_GATE_COLLIDER];
 }
 
 /** 월드 경계(넉넉하게): 실제 움직임은 울타리·담이 막는다 */
@@ -347,35 +347,46 @@ export const CH1_SIZES = { mailbox: TOWN.mailbox, lowWall: LOW_WALL_H, fence: TO
 export const YUNA_EYE = { s: YARD.back + 0.2, t: YUNA_WINDOW.t };
 
 /**
- * 앞마당 정원길(디딤돌): 대문 → 현관까지 비스듬히 곧게. 길 위·길목(대문 안쪽)은 비워 둔다
+ * 앞마당 생울타리 둘(2026-11-28 사용자: "바깥문에서 현관으로 들어가는 코스가 짧고 어색하다"): 요정 키보다 높은 상록 생울타리가
+ * 마당을 세 갈래 길로 나눈다. 대문 → 앞쪽 길을 왼쪽으로 → 왼쪽 틈으로 올라가 → 가운데 길을 오른쪽으로 → 창가 앞 틈으로 올라가(가장 위험) →
+ * 집 앞 길을 왼쪽으로 → 현관. 생울타리 뒤에 앉아 있으면 창·문간에서 안 보인다(긴 엄폐물).
+ */
+export const HEDGES: readonly { a: { s: number; t: number }; b: { s: number; t: number } }[] = [
+  { a: { s: 47.0, t: -3 }, b: { s: 47.0, t: YARD.right } },
+  { a: { s: 52.5, t: YARD.left }, b: { s: 52.5, t: 9 } },
+];
+/** 생울타리 두께(골목 좌표) */
+export const HEDGE_THICK = 1.0;
+
+/**
+ * 앞마당 정원길(디딤돌): 생울타리 사이 세 갈래 길을 지그재그로 약 59 m. 길 위는 비워 둔다
  * (2026-11-28 사용자: "유나네 집 앞에 눈사람이랑 수레로 길이 막혀 있는 건 어색하다", "위치를 길목에 두지 마").
  */
 export const GARDEN_PATH: readonly { s: number; t: number }[] = [
   { s: YARD.front - 0.4, t: 8.6 },
-  { s: 44.2, t: 4.2 },
-  { s: 46.0, t: -1.2 },
-  { s: 48.8, t: -6.0 },
-  { s: 52.6, t: -8.6 },
-  { s: 56.0, t: -7.4 },
-  { s: YARD.back - 2.5, t: -1.8 },
+  { s: 44.5, t: 6.0 },
+  { s: 44.5, t: -7.0 },
+  { s: 49.7, t: -7.5 },
+  { s: 49.7, t: 12.0 },
+  { s: 54.8, t: 12.0 },
+  { s: 55.2, t: 2.5 },
+  { s: YARD.back - 2.5, t: -0.2 },
 ];
 
 /** 엄폐물 생김새 */
 export type CoverKind = 'snowman' | 'tree' | 'bush' | 'logs' | 'doghouse';
 /**
- * 앞마당 엄폐물(골목 좌표, 반지름). 유나 창은 집 오른쪽(대문 쪽)이라 정원길은 대문에서 왼쪽으로 크게 돌아 현관(집 왼쪽)으로 간다.
- * 엄폐물은 길에서 1.5 m 넘게 떨어진 창 쪽에 띄엄띄엄: 눈사람 → 개집 → 장식 나무 → 덤불 → 현관 오른쪽 덤불.
- * 그 뒤(창 반대쪽)에서 **앉아야** 숨는다(2026-11-28 사용자: "앉는 키를 눌러서 엄폐할 수 있게"). 마당 곳곳에 장작·나무·덤불 몇 개 더.
+ * 앞마당 엄폐물(골목 좌표, 반지름): 길 모퉁이·갈래 끝·담 밑에(길 위는 비운다). 생울타리와 함께 그 뒤에서 **앉아야** 숨는다.
  */
 export const COVERS: readonly { id: string; kind: CoverKind; s: number; t: number; r: number }[] = [
-  { id: 'snowman', kind: 'snowman', s: 45.9, t: 6.2, r: 0.85 },
-  { id: 'doghouse', kind: 'doghouse', s: 47.8, t: 1.8, r: 1.05 },
-  { id: 'treeA', kind: 'tree', s: 50.3, t: -2.6, r: 0.95 },
-  { id: 'bushA', kind: 'bush', s: 54.0, t: -4.6, r: 0.9 },
-  { id: 'bushB', kind: 'bush', s: 56.3, t: 0.7, r: 0.9 }, // 현관 계단 오른쪽 아래(계단 위에 두면 묻힌다)
-  { id: 'logs', kind: 'logs', s: 51.2, t: 4.6, r: 0.85 },
-  { id: 'treeB', kind: 'tree', s: 45.0, t: -6.8, r: 0.95 },
-  { id: 'bushC', kind: 'bush', s: 49.6, t: 10.6, r: 0.9 },
+  { id: 'snowman', kind: 'snowman', s: 44.3, t: 12.8, r: 0.85 }, // 대문 안 오른쪽 끝
+  { id: 'bushA', kind: 'bush', s: 44.3, t: -9.8, r: 0.9 }, // 앞쪽 길 왼쪽 끝
+  { id: 'bushC', kind: 'bush', s: 50.0, t: -9.7, r: 0.9 }, // 가운데 길 왼쪽 끝
+  { id: 'treeA', kind: 'tree', s: 50.6, t: 13.7, r: 0.95 }, // 창가 앞 틈 옆
+  { id: 'doghouse', kind: 'doghouse', s: 55.2, t: -9.2, r: 1.05 }, // 집 앞 길 왼쪽 끝
+  { id: 'treeB', kind: 'tree', s: 57.9, t: -8.0, r: 0.95 },
+  { id: 'bushB', kind: 'bush', s: 57.6, t: 4.2, r: 0.9 }, // 현관과 창가 사이
+  { id: 'logs', kind: 'logs', s: 57.7, t: 10.0, r: 0.85 }, // 창가 오른쪽 벽 밑
 ];
 
 /** 창 바로 아래(유나가 내려다보지 못하는 곳) */
@@ -418,3 +429,5 @@ export const COVER_COLLIDERS: readonly Collider[] = COVERS.map((c) => {
   const p = W(c.s, c.t);
   return { kind: 'circle', x: p.x, z: p.z, r: c.r * 0.8 };
 });
+/** 생울타리 충돌 */
+export const HEDGE_COLLIDERS: readonly Collider[] = HEDGES.map((h) => laneWall(h.a, h.b, HEDGE_THICK));
