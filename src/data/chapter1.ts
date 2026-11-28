@@ -121,7 +121,8 @@ export const CH1_HOUSES: readonly Ch1House[] = [
 /** 집 배율·반 크기·문 위치(유나네만 크다) */
 export const houseScaleOf = (h: Ch1House): number => HOUSE_SCALE * (h.yuna ? YUNA_HOUSE_K : 1);
 export const halfOf = (h: Ch1House): { w: number; d: number } => (h.yuna ? YUNA_HALF : HOUSE_HALF);
-const doorOff = (h: Ch1House): number => DOOR_OFF * (h.yuna ? YUNA_HOUSE_K : 1);
+/** 유나네는 좌우를 뒤집어 세운다(문이 가운데 왼쪽, 창가가 오른쪽) */
+const doorOff = (h: Ch1House): number => (h.yuna ? -DOOR_OFF * YUNA_HOUSE_K : DOOR_OFF);
 
 export function houseById(id: string): Ch1House {
   return CH1_HOUSES.find((h) => h.id === id)!;
@@ -171,7 +172,8 @@ export function potOf(h: Ch1House): { s: number; t: number } {
 }
 
 /** 유나 창가(돌출 창): 문 왼쪽, 사진기 쪽 앞면 */
-export const YUNA_WINDOW = { s: YUNA_S - YUNA_HALF.d, t: -4.2 * YUNA_HOUSE_K, width: 4.0, sill: 2.5 * ELF_H, height: 2.9 * ELF_H };
+/** 유나 창가: 집 오른쪽(대문 쪽)에서 마당을 내려다본다(2026-11-28 사용자: "감시하는 인물이 집 오른편에") */
+export const YUNA_WINDOW = { s: YUNA_S - YUNA_HALF.d, t: 4.2 * YUNA_HOUSE_K, width: 4.0, sill: 2.5 * ELF_H, height: 2.9 * ELF_H };
 
 /** 길잡이: 갈림길의 빨간 우체통(울타리 앞), 윗길 모퉁이의 큰 트리(빈 땅 안) */
 export const LANDMARKS = {
@@ -350,36 +352,37 @@ export const YUNA_EYE = { s: YARD.back + 0.2, t: YUNA_WINDOW.t };
  */
 export const GARDEN_PATH: readonly { s: number; t: number }[] = [
   { s: YARD.front - 0.4, t: 8.6 },
-  { s: 45.6, t: 11.2 },
-  { s: 50.0, t: 11.8 },
-  { s: 54.0, t: 11.0 },
-  { s: 56.6, t: 8.0 },
-  { s: YARD.back - 2.6, t: 3.4 },
+  { s: 44.2, t: 4.2 },
+  { s: 46.0, t: -1.2 },
+  { s: 48.8, t: -6.0 },
+  { s: 52.6, t: -8.6 },
+  { s: 56.0, t: -7.4 },
+  { s: YARD.back - 2.5, t: -3.4 },
 ];
 
 /** 엄폐물 생김새 */
 export type CoverKind = 'snowman' | 'tree' | 'bush' | 'logs' | 'doghouse';
 /**
- * 앞마당 엄폐물(골목 좌표, 반지름). 정원길 옆 창 쪽에 띄엄띄엄(길 위는 비운다): 눈사람 → 개집 → 장식 나무 → 덤불 → 현관.
- * 마당 가운데·왼쪽에도 몇 개(장식 나무·덤불·장작)(눈 더미는 어색해 뺐다): 길을 벗어나 숨어 가는 다른 길. 요정보다 크다.
- * 넓은 마당(깊이 17 m): 유나가 한 번 그리는 동안 다 못 건넌다 → 숨었다 뛰었다를 되풀이하거나 종으로 유나를 떼어 놓는다.
+ * 앞마당 엄폐물(골목 좌표, 반지름). 유나 창은 집 오른쪽(대문 쪽)이라 정원길은 대문에서 왼쪽으로 크게 돌아 현관(집 왼쪽)으로 간다.
+ * 엄폐물은 길에서 1.5 m 넘게 떨어진 창 쪽에 띄엄띄엄: 눈사람 → 개집 → 장식 나무 → 덤불 → 현관 오른쪽 덤불.
+ * 그 뒤(창 반대쪽)에서 **앉아야** 숨는다(2026-11-28 사용자: "앉는 키를 눌러서 엄폐할 수 있게"). 마당 곳곳에 장작·나무·덤불 몇 개 더.
  */
 export const COVERS: readonly { id: string; kind: CoverKind; s: number; t: number; r: number }[] = [
-  { id: 'snowman', kind: 'snowman', s: 46.4, t: 8.7, r: 0.85 },
-  { id: 'doghouse', kind: 'doghouse', s: 50.2, t: 9.2, r: 1.05 },
-  { id: 'treeA', kind: 'tree', s: 53.4, t: 8.0, r: 0.95 },
-  { id: 'bushA', kind: 'bush', s: 54.6, t: 4.6, r: 0.9 },
-  { id: 'treeB', kind: 'tree', s: 50.0, t: 3.0, r: 0.95 },
-  { id: 'bushB', kind: 'bush', s: 45.4, t: 3.4, r: 0.9 },
-  { id: 'logs', kind: 'logs', s: 47.4, t: -6.4, r: 0.85 },
-  { id: 'bushC', kind: 'bush', s: 53.8, t: -1.6, r: 0.95 },
+  { id: 'snowman', kind: 'snowman', s: 45.9, t: 6.2, r: 0.85 },
+  { id: 'doghouse', kind: 'doghouse', s: 47.8, t: 1.8, r: 1.05 },
+  { id: 'treeA', kind: 'tree', s: 50.3, t: -2.6, r: 0.95 },
+  { id: 'bushA', kind: 'bush', s: 54.0, t: -4.6, r: 0.9 },
+  { id: 'bushB', kind: 'bush', s: 56.3, t: 0.7, r: 0.9 }, // 현관 계단 오른쪽 아래(계단 위에 두면 묻힌다)
+  { id: 'logs', kind: 'logs', s: 51.2, t: 4.6, r: 0.85 },
+  { id: 'treeB', kind: 'tree', s: 45.0, t: -6.8, r: 0.95 },
+  { id: 'bushC', kind: 'bush', s: 49.6, t: 10.6, r: 0.9 },
 ];
 
 /** 창 바로 아래(유나가 내려다보지 못하는 곳) */
 export const BLIND = { s0: YARD.back - 1.5, t0: YUNA_WINDOW.t - 2.0, t1: YUNA_WINDOW.t + 2.0 };
 
 /** 현관 발판(선물을 놓는 곳): 문 앞 */
-export const PORCH = { s: YARD.back - 1.9, t: DOOR_OFF * YUNA_HOUSE_K, hs: 1.2, ht: 1.8 };
+export const PORCH = { s: YARD.back - 1.9, t: -DOOR_OFF * YUNA_HOUSE_K, hs: 1.2, ht: 1.8 };
 
 /** 들킨 요정이 돌아가는 곳: 엄폐물에 숨은 적이 없으면 대문 밖 */
 export const OUTSIDE_GATE = { s: YARD.front - 1.4, t: (YARD.gate[0] + YARD.gate[1]) / 2 };

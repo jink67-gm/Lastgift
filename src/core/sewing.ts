@@ -69,6 +69,8 @@ export interface SewingInput {
   move: { x: number; y: number };
   actionDown: boolean;
   actionHeld: boolean;
+  /** 앉기(1장: 엄폐물 뒤에서 앉으면 숨는다). 다른 장은 쓰지 않는다 */
+  crouch?: boolean;
 }
 
 export type SewingEvent =

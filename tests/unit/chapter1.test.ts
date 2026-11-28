@@ -89,11 +89,12 @@ describe('1장 규칙', () => {
     r = walkTo(s, 45.3, 9.1, 4);
     expect(r.events.filter((e) => e === 'found')).toEqual(['found']);
     expect(r.state.found).toBe(true);
-    r = walkTo(r.state, 47, 4, 4);
+    r = walkTo(r.state, 44.2, 4.2, 4);
     expect(r.events).not.toContain('found');
     // 정원길을 따라 막힘 없이 현관 앞까지
     const end = GARDEN_PATH[GARDEN_PATH.length - 1]!;
-    const g2 = walkPath(r.state, GARDEN_PATH.map((p) => [p.s, p.t] as [number, number]), 6).state;
+    // (유나가 창가를 떠나 있게 해 길만 본다)
+    const g2 = walkPath({ ...r.state, yunaAway: 999 }, GARDEN_PATH.map((p) => [p.s, p.t] as [number, number]), 6).state;
     expect(Math.hypot(toLane(g2.players[0]!).s - end.s, toLane(g2.players[0]!).t - end.t)).toBeLessThan(0.4);
   });
   it('가짜 집 대문(A·B·C)은 행동하면 덜컹거릴 뿐 열리지 않는다', () => {
@@ -180,7 +181,9 @@ describe('1장 들키지 않기(무궁화 꽃이 피었습니다 + 종)', () => 
   it('창에서 보이는가: 엄폐물 바로 뒤·창 바로 아래·앞마당 밖은 안 보이고, 앞마당 한가운데는 보인다', () => {
     for (const c of COVERS) {
       const b = behind(c);
-      expect(hiddenFromWindow(W(b.s, b.t)), c.id).toBe(true);
+      // 엄폐물 뒤에서 앉아야 숨는다(서 있으면 머리가 보인다)
+      expect(hiddenFromWindow({ ...W(b.s, b.t), crouching: true }), c.id).toBe(true);
+      expect(hiddenFromWindow({ ...W(b.s, b.t), crouching: false }), c.id).toBe(false);
     }
     expect(hiddenFromWindow(W(46, 0))).toBe(false);
     expect(hiddenFromWindow(W(YUNA_EYE.s - 0.9, YUNA_EYE.t + 0.5))).toBe(true);
@@ -199,14 +202,20 @@ describe('1장 들키지 않기(무궁화 꽃이 피었습니다 + 종)', () => 
     s = at({ ...s, gateOpen: true, time: firstLook(7) + 0.05 }, 'p0', 46, 0);
     expect(step(s, { p0: walkRight, p1: idle }, DT).events.some((e) => e.type === 'caught')).toBe(false);
   });
-  it('엄폐물 뒤에서는 움직여도 괜찮다, 앞마당 밖도 괜찮다', () => {
+  it('엄폐물 뒤에서 앉은 채로는 살금살금 움직여도 괜찮고(느리게 걷는다), 서서 움직이면 들킨다. 앞마당 밖은 괜찮다', () => {
     const c = COVERS[1]!;
     const b = behind(c);
     let s = at(looking(), 'p0', b.s, b.t);
     s = at(s, 'p1', 40, -2);
-    const tiny = { ...idle, move: { x: 0.05, y: 0 } };
-    const r = step(s, { p0: tiny, p1: walkRight }, DT);
+    const tiny = { ...idle, move: { x: 0.1, y: 0 } };
+    const r = step(s, { p0: { ...tiny, crouch: true }, p1: walkRight }, DT);
     expect(r.events.some((e) => e.type === 'caught')).toBe(false);
+    expect(r.state.players[0]!.crouching).toBe(true);
+    const moved = Math.hypot(r.state.players[0]!.x - s.players[0]!.x, r.state.players[0]!.z - s.players[0]!.z);
+    const r2 = step(s, { p0: tiny, p1: idle }, DT);
+    const moved2 = Math.hypot(r2.state.players[0]!.x - s.players[0]!.x, r2.state.players[0]!.z - s.players[0]!.z);
+    expect(moved).toBeLessThan(moved2 * 0.7); // 앉으면 느리다
+    expect(r2.events.some((e) => e.type === 'caught' && (e as { playerId: string }).playerId === 'p0')).toBe(true);
   });
   it('들키면 검은 화면 동안 모두 멈추고, 가장 깜깜할 때 들킨 요정은 (멘 자루와 함께) 대문 앞으로. 밝아지면 유나는 다시 그림부터', () => {
     let s = at(looking(), 'p0', 46, 0);

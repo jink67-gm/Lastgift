@@ -13,6 +13,8 @@ export interface Intent {
     /** 이번 샘플에서 떼어졌다 */
     up: boolean;
   };
+  /** 앉기(누르고 있는 동안, 터치는 단추로 켜고 끈다). 1장: 엄폐물 뒤에서 앉으면 숨는다 */
+  crouch?: boolean;
 }
 
 export const IDLE_INTENT: Intent = Object.freeze({

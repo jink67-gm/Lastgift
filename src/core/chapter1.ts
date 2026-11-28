@@ -9,8 +9,8 @@
 //   가짜 집 대문은 덜컹거릴 뿐(잠김). 자루를 멘 요정도 연다(손은 비었다). 대문 앞에서는 지도·내려놓기보다 대문이 먼저.
 // - 유나네 앞마당(낮은 담 안)에 처음 들어서면 "찾았다"(한 번만).
 // - 무궁화 꽃이 피었습니다(2026-11-28 사용자 결정): 유나는 창가에서 [그림 그리기 → 일어나 돌아서기(예고 1초) → 창밖 보기 → 다시 앉기]를
-//   되풀이한다(시드로 정한 순서). 창밖을 보는 동안 앞마당 안에서 움직인 요정은 들킨다. 멈춰 있거나, 엄폐물 뒤(창 → 요정 선이 막힘)나
-//   창 바로 아래면 괜찮다. 돌아본 첫 LOOK_GRACE초는 봐준다(멈출 틈).
+//   되풀이한다(시드로 정한 순서). 창밖을 보는 동안 앞마당 안에서 움직인 요정은 들킨다. 멈춰 있거나, 엄폐물 뒤(창 → 요정 선이 막힘)에서
+//   **앉아 있거나**(앉기 키·단추, 앉으면 느리게 걷는다: 엄폐물 뒤에서 앉은 채 살금살금은 괜찮다), 창 바로 아래면 괜찮다. 돌아본 첫 LOOK_GRACE초는 봐준다(멈출 틈).
 //   들키면 화면이 잠깐 까맣게 바뀌고(CAUGHT_PAUSE초, 모두 멈춤) 들킨 요정은 대문 앞으로 돌아가 있다. 유나는 다시 그림을 그린다.
 //   든 것은 그대로, 팀 시계도 그대로. 예전 망보는 자리·손 신호·눈 표시·작은 엿보기 화면은 없앴다.
 // - 종(BELL, 담 밖): 행동 → 유나가 창가를 떠나 YUNA_AWAY초 동안 창이 빈다(그동안은 아무도 들키지 않는다). 돌아오면 다시 그림부터.
@@ -47,6 +47,8 @@ export interface Ch1Player extends PlayerState {
   connected: boolean;
   /** 지우의 지도를 펴 들고 있다(움직이지 않는다) */
   mapOpen: boolean;
+  /** 앉아 있다(엄폐물 뒤에서 숨는다, 걸음이 느리다) */
+  crouching?: boolean;
 
 }
 
@@ -128,12 +130,16 @@ export function atBell(p: { x: number; z: number }): boolean {
   return Math.hypot(s - BELL.s, t - BELL.t) <= BELL_REACH;
 }
 
-/** 창에서 이 요정이 보이지 않는가(엄폐물 뒤, 창 바로 아래, 앞마당 밖) */
-export function hiddenFromWindow(p: { x: number; z: number }): boolean {
+/** 앉아 걷는 빠르기(서서 걷기의 배) */
+export const CROUCH_SPEED = 0.5;
+
+/** 창에서 이 요정이 보이지 않는가(엄폐물 뒤에서 앉아 있음, 창 바로 아래, 앞마당 밖) */
+export function hiddenFromWindow(p: { x: number; z: number; crouching?: boolean }): boolean {
   if (!inYunasYard(p)) return true;
   const { s, t } = toLane(p);
   if (s >= BLIND.s0 && t >= BLIND.t0 && t <= BLIND.t1) return true;
-  // 창 → 요정 선이 엄폐물을 지나고, 요정이 그 엄폐물 바로 뒤에 있다
+  // 창 → 요정 선이 엄폐물을 지나고, 요정이 그 엄폐물 바로 뒤에 앉아 있다(서 있으면 머리가 보인다)
+  if (!p.crouching) return false;
   for (const c of COVERS) {
     const ds = s - YUNA_EYE.s, dt = t - YUNA_EYE.t;
     const len2 = ds * ds + dt * dt;
@@ -312,7 +318,9 @@ export function step(state: Ch1State, inputs: Record<string, SewingInput>, dt: n
     players: s.players.map((p) => {
       const inp = inputs[p.id];
       if (!p.connected || p.mapOpen || !inp) return p.moving ? { ...p, moving: false } : p;
-      return { ...p, ...stepPlayer(p, inp.move, dt, WORLD) };
+      const crouching = !!inp.crouch;
+      const move = crouching ? { x: inp.move.x * CROUCH_SPEED, y: inp.move.y * CROUCH_SPEED } : inp.move;
+      return { ...p, ...stepPlayer(p, move, dt, WORLD), crouching };
     }),
   };
   // 3) 든 선물은 든 요정을 따라간다

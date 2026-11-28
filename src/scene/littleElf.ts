@@ -174,6 +174,7 @@ export function createLittleElf(models: Models, look: ElfLook): ElfView | null {
     { u: 1, rot: 0, hz: 0, hy: hipH, thigh: 0, shin: 0, spine: 0, armX: 0, armZ: 0 },
   ] as const;
   const _hip = new THREE.Vector3(), _eul = new THREE.Euler();
+  let crouchW = 0;
   // 등에 멘 자루
   let pack: THREE.Object3D | null = null;
   let packT = Infinity; // 메기 시작부터 흐른 시간(Infinity = 이미 멤)
@@ -455,6 +456,19 @@ export function createLittleElf(models: Models, look: ElfLook): ElfView | null {
         const sh = Math.sin(timeSec * 34) * 0.16;
         turn(B.ul, Z, sh);
         turn(B.ur, Z, -sh);
+      }
+      // 앉기(숨기): 엉덩이를 낮추고 무릎을 굽혀 앞으로 숙인다(걸으면 쪼그려 걷기)
+      crouchW += ((pose.crouch ? 1 : 0) - crouchW) * (1 - Math.exp(-dt * 14));
+      if (crouchW > 0.01) {
+        const c = crouchW;
+        model.position.y -= hipH * 0.4 * c;
+        const stepK = moving ? Math.sin(timeSec * 10) * 0.25 : 0;
+        turn(B.thl, X, (-1.25 + stepK) * c);
+        turn(B.thr, X, (-1.25 - stepK) * c);
+        turn(B.shl, X, 1.7 * c);
+        turn(B.shr, X, 1.7 * c);
+        turn(B.spine, X, 0.45 * c);
+        turn(B.head, X, -0.3 * c);
       }
       // 고개 숙이기(0 = 앞, 1 = 발밑)
       if (lookDown > 0.001) turn(B.head, X, 0.75 * lookDown);

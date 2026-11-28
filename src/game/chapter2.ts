@@ -50,7 +50,7 @@ export function chapter2Checkpoint(roomId: string) {
 }
 
 export function toSewingInput(i: Intent): SewingInput {
-  return { move: i.move, actionDown: i.action.down, actionHeld: i.action.held };
+  return { move: i.move, actionDown: i.action.down, actionHeld: i.action.held, crouch: !!i.crouch };
 }
 
 export function startChapter2(models: Models, opts?: StoryOptions): void {

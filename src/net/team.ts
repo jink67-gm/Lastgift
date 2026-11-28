@@ -89,7 +89,7 @@ function newId(): string {
 const hatOf = (slot: string) => ELF_LOOKS[Number(slot.slice(1))]!.hat;
 const isTest = () => import.meta.env.DEV || new URLSearchParams(location.search).has('test');
 const setTeamHud = (hud: Hud | null, team: TeamEntry[]) => hud?.setTeam(team.map((m) => ({ color: hatOf(m.slot), connected: m.connected })));
-const toInput = (i: Intent): SewingInput => ({ move: i.move, actionDown: i.action.down, actionHeld: i.action.held });
+const toInput = (i: Intent): SewingInput => ({ move: i.move, actionDown: i.action.down, actionHeld: i.action.held, crouch: !!i.crouch });
 
 function exposeNet(v: Record<string, unknown>): void {
   if (isTest()) (window as unknown as Record<string, unknown>).__lastgiftNet = v;
@@ -130,7 +130,7 @@ class TeamHost implements TeamNet, MirrorLink {
   private readonly links = new Map<string, PeerLink>();
   readonly lastHeard = new Map<string, number>();
   private readonly open = new Set<Slot>(['p0']);
-  readonly guestIn = new Map<Slot, { n: number; move: { x: number; y: number }; held: boolean; at: number }>();
+  readonly guestIn = new Map<Slot, { n: number; move: { x: number; y: number }; held: boolean; crouch?: boolean; at: number }>();
   private readonly pendingAct = new Map<Slot, number>();
   private readonly seen = new Map<Slot, Set<string>>();
   private readonly presence: ((slot: Slot, on: boolean) => void)[] = [];
@@ -274,7 +274,7 @@ class TeamHost implements TeamNet, MirrorLink {
       // 이동 입력은 state(빠름, 잃을 수 있음)와 mission(느려도 꼭 도착) 둘로 온다 → 번호가 새것만
       const prev = this.guestIn.get(slot);
       if (prev && m.n <= prev.n) return;
-      this.guestIn.set(slot, { n: m.n, move: { x: m.mx, y: m.my }, held: m.held, at: performance.now() });
+      this.guestIn.set(slot, { n: m.n, move: { x: m.mx, y: m.my }, held: m.held, crouch: !!m.crouch, at: performance.now() });
       return;
     }
     if (ch !== 'mission' || !this.run) return;
@@ -325,7 +325,7 @@ class TeamHost implements TeamNet, MirrorLink {
       const fresh = gi && now - gi.at < INPUT_STALE_MS;
       const acts = this.pendingAct.get(slot) ?? 0;
       if (acts > 0) this.pendingAct.set(slot, acts - 1);
-      out[slot] = { move: fresh ? gi.move : { x: 0, y: 0 }, actionDown: acts > 0, actionHeld: !!(fresh && gi.held) };
+      out[slot] = { move: fresh ? gi.move : { x: 0, y: 0 }, actionDown: acts > 0, actionHeld: !!(fresh && gi.held), crouch: !!(fresh && gi.crouch) };
     }
     return out;
   }
@@ -575,7 +575,7 @@ class TeamGuest implements TeamNet, MirrorLink {
     const intent = this.ticks - this.intentTick <= 2 ? this.pendingIntent : IDLE_INTENT;
     if (this.link?.isOpen && this.mySlot && now - this.lastInput >= INPUT_MS) {
       this.lastInput = now;
-      const msg = { t: 'in', n: ++this.inN, mx: intent.move.x, my: intent.move.y, held: intent.action.held };
+      const msg = { t: 'in', n: ++this.inN, mx: intent.move.x, my: intent.move.y, held: intent.action.held, crouch: !!intent.crouch };
       this.link.send('state', msg);
       // 학교망처럼 state 채널 꾸러미를 많이 잃는 길에서도 움직임이 끊기지 않게: 바뀌었을 때와 0.25초마다 신뢰 채널로도
       const key = `${msg.mx.toFixed(2)},${msg.my.toFixed(2)},${msg.held}`;

@@ -17,6 +17,8 @@ export interface InputMsg {
   mx: number;
   my: number;
   held: boolean;
+  /** 앉기(1장). 예전 기기는 보내지 않는다 */
+  crouch?: boolean;
 }
 
 /** mission 채널: 행동 버튼·E 한 번 */
@@ -126,7 +128,7 @@ export function parseGuestMsg(data: string): GuestMsg | null {
     if (!num(v.n) || !num(v.mx) || !num(v.my) || typeof v.held !== 'boolean') return null;
     const len = Math.hypot(v.mx as number, v.my as number);
     const k = len > 1 ? 1 / len : 1; // 속도를 부풀리지 못하게
-    return { t: 'in', n: v.n as number, mx: (v.mx as number) * k, my: (v.my as number) * k, held: v.held };
+    return { t: 'in', n: v.n as number, mx: (v.mx as number) * k, my: (v.my as number) * k, held: v.held, crouch: v.crouch === true };
   }
   if (v.t === 'act' || v.t === 'retry') {
     if (!str(v.runId) || !num(v.epoch) || !str(v.playerId, 8) || !str(v.eventId)) return null;

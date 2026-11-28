@@ -33,10 +33,10 @@ test('1장 장면', async ({ page }) => {
     ['e4_neighborC', 39.5, -17],
     ['e5_rightB', 33, 22],
     ['f_yunaGate', 40.4, 7.4],
-    ['g_inyard', 47.5, 11.4],
-    ['g2_midyard', 52, 5],
+    ['g_inyard', 44.6, 5.6],
+    ['g2_midyard', 50.5, -5.5],
     ['h_bell', 41.0, -6.0],
-    ['i_porch', 56.6, 3.0],
+    ['i_porch', 56.6, -2.6],
   ];
   for (const [name, s, t] of spots) {
     await hook(page, 'debugPlace', 'p0', s, t, Math.PI);
@@ -59,6 +59,15 @@ test('1장 장면', async ({ page }) => {
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `${OUT}/j_map.png` });
   await page.keyboard.press('Enter');
+  // 앉아서 숨기: 개집 뒤에서 1P가 C를 누르고 있다
+  await hook(page, 'debugPlace', 'p0', 46.3, 1.3, Math.PI * 1.25);
+  await hook(page, 'debugPlace', 'p1', 44.4, 6.3, Math.PI * 1.25);
+  await page.keyboard.down('KeyC');
+  await page.keyboard.down('ShiftRight');
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `${OUT}/g3_crouch.png` });
+  await page.keyboard.up('KeyC');
+  await page.keyboard.up('ShiftRight');
   // 종: 2P가 담 밖 종 앞에서 Enter → 유나가 창가를 떠난다
   await hook(page, 'debugPlace', 'p0', 40.2, -4.6, Math.PI);
   await hook(page, 'debugPlace', 'p1', 41.3, -7.2, Math.PI * 1.25);
@@ -92,8 +101,8 @@ test('1장 장면', async ({ page }) => {
   await page.screenshot({ path: `${OUT}/h6_backAtGate.png` });
   // 현관 발판에서 자루를 풀어 두 선물을 꺼낸다
   await hook(page, 'setTime', 0.1);
-  await hook(page, 'debugPlace', 'p0', 56.8, 2.1, Math.PI * 1.25);
-  await hook(page, 'debugPlace', 'p1', 55.4, 6.0, Math.PI * 1.25);
+  await hook(page, 'debugPlace', 'p0', 56.8, -2.1, Math.PI * 1.25);
+  await hook(page, 'debugPlace', 'p1', 55.4, -6.0, Math.PI * 1.25);
   await page.waitForTimeout(1200);
   await page.keyboard.press('KeyE');
   await page.waitForTimeout(1500);

@@ -9,6 +9,8 @@ export interface KeyMap {
   left: readonly string[];
   right: readonly string[];
   action: readonly string[];
+  /** 앉기(누르고 있는 동안) */
+  crouch?: readonly string[];
 }
 
 /** 한 사람이 쓰는 기본 배치: WASD와 방향키 둘 다 이동, E가 행동 */
@@ -18,10 +20,11 @@ export const KEYMAP_ALL: KeyMap = {
   left: ['KeyA', 'ArrowLeft'],
   right: ['KeyD', 'ArrowRight'],
   action: ['KeyE'],
+  crouch: ['KeyC', 'ShiftLeft', 'ShiftRight'],
 };
 
 /** 한 키보드를 둘이 나눠 쓸 때(로컬 2인 시험): 1P = WASD + E */
-export const KEYMAP_P1: KeyMap = { up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'], action: ['KeyE'] };
+export const KEYMAP_P1: KeyMap = { up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'], action: ['KeyE'], crouch: ['KeyC', 'ShiftLeft'] };
 
 /** 한 키보드를 둘이 나눠 쓸 때: 2P = 방향키 + Enter(또는 /) */
 export const KEYMAP_P2: KeyMap = {
@@ -30,10 +33,11 @@ export const KEYMAP_P2: KeyMap = {
   left: ['ArrowLeft'],
   right: ['ArrowRight'],
   action: ['Enter', 'NumpadEnter', 'Slash'],
+  crouch: ['ShiftRight', 'Period'],
 };
 
 function keysOf(m: KeyMap): Set<string> {
-  return new Set([...m.up, ...m.down, ...m.left, ...m.right, ...m.action]);
+  return new Set([...m.up, ...m.down, ...m.left, ...m.right, ...m.action, ...(m.crouch ?? [])]);
 }
 
 /** 기본 배치에서 게임이 쓰는 키(페이지 스크롤 같은 기본 동작을 막는다) */
@@ -50,6 +54,7 @@ export class KeyState {
   private readonly LEFT: Set<string>;
   private readonly RIGHT: Set<string>;
   private readonly ACTION: Set<string>;
+  private readonly CROUCH: Set<string>;
 
   constructor(map: KeyMap = KEYMAP_ALL) {
     this.keys = keysOf(map);
@@ -58,6 +63,7 @@ export class KeyState {
     this.LEFT = new Set(map.left);
     this.RIGHT = new Set(map.right);
     this.ACTION = new Set(map.action);
+    this.CROUCH = new Set(map.crouch ?? []);
   }
 
   /** 이 배치가 쓰는 키인가 */
@@ -99,6 +105,7 @@ export class KeyState {
         held: any(this.ACTION),
         up: this.actionUp,
       },
+      crouch: any(this.CROUCH),
     };
     this.actionDown = false;
     this.actionUp = false;

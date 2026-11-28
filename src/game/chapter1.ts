@@ -199,6 +199,7 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
   attachKeyboard(window, k1);
   attachKeyboard(window, k2);
   const controls = createControls(document);
+  controls.enableCrouch(true); // 1장: 터치 화면에 앉기 단추
   const hud = createHud(document);
   const kv = browserStorage();
   const settings = createSettingsUi(document, loadSettings(kv));
@@ -421,6 +422,7 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
         act: since >= 0 && since < 0.35 ? since / 0.35 : 0,
         tired: false,
         span: held && held.id !== SACK ? gifts.get(held.id)!.span : p.mapOpen ? 0.42 / ELF_SCALE : undefined,
+        crouch: !!p.crouching,
       });
       e.root.updateMatrixWorld(true);
       // 지도: 편 요정 손 위 종이 + 화면 아래 모서리 그림
@@ -475,6 +477,9 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
       holdTween.apply(it.id, g.v, idx >= 0, elapsed);
     }
     controls.update(iconOf(mine));
+    // 앉기 안내: 유나네를 찾은 뒤(앞마당에서 숨을 때) 키보드 화면에 [C] + 앉기 그림
+    const meP = state.players.find((p) => p.id === ME);
+    controls.crouchHint(state.found && ending < 0, !!meP?.crouching);
     space.update(elapsed);
     // 유나네 대문: 열리면 0.7초에 걸쳐 안쪽으로 활짝. 가짜 집 대문은 덜컹
     gateK = state.gateOpen ? Math.min(1, gateK + frame / 0.7) : 0;
@@ -601,7 +606,7 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
   /** 앞세워 보여 줄 곳: 골목 끝 유나네 담(아직 못 찾았으면), 찾았으면 앞마당 */
   function goalOf(): Pt | null {
     // 찾기 전에는 사진기가 유나네 쪽을 앞세우지 않는다(어느 집인지 화면이 알려 주면 안 된다)
-    if (state.found) return W(YARD.back + 2.2, YUNA_WINDOW.t + 2); // 유나 창가가 늘 화면에(무궁화 꽃: 돌아서는 게 보여야 한다)
+    if (state.found) return W(YARD.back + 2.2, YUNA_WINDOW.t - 3); // 유나 창가가 늘 화면에(무궁화 꽃: 돌아서는 게 보여야 한다)
     return null;
   }
 

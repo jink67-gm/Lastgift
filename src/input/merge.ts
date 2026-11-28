@@ -17,5 +17,6 @@ export function mergeIntents(...list: Intent[]): Intent {
       held: list.some((i) => i.action.held),
       up: list.some((i) => i.action.up) && !list.some((i) => i.action.held),
     },
+    crouch: list.some((i) => !!i.crouch),
   };
 }

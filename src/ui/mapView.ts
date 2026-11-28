@@ -1,6 +1,6 @@
 // 지우의 그림 지도(1장): 공책 한 장에 크레파스로 그린 동네 길 그림. 글자 없이(명세서: 대사·설명 없음).
 //   아래 돌 아치 → 골목 → 빨간 우체통 갈림길에서 왼쪽 → 끝에서 위로 → 큰 트리 모퉁이에서 오른쪽 → 나무 대문으로(빨간 화살표).
-//   막다른 갈래·오른쪽 윗길도 길로만 그렸다. 유나네: 낮은 담·나무 대문, 대문 왼쪽 물고기 우편함, 문 오른쪽 풍차 화분, 창가에 웃는 얼굴.
+//   막다른 갈래·오른쪽 윗길도 길로만 그렸다. 유나네: 낮은 담·나무 대문, 대문 왼쪽 물고기 우편함, 문 오른쪽 풍차 화분, 집 오른쪽 창가에 웃는 얼굴.
 //   다른 집들은 무늬 없이 네모로만(가까이 가서 생김새를 비교하게).
 // 지도를 편 요정 쪽 아래 모서리에 펼쳐진다(1P 왼쪽, 2P 오른쪽). 테두리는 그 요정 모자 색.
 
@@ -100,7 +100,7 @@ export function drawJiuMap(g: CanvasRenderingContext2D, W = 400, H = 500): void 
   fill(g, '#f3dfc4', () => g.rect(hx, hy, hw, hh));
   crayon(g, [[hx - 8, hy + 4], [hx + hw / 2, hy - 24], [hx + hw + 8, hy + 4]], '#c0623a', 8, 5);
   crayon(g, [[hx, hy + 4], [hx, hy + hh], [hx + hw, hy + hh], [hx + hw, hy + 4]], '#8a5a3a', 5, 6);
-  const wx = fx(-4.2);
+  const wx = fx(4.6); // 창가(웃는 얼굴)는 집 오른쪽
   fill(g, '#ffd27a', () => g.rect(wx - 18, hy + 14, 36, 30));
   crayon(g, [[wx - 18, hy + 14], [wx + 18, hy + 14], [wx + 18, hy + 44], [wx - 18, hy + 44], [wx - 18, hy + 14]], '#2f6fd0', 4, 7);
   g.strokeStyle = '#5a3620';
@@ -117,7 +117,7 @@ export function drawJiuMap(g: CanvasRenderingContext2D, W = 400, H = 500): void 
     g.arc(wx + sx * 10, hy + 30, 3, 0, Math.PI * 2);
     g.fill();
   }
-  const dx = fx(1.6);
+  const dx = fx(-1.6); // 문은 가운데 왼쪽
   fill(g, '#8c4a3a', () => g.rect(dx - 9, hy + hh - 30, 18, 30));
   const px = dx + 22, py = hy + hh - 4;
   crayon(g, [[px - 6, py], [px - 8, py - 10], [px + 8, py - 10], [px + 6, py], [px - 6, py]], '#c0623a', 4, 9);

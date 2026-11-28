@@ -18,6 +18,22 @@ const CSS = `
   right: calc(env(safe-area-inset-right) + 24px); bottom: calc(env(safe-area-inset-bottom) + 28px);
   background: rgba(27, 36, 51, 0.72); border: 4px solid #fff; box-sizing: border-box;
   pointer-events: auto; touch-action: none; display: none; padding: 14px; }
+#crouch-btn { position: absolute; width: 72px; height: 72px; border-radius: 50%;
+  right: calc(env(safe-area-inset-right) + 132px); bottom: calc(env(safe-area-inset-bottom) + 24px);
+  background: rgba(27, 36, 51, 0.72); border: 4px solid #fff; box-sizing: border-box;
+  pointer-events: auto; touch-action: none; display: none; padding: 10px; }
+#crouch-btn.on { background: rgba(80, 170, 110, 0.9); }
+#crouch-btn svg { width: 100%; height: 100%; display: block; }
+body.touch-on #crouch-btn.enabled { display: block; }
+#crouch-hint { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 8px;
+  padding: 6px 12px 6px 8px; border-radius: 14px; background: rgba(27, 36, 51, 0.72); }
+#crouch-hint .key { min-width: 36px; height: 36px; border-radius: 8px; background: #fff; color: #1b2433; padding: 0 6px;
+  font: 700 20px/36px system-ui, sans-serif; text-align: center; box-shadow: 0 3px 0 #9aa6bb; }
+#crouch-hint svg { width: 40px; height: 40px; display: block; }
+#crouch-hint.show { display: flex; }
+#crouch-hint.on { background: rgba(60, 140, 90, 0.85); }
+body.touch-on #crouch-hint { display: none !important; }
+@media (max-width: 820px) { #crouch-hint { top: 116px; } }
 #action-btn.pressed { background: rgba(255, 216, 74, 0.85); transform: scale(0.94); }
 #action-btn svg, #key-hint svg { width: 100%; height: 100%; display: block; }
 #key-hint { position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
@@ -39,6 +55,10 @@ export interface Controls {
   /** 매 프레임: 스틱 위치와 행동 그림을 갱신한다 */
   update(icon: ActionIcon): void;
   readonly touchMode: boolean;
+  /** 앉기 단추를 쓰는 장(1장)에서 켠다. 켜면 터치 화면에 앉기 단추가 생긴다 */
+  enableCrouch(on: boolean): void;
+  /** 키보드 앉기 안내(C + 앉기 그림): show = 보이기, on = 지금 앉아 있음 */
+  crouchHint(show: boolean, on: boolean): void;
 }
 
 export function createControls(doc: Document): Controls {
@@ -52,6 +72,8 @@ export function createControls(doc: Document): Controls {
     <div id="stick-zone"></div>
     <div id="stick-base"></div><div id="stick-knob"></div>
     <div id="action-btn" role="button" aria-label="행동"></div>
+    <div id="crouch-btn" role="button" aria-label="앉기"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="20" r="9" fill="#fff" stroke="#1b2433" stroke-width="2.5"/><path d="M20 52l6-14 12 2 6 12M26 38l4-9h8l4 9" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 56h48" stroke="#ffd84a" stroke-width="4" stroke-linecap="round"/></svg></div>
+    <div id="crouch-hint"><div class="key">C</div><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="20" r="9" fill="#fff" stroke="#1b2433" stroke-width="2.5"/><path d="M20 52l6-14 12 2 6 12M26 38l4-9h8l4 9" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 56h48" stroke="#ffd84a" stroke-width="4" stroke-linecap="round"/></svg></div>
     <div id="key-hint" class="hidden"><div class="key">E</div><div class="pic"></div></div>`;
   doc.body.appendChild(root);
 
@@ -59,6 +81,8 @@ export function createControls(doc: Document): Controls {
   const base = root.querySelector<HTMLDivElement>('#stick-base')!;
   const knob = root.querySelector<HTMLDivElement>('#stick-knob')!;
   const btn = root.querySelector<HTMLDivElement>('#action-btn')!;
+  const crouchBtn = root.querySelector<HTMLDivElement>('#crouch-btn')!;
+  const crouchHint = root.querySelector<HTMLDivElement>('#crouch-hint')!;
   const hint = root.querySelector<HTMLDivElement>('#key-hint')!;
   const hintPic = hint.querySelector<HTMLDivElement>('.pic')!;
 
@@ -97,6 +121,11 @@ export function createControls(doc: Document): Controls {
   });
   for (const t of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) btn.addEventListener(t, release);
   btn.addEventListener('contextmenu', (e) => e.preventDefault());
+  crouchBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    touch.crouchOn = !touch.crouchOn;
+  });
+  crouchBtn.addEventListener('contextmenu', (e) => e.preventDefault());
 
   // 화면 전환·회전·창 전환 때 붙어 있는 입력이 남지 않게 한다.
   const clear = () => touch.clear();
@@ -113,7 +142,16 @@ export function createControls(doc: Document): Controls {
     get touchMode() {
       return touchMode;
     },
+    crouchHint(show, on) {
+      crouchHint.classList.toggle('show', show);
+      crouchHint.classList.toggle('on', on);
+    },
+    enableCrouch(on) {
+      crouchBtn.classList.toggle('enabled', on);
+      if (!on) touch.crouchOn = false;
+    },
     update(icon) {
+      crouchBtn.classList.toggle('on', touch.crouchOn);
       const v = touch.stickView();
       const idleX = Math.max(24 + STICK_RADIUS, win.innerWidth * 0.14);
       const idleY = win.innerHeight - 28 - STICK_RADIUS - 24;

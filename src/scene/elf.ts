@@ -62,6 +62,8 @@ export interface ElfPose {
   tired: boolean;
   /** 손 위에 얹은 물건의 가로 폭(요정 크기 1 기준 m). 두 손이 물건 바닥 아래에 오게 손 사이를 맞춘다 */
   span?: number;
+  /** 앉기(1장 숨기): 무릎을 굽혀 몸을 낮추고 앞으로 숙인다 */
+  crouch?: boolean;
 }
 
 export const NO_POSE: ElfPose = { carry: 'none', act: 0, tired: false };

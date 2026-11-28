@@ -120,6 +120,15 @@ test('1장 들키지 않기: 유나가 창밖을 볼 때 움직이면 화면이 
   const l = await page.evaluate(([x, z]) => (window as unknown as { __lastgift: Hook }).__lastgift.lane(x, z), [p0.x, p0.z] as const);
   expect(l.s).toBeLessThan(42.5); // 대문 앞(담 밖)
   expect((await H(page, (h) => h.gaze())).phase).toBe('away');
+  // 앉기: 1P C(누르는 동안), 2P 오른쪽 Shift
+  await page.keyboard.down('KeyC');
+  await page.keyboard.down('ShiftRight');
+  await page.waitForTimeout(300);
+  expect((await H(page, (h) => h.ch1())).players.map((p) => (p as { crouching?: boolean }).crouching)).toEqual([true, true]);
+  await page.keyboard.up('KeyC');
+  await page.keyboard.up('ShiftRight');
+  await page.waitForTimeout(300);
+  expect((await H(page, (h) => h.ch1())).players[0]!).toMatchObject({ crouching: false });
   // 2P가 담 밖 종 앞에서 Enter → 유나가 창가를 떠난다
   await page.evaluate(() => (window as unknown as { __lastgift: Hook }).__lastgift.debugPlace('p1', 41.3, -7.2, Math.PI * 1.25));
   await page.waitForTimeout(400);
@@ -140,8 +149,8 @@ test('1장 배달: 현관에서 자루를 풀어 두 선물을 놓고 모두 물
   await page.evaluate(() => {
     const h = (window as unknown as { __lastgift: Hook }).__lastgift;
     h.setTime(0.1);
-    h.debugPlace('p0', 56.8, 1.6, Math.PI * 1.25);
-    h.debugPlace('p1', 56.8, 3.0, Math.PI * 1.25);
+    h.debugPlace('p0', 56.8, -2.8, Math.PI * 1.25);
+    h.debugPlace('p1', 56.8, -1.4, Math.PI * 1.25);
   });
   await page.waitForTimeout(500);
   await page.keyboard.press('KeyE');

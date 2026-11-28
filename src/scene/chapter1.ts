@@ -860,11 +860,15 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
   // 집·우편함·화분
   const pots: Pot[] = [];
   const houseMeshes: THREE.Object3D[] = [];
+  let yunaPot: { group: THREE.Object3D; s: number; t: number } | null = null;
   for (const h of CH1_HOUSES) {
     const c = at(h.s, h.t);
     const house = alleyHouse(models, { x: c.x, z: c.z, rotY: faceYaw(h), scale: houseScaleOf(h) });
     if (!h.yuna) house.userData.fadeable = true;
-    else houseMeshes.push(house); // 앞쪽 집이 뒤 길의 요정을 가리면 흐려진다
+    else {
+      house.scale.x *= -1; // 유나네는 좌우를 뒤집어 문이 왼쪽, 창가가 오른쪽(데이터 doorOff와 같다)
+      houseMeshes.push(house);
+    } // 앞쪽 집이 뒤 길의 요정을 가리면 흐려진다
     root.add(house);
     const m = mailboxOf(h);
     const mb = mailbox(models, h.mail);
@@ -878,6 +882,7 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
     p.group.rotation.y = faceYaw(h);
     root.add(p.group);
     pots.push(p);
+    if (h.yuna) yunaPot = { group: p.group, s: pp.s, t: pp.t };
     // 문 앞 발판
     const d = doorOf(h);
     const mat = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.3), std('#8c4a3a', { roughness: 1 }));
@@ -1013,10 +1018,12 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
     return hit ? hit.point.y : 0;
   };
   // 계단 윗단(집 모델에서 잰 높이 약 0.8)은 문 앞 t 약 -0.5 ~ 1.6에 걸쳐 있다 → 그 가운데 두 자리
+  // 유나네 화분은 큰 현관 계단 위에(계단 속에 묻혀 흙만 보이지 않게)
+  if (yunaPot) yunaPot.group.position.y = stepTop(yunaPot.s, yunaPot.t);
   const kk = YUNA_HOUSE_K;
   const doorstep = [-0.55, 0.55].map((k) => {
     const s0 = door.s - 0.8 * kk;
-    const t0 = 0.6 * kk + k;
+    const t0 = -0.6 * kk + k; // 뒤집어 세운 집: 계단 윗단은 문 앞(가운데 왼쪽)
     return at(s0, t0, stepTop(s0, t0) + 0.01);
   });
   const windowCenter = win.group.localToWorld(new THREE.Vector3(0, YUNA_WINDOW.sill + YUNA_WINDOW.height / 2, 1.5));

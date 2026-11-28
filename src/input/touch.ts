@@ -20,6 +20,8 @@ export class TouchState {
   private readonly actionIds = new Set<number>();
   private actionDown = false;
   private actionUp = false;
+  /** 앉기 단추(누를 때마다 켜고 끈다) */
+  crouchOn = false;
 
   /** 스틱 영역에 손가락이 닿았다. 이미 스틱을 쓰는 손가락이 있으면 무시한다. */
   stickStart(id: number, x: number, y: number): boolean {
@@ -89,6 +91,7 @@ export class TouchState {
     const intent: Intent = {
       move: { x: mx, y: my },
       action: { down: this.actionDown, held: this.actionIds.size > 0, up: this.actionUp },
+      crouch: this.crouchOn,
     };
     this.actionDown = false;
     this.actionUp = false;
