@@ -601,16 +601,18 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     for (const [id, g] of gifts) if (id !== SACK) g.v.scale.setScalar(Math.max(0.001, (1 - take) * (g.v.userData.baseScale as number)));
     peekFrame.style.display = 'none';
     for (const h of hands) h.visible = false;
+    fader.update([], frame); // 놀이 중 흐려 둔 담·집을 되돌린다(끝 장면 화면 옆에 반투명 유령이 남지 않게)
     document.body.classList.add('cutscene');
     // 유나: 창가로 돌아와 앉는다 → 그린다 → 든다
     space.setGaze(t < 1.6 ? 'away' : t < 2.4 ? 'turn' : 'look', t < 1.6 ? 0 : sg(1.6, 2.4), t);
     book.visible = t > 2.0;
     drawBook(1); // 다 그린 고래
+    // 책상에 눕혀 둔 스케치북을 세워 가슴 앞에 펼쳐 보인다(얼굴을 가리지 않게 턱 아래까지만: 웃는 얼굴 + 다 그린 고래)
     const lift = ez(sg(3.6, 4.4));
     const base = space.yunaPlaceholder.position;
-    book.position.set(0, base.y + 0.35 + lift * 1.15, 1.5 * 0.75 + 0.05);
+    book.position.set(0, base.y + 0.28 + lift * 0.06, 1.5 * 0.75 + 0.05);
     book.rotation.set(-1.0 * (1 - lift), 0, 0);
-    book.scale.setScalar(0.6 + 0.4 * ez(sg(2.0, 2.6)) + 0.15 * lift);
+    book.scale.setScalar(0.55 + 0.25 * ez(sg(2.0, 2.6)) + 0.06 * lift);
     if (lift > 0) space.yunaPlaceholder.position.y = base.y + Math.abs(Math.sin(t * 7)) * 0.12 * lift;
     // 사진기: 지금 화면에서 창 앞으로
     const k = ez(sg(0, 1.4));

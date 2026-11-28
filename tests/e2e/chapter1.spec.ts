@@ -1,4 +1,5 @@
 // 1장 04-4a: 돌 아치 → 우편함 골목 → 유나네 앞마당 찾기(실제 키). 지우의 그림 지도 펴기·접기.
+// 1P는 두 선물(스케치북·색연필)이 든 물고기 자루를 등에 메고 시작한다. 현관 발판에서 E → 두 선물을 꺼내 놓는다.
 import { expect, test, type Page } from '@playwright/test';
 
 test.use({ viewport: { width: 640, height: 360 } });
@@ -16,17 +17,16 @@ async function hold(page: Page, keys: string[], ms: number) {
   for (const k of keys) await page.keyboard.up(k);
 }
 
-test('1장: 선물을 들고 골목을 올라가고, 빈손 E로 지도를 펴며, 담 끝을 돌아 앞마당에 들어서면 찾았다', async ({ page }) => {
+test('1장: 자루를 메고 골목을 올라가고, 빈손 E로 지도를 펴며, 담 끝을 돌아 앞마당에 들어서면 찾았다', async ({ page }) => {
   test.setTimeout(120_000);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/?chapter=1&test&noshadow&noestablish');
   await page.waitForFunction(() => !!(window as unknown as { __lastgift?: { ch1?: unknown } }).__lastgift?.ch1, null, { timeout: 30_000 });
   await page.waitForTimeout(500);
-  // 발치의 스케치북을 집는다
-  await page.keyboard.press('KeyE');
-  await page.waitForTimeout(200);
-  expect((await g(page)).items.find((i) => i.carriedBy === 'p0')?.id).toBe('sketchbook');
+  // 1P는 처음부터 자루를 멨다(선물은 자루 안)
+  expect((await g(page)).items.find((i) => i.carriedBy === 'p0')?.id).toBe('sack');
+  expect((await g(page)).items.filter((i) => i.carriedBy).length).toBe(1);
   // 위(W) = 골목 앞쪽: 들고 걸어도 골목 안
   const s0 = await g(page);
   const a = await lane(page, s0.players[0]!.x, s0.players[0]!.z);
@@ -127,16 +127,13 @@ test('1장 망보기: 망보는 자리에서만 창을 엿보는 작은 화면, 
   expect(errors).toEqual([]);
 });
 
-test('1장 배달: 두 선물을 현관에 놓고 모두 물러나면 기억 1 → 유나가 창가에서 고래를 꼬리까지 그리는 끝 장면', async ({ page }) => {
+test('1장 배달: 현관에서 자루를 풀어 두 선물을 놓고 모두 물러나면 기억 1 → 끝 장면', async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto('/?chapter=1&test&noshadow&noestablish');
   await page.waitForFunction(() => !!(window as unknown as { __lastgift?: { ch1?: unknown } }).__lastgift?.ch1, null, { timeout: 30_000 });
   await page.waitForTimeout(400);
-  await page.keyboard.press('KeyE');
-  await page.keyboard.press('Enter');
-  await page.waitForTimeout(300);
-  expect((await H(page, (h) => h.ch1())).items.every((i) => i.carriedBy)).toBe(true);
-  // 유나가 그림 그리는 동안 현관 앞으로(시각을 처음으로)
+  expect((await H(page, (h) => h.ch1())).items.find((i) => i.carriedBy === 'p0')?.id).toBe('sack');
+  // 현관 앞으로(시각을 처음으로: 유나가 책상을 볼 때)
   await page.evaluate(() => {
     const h = (window as unknown as { __lastgift: Hook }).__lastgift;
     h.setTime(0.1);
@@ -145,8 +142,8 @@ test('1장 배달: 두 선물을 현관에 놓고 모두 물러나면 기억 1 �
   });
   await page.waitForTimeout(500);
   await page.keyboard.press('KeyE');
-  await page.keyboard.press('Enter');
   await page.waitForTimeout(300);
+  expect((await H(page, (h) => h.ch1Events())).some((e) => e.type === 'unpack' && e.playerId === 'p0')).toBe(true);
   expect((await H(page, (h) => h.ch1())).placed.sort()).toEqual(['pencils', 'sketchbook']);
   expect((await H(page, (h) => h.run())).phase).toBe('play');
   // 물러나면 완료

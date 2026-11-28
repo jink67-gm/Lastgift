@@ -262,10 +262,9 @@ export function drawStory(g: CanvasRenderingContext2D, t: number, W = 960, H = 5
     }
     // 다 그린 고래(종이 끝이라 꼬리 자리가 없다)
     drawWhale(g, 628, 340, 1.3, 0.78, '#2f6fd0', false);
-    // 유나: 오른쪽 아래에서 고래를 보며 시무룩(연필을 쥔 채)
+    // 유나: 오른쪽 아래에서 고래를 보며 시무룩(연필은 들지 않는다: 얼굴을 가로질러 어색했다)
     const inK = ease(seg(t, [0, 0.8]));
     drawPerson(g, YUNA_2D, 830, 560 + (1 - inK) * 120, 1.05, { mood: t > 1.6 ? -1 : 0, look: -1 });
-    pencil(g, 760, 470, -0.9);
     // 지우: 왼쪽 아래에서 들어와 유나를 본다
     const stopK = ease(seg(t, STORY.stop));
     if (stopK > 0) drawPerson(g, JIWOO_2D, 120, 560 + (1 - stopK) * 160, 1.1, { mood: 0, look: 1 });

@@ -38,13 +38,22 @@ test('1장 장면', async ({ page }) => {
     await page.waitForTimeout(1800);
     await page.screenshot({ path: `${OUT}/${name}.png` });
   }
-  // 지우 지도: 빈손 1P가 집을 것 없는 데서 E
-  await hook(page, 'debugPlace', 'p0', 15, 0, Math.PI);
+  // 지우 지도: 빈손 2P가 집을 것 없는 데서 Enter(1P는 자루를 멨다)
+  await hook(page, 'debugPlace', 'p0', 13.8, 0.8, Math.PI);
+  await hook(page, 'debugPlace', 'p1', 15, 0, Math.PI);
   await page.waitForTimeout(800);
-  await page.keyboard.press('KeyE');
+  await page.keyboard.press('Enter');
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `${OUT}/j_map.png` });
+  await page.keyboard.press('Enter');
+  // 현관 발판에서 자루를 풀어 두 선물을 꺼낸다
+  await hook(page, 'setTime', 0.1);
+  await hook(page, 'debugPlace', 'p0', 49.4, 0.2, Math.PI * 1.25);
+  await hook(page, 'debugPlace', 'p1', 47.6, 2.2, Math.PI * 1.25);
+  await page.waitForTimeout(1200);
   await page.keyboard.press('KeyE');
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `${OUT}/j_unpacked.png` });
   // 끝 장면
   await hook(page, 'debugWin');
   for (const t of [0.5, 2.5, 4.5, 6.5, 8.5, 10.5]) {
