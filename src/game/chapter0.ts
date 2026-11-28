@@ -101,7 +101,7 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
   }
   const markers = createMarkers();
   /**
-   * 0장 끝 장면(다 나누면): 물고기 자루(유나네)에 가장 가까운 요정이 자루 앞으로 걸어가 두 손으로 들어 등에 메고(1.2초),
+   * 0장 끝 장면(다 나누면): 1P(연결된 첫 요정)가 물고기 자루 앞으로 걸어가 두 손으로 들어 등에 메고(1.2초, 1장은 1P가 멘 채 시작),
    * 모두 유나네 골목 쪽을 보고 몇 걸음 → 1장. 화면만(판정과 무관). 방장·참가자 모두 같은 상태에서 같은 요정을 고른다
    */
   let ending: { clock: number; carrier: number; from: { x: number; z: number }; slung: boolean } | null = null;
@@ -435,12 +435,8 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
     let handY = 0;
     let handN = 0;
     if (sort.complete && !ending) {
-      const sack = markerOf('yuna');
-      let best = 0;
-      sw.players.forEach((p, i) => {
-        const b = sw.players[best]!;
-        if (p.connected && (!b.connected || Math.hypot(p.x - sack.x, p.z - sack.z) < Math.hypot(b.x - sack.x, b.z - sack.z))) best = i;
-      });
+      // 1P(연결된 첫 요정)가 메고 간다: 1장은 1P가 자루를 멘 채 시작한다
+      const best = Math.max(0, sw.players.findIndex((p) => p.connected));
       const b = shown.get(sw.players[best]!.id) ?? sw.players[best]!;
       ending = { clock: 0, carrier: best, from: { x: b.x, z: b.z }, slung: false };
     }

@@ -1,6 +1,7 @@
 // 1장 공간 그리기: 돌 아치 → 우편함 골목(양옆 집·우편함 무늬·화분) → 낮은 담 안 유나네 앞마당·창가.
 // 배치는 src/data/chapter1.ts만 따른다(판정과 같은 값). 사람(유나·지우)은 사용자 에셋을 받아 넣는다(지금은 창가에 실루엣 자리만).
 import * as THREE from 'three';
+import { drawPerson, YUNA_2D } from '../ui/people2d';
 import {
   ARCH,
   CH1_HOUSES,
@@ -24,7 +25,7 @@ import {
 } from '../data/chapter1';
 import { MAILBOX_SCALE, TOWN } from '../data/townScale';
 import type { Models } from './models';
-import { alleyHouse, berm, contactShadow, edgeFence, footprints, packedPath, roundedBox } from './plazaDressing';
+import { alleyHouse, berm, contactShadow, edgeFence, footprints, packedPath, roundedBox, stoneWall } from './plazaDressing';
 import { townLamp } from './plaza';
 import { kenneyProp } from './kenney';
 import { warmPool } from './winterLight';
@@ -231,15 +232,8 @@ function lowWall(a: { s: number; t: number }, b: { s: number; t: number }): THRE
   const pb = at(b.s, b.t);
   const len = pa.distanceTo(pb);
   const mid = pa.clone().add(pb).multiplyScalar(0.5);
-  const body = new THREE.Mesh(roundedBox(len, LOW_WALL_H, 0.5), std('#a89a86', { roughness: 0.95 }));
-  body.position.set(0, LOW_WALL_H / 2, 0);
-  g.add(body);
-  // 돌 줄눈(짙은 띠 둘)
-  for (const y of [0.55, 1.15]) {
-    const seam = new THREE.Mesh(new THREE.BoxGeometry(len * 0.98, 0.05, 0.52), std('#8a7d6a'));
-    seam.position.y = y;
-    g.add(seam);
-  }
+  // 크기·색이 다른 돌을 엇갈려 쌓은 담(예전: 회색 긴 상자 + 줄눈 띠 둘)
+  g.add(stoneWall(len, LOW_WALL_H, 0.5, Math.round(len * 7)));
   const cap = new THREE.Mesh(roundedBox(len + 0.1, 0.22, 0.7), snowMat);
   cap.position.y = LOW_WALL_H + 0.08;
   g.add(cap);
@@ -286,36 +280,78 @@ function bayWindow(): { group: THREE.Group; seat: THREE.Vector3; silhouette: THR
   const desk = new THREE.Mesh(new THREE.BoxGeometry(w * 0.85, 0.12, 0.7), std('#8a5a3a'));
   desk.position.set(0, sill + 0.05, depth - 0.55);
   g.add(desk);
-  // 유나 자리(사용자 에셋이 올 때까지 실루엣 판). 앞면(눈 있음)·뒷면(뒤통수)을 붙인 판을 돌려 "몸 돌리기"를 보인다
+  // 방 안 살림(단색 벽이던 것): 벽 액자, 책꽂이, 책상 스탠드
+  const frameTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = 96;
+    c.height = 72;
+    const x = c.getContext('2d')!;
+    x.fillStyle = '#8a5a3a';
+    x.fillRect(0, 0, 96, 72);
+    x.fillStyle = '#fff8e8';
+    x.fillRect(7, 7, 82, 58);
+    x.fillStyle = '#7fb6e8';
+    x.fillRect(7, 7, 82, 30);
+    x.fillStyle = '#e57a3a';
+    x.beginPath();
+    x.moveTo(30, 44);
+    x.lineTo(48, 26);
+    x.lineTo(66, 44);
+    x.fill();
+    x.fillStyle = '#f2c230';
+    x.fillRect(36, 44, 24, 18);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
+  const pic = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.52), new THREE.MeshBasicMaterial({ map: frameTex }));
+  pic.position.set(-w * 0.3, sill + h * 0.74, 0.04);
+  g.add(pic);
+  const shelf = new THREE.Group();
+  const wood = std('#9a6a44');
+  const sideBoard = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.06, 0.32), wood);
+  for (const y of [0, 0.42, 0.84]) {
+    const b = sideBoard.clone();
+    b.position.y = y;
+    shelf.add(b);
+  }
+  ['#d23a3a', '#2f6fd0', '#2f9a4a', '#f2c230', '#7a4ad0'].forEach((c, i) => {
+    const book = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.3 + (i % 2) * 0.06, 0.24), std(c));
+    book.position.set(-0.24 + i * 0.11, 0.18 + (i % 2) * 0.03, 0);
+    shelf.add(book);
+  });
+  shelf.position.set(w * 0.34, sill + h * 0.32, 0.2);
+  g.add(shelf);
+  const lamp = new THREE.Group();
+  const shade = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.22, 14, 1, true), std('#f4c86a', { emissive: '#ffcf7a', emissiveIntensity: 0.7, side: THREE.DoubleSide }));
+  shade.position.y = 0.42;
+  lamp.add(shade);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.4, 6), std('#3b3f4a'));
+  pole.position.y = 0.2;
+  lamp.add(pole);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), new THREE.MeshBasicMaterial({ color: '#fff3c4' }));
+  bulb.position.y = 0.36;
+  lamp.add(bulb);
+  lamp.position.set(-w * 0.36, sill + 0.11, depth - 0.6);
+  g.add(lamp);
+  // 유나 자리(사용자 에셋이 올 때까지 그림책 화풍 세움판)
   const yuna = new THREE.Group();
   yuna.name = 'yunaPlaceholder';
-  const sil = (color: string) => {
-    const head = new THREE.Shape();
-    head.absarc(0, 0.95, 0.42, 0, Math.PI * 2, false);
-    const body = new THREE.Shape();
-    body.moveTo(-0.75, 0);
-    body.quadraticCurveTo(-0.7, 0.55, 0, 0.6);
-    body.quadraticCurveTo(0.7, 0.55, 0.75, 0);
-    body.lineTo(-0.75, 0);
-    const tails = [-1, 1].map((sx) => {
-      const t = new THREE.Shape();
-      t.absarc(sx * 0.5, 0.85, 0.16, 0, Math.PI * 2, false);
-      return t;
-    });
-    return new THREE.Mesh(new THREE.ShapeGeometry([head, body, ...tails]), new THREE.MeshBasicMaterial({ color, side: THREE.FrontSide }));
+  // 그림책 화풍 유나(ui/people2d): 앞모습·뒷모습 판을 등지게 붙여 돌리면 "몸 돌리기"가 보인다(사람 에셋을 받으면 3D 인물로)
+  const card = (back: boolean) => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 256;
+    drawPerson(c.getContext('2d')!, YUNA_2D, 128, 256, 1.05, { back, mood: 1 });
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6), new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.5 }));
+    m.position.y = 0.8;
+    return m;
   };
-  const front = sil('#6a4430');
+  const front = card(false);
   front.position.z = 0.01;
   yuna.add(front);
-  const face = new THREE.Mesh(new THREE.CircleGeometry(0.33, 20), new THREE.MeshBasicMaterial({ color: '#f3cfb2' }));
-  face.position.set(0, 0.93, 0.015);
-  yuna.add(face);
-  for (const sx of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.CircleGeometry(0.05, 10), new THREE.MeshBasicMaterial({ color: '#1b1210' }));
-    eye.position.set(sx * 0.12, 0.98, 0.02);
-    yuna.add(eye);
-  }
-  const backSide = sil('#3a2418');
+  const backSide = card(true);
   backSide.rotation.y = Math.PI;
   backSide.position.z = -0.01;
   yuna.add(backSide);

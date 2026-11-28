@@ -1,12 +1,15 @@
 // 1장 시작 그림책(명세서 §4 1장 첫 문단): 대사·글자 없이 손과 소품만으로.
-//   ① 지우의 공책 귀퉁이에 유나(노란 소매, 작은 손)가 고래를 그린다 → 종이 끝에서 연필이 멈춘다(꼬리 그릴 자리가 없다)
-//   ② 지우(파란 소매, 큰 손)가 그 모습을 본다 → 빈 스케치북과 색연필을 그린 카드를 만든다, 받을 자리에 유나 얼굴
+//   ① 지우의 공책 귀퉁이에 이미 그려진 고래(종이 끝이라 꼬리가 없다) 옆에서 유나가 시무룩 → 지우가 그 모습을 본다
+//   ② 지우가 다 그린 카드(빈 스케치북 + 색연필 + 받을 자리의 유나 얼굴)를 들고 웃는다
+//   (2026-11-28 사용자: "그리는 과정은 어색, 인물을 보여 주고 그림은 다 그린 것으로". 인물은 그림책 화풍 상반신, ui/people2d)
 //   ③ 봉투에 산타 얼굴 우표 → ④ 빨간 우체통에 쏙 → ⑤ 같은 카드가 요정 손(초록 소매·뾰족 장갑)에 → 우편함 골목으로
-// 사람은 손과 소매만 그린다(사람 모델은 사용자 에셋으로 장면에 넣는다). 건너뛰기: 버튼·Esc.
+// 우체통·요정 장면은 손만 그린다. 건너뛰기: 버튼·Esc.
+
+import { drawPerson, JIWOO_2D, YUNA_2D } from './people2d';
 
 export const STORY = {
-  draw: [0.6, 4.6] as const, // 고래 그리기(꼬리 앞에서 멈춤)
-  stop: [4.6, 6.0] as const, // 연필이 멈칫
+  draw: [0.6, 3.4] as const, // 유나와 꼬리 없는 고래
+  stop: [3.4, 6.0] as const, // 지우가 본다
   card: [6.0, 9.6] as const, // 지우가 카드를 그림
   envelope: [9.6, 12.0] as const,
   mailbox: [12.0, 14.2] as const,
@@ -257,26 +260,21 @@ export function drawStory(g: CanvasRenderingContext2D, t: number, W = 960, H = 5
       for (let x = 200; x < 520; x += 8) g.lineTo(x, y + Math.sin(x * 0.2) * 3);
       g.stroke();
     }
-    const p = ease(seg(t, STORY.draw)) * 0.78; // 꼬리 앞(0.8)에서 멈춘다
-    drawWhale(g, 628, 340, 1.3, p, '#2f6fd0', false);
-    // 유나의 손(노란 소매, 작은 손)과 연필: 그리는 자리를 따라간다
-    const stopK = seg(t, STORY.stop);
-    const tipX = 628 + 1.3 * (p < 0.55 ? Math.cos(Math.PI * 0.95 - (p / 0.55) * Math.PI * 1.9) * 70 : 88);
-    const tipY = 340 + 1.3 * (p < 0.55 ? -Math.sin(Math.PI * 0.95 - (p / 0.55) * Math.PI * 1.9) * 30 : -10) - stopK * 14;
-    pencil(g, tipX, tipY, -0.9);
-    hand(g, tipX + 40, tipY + 40, 0.75, '#f2c230', null, 0.65);
-    // ② 지우(파란 소매, 큰 손)가 옆에서 본다
-    if (stopK > 0) {
-      g.globalAlpha = stopK;
-      hand(g, 120, 460, 1.0, '#2f6fd0', null, -0.4);
-      g.globalAlpha = 1;
-    }
+    // 다 그린 고래(종이 끝이라 꼬리 자리가 없다)
+    drawWhale(g, 628, 340, 1.3, 0.78, '#2f6fd0', false);
+    // 유나: 오른쪽 아래에서 고래를 보며 시무룩(연필을 쥔 채)
+    const inK = ease(seg(t, [0, 0.8]));
+    drawPerson(g, YUNA_2D, 830, 560 + (1 - inK) * 120, 1.05, { mood: t > 1.6 ? -1 : 0, look: -1 });
+    pencil(g, 760, 470, -0.9);
+    // 지우: 왼쪽 아래에서 들어와 유나를 본다
+    const stopK = ease(seg(t, STORY.stop));
+    if (stopK > 0) drawPerson(g, JIWOO_2D, 120, 560 + (1 - stopK) * 160, 1.1, { mood: 0, look: 1 });
   } else if (t < STORY.envelope[0]) {
-    // ② 카드를 그린다
-    drawCard(g, 260, 90, 440, 330, ease(seg(t, STORY.card)));
-    const k = seg(t, STORY.card);
-    pencil(g, 470 + Math.sin(k * 20) * 60, 220 + k * 120, -0.8, '#2f6fd0');
-    hand(g, 520 + Math.sin(k * 20) * 60, 270 + k * 120, 0.95, '#2f6fd0', null, 0.6);
+    // ② 다 그린 카드를 들고 웃는 지우
+    const k = ease(seg(t, [STORY.card[0], STORY.card[0] + 0.7]));
+    drawCard(g, 220, 70 + (1 - k) * 40, 440, 330, 1);
+    drawPerson(g, JIWOO_2D, 800, 560, 1.15, { mood: 1, look: -1 });
+    hand(g, 640, 400, 0.85, '#2f6fd0', null, 0.5);
   } else if (t < STORY.mailbox[0]) {
     // ③ 봉투에 넣고 산타 우표
     const k = seg(t, STORY.envelope);

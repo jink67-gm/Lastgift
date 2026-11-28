@@ -475,15 +475,56 @@ export function edgeFence(
 
 /** 지붕 두 면을 따라 얹은 둥근 눈(Tiny Treats 집: 용마루가 앞뒤(z) 방향, 모델 단위) */
 function roofSnow(): THREE.Group {
+  // 지붕 위쪽만 눈(처마 쪽은 주황 지붕이 보인다: 위에서 보면 지붕 전체가 흰 판이던 것) + 눈 위 작은 둔덕
   const g = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({ color: C.drift, roughness: 1 });
   for (const s of [-1, 1]) {
-    const slab = new THREE.Mesh(roundedBox(3.3, 0.34, 6.6), mat);
-    slab.position.set(s * 1.55, 4.42, 1.0);
+    const slab = new THREE.Mesh(roundedBox(2.3, 0.3, 6.4), mat);
+    slab.position.set(s * 1.12, 4.7, 1.0);
     slab.rotation.z = s * -0.56;
     g.add(slab);
+    for (const z of [-1.2, 1.1, 3.0]) {
+      const lump = new THREE.Mesh(new THREE.SphereGeometry(0.42, 10, 6), mat);
+      lump.scale.set(1.4, 0.35, 1.1);
+      lump.position.set(s * (0.95 + (z > 0 ? 0.2 : -0.1)), 4.98 - (z > 2 ? 0.12 : 0), 1.0 + z);
+      lump.rotation.z = s * -0.56;
+      g.add(lump);
+    }
   }
   return g;
+}
+
+/** 돌을 쌓은 담(크기·색이 조금씩 다른 돌을 줄마다 엇갈려, 한 덩어리). 원점 = 바닥 가운데, 길이는 x */
+export function stoneWall(len: number, h: number, d: number, seed = 1): THREE.Mesh {
+  let r = seed * 9301 + 49297;
+  const rand = () => ((r = (r * 16807) % 2147483647) / 2147483647);
+  const tones = ['#a89a86', '#9c8f7c', '#b3a690', '#958877'].map((c) => new THREE.Color(c));
+  const parts: THREE.BufferGeometry[] = [];
+  const rows = Math.max(2, Math.round(h / 0.36));
+  const rh = h / rows;
+  const m4 = new THREE.Matrix4();
+  for (let row = 0; row < rows; row++) {
+    let x = -len / 2 + (row % 2 ? -0.3 : 0);
+    while (x < len / 2) {
+      const w = 0.55 + rand() * 0.35;
+      const x0 = Math.max(-len / 2, x), x1 = Math.min(len / 2, x + w);
+      if (x1 - x0 > 0.1) {
+        const geo = roundedBox(x1 - x0 - 0.04, rh - 0.04, d + (rand() - 0.5) * 0.06).clone().toNonIndexed();
+        geo.applyMatrix4(m4.makeTranslation((x0 + x1) / 2, rh * (row + 0.5), (rand() - 0.5) * 0.05));
+        const t = tones[Math.floor(rand() * tones.length)]!;
+        const n = geo.attributes.position!.count;
+        const col = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) col.set([t.r, t.g, t.b], i * 3);
+        geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        parts.push(geo);
+      }
+      x += w;
+    }
+  }
+  const m = new THREE.Mesh(mergeGeometries(parts)!, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
 }
 
 export function alleyHouse(models: Models, h: { x: number; z: number; rotY: number; scale: number }): THREE.Object3D {

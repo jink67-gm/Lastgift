@@ -1,6 +1,8 @@
 // 1장 규칙(명세서 §5 1장). 방장만 계산한다. three.js·DOM 없음.
 //
-// - 가벼운 선물 둘(스케치북·색연필 통)은 혼자 들고 놓는다(core/carry).
+// - 0장에서 나눠 담은 물고기 자루(스케치북·색연필 통이 들어 있다)를 1P가 메고 시작한다(2026-11-28 사용자 결정).
+//   자루는 혼자 메고 내려놓고 다시 멜 수 있다(core/carry, 화면에서는 등에 멘다). 현관 발판에서 행동 → 두 선물을 꺼내
+//   현관에 놓는다(빈 자루는 그대로 멘다). 자루를 멘 요정은 손이 차서 지도를 펴지 못한다.
 // - 지우의 그림 지도: 빈손이고 집을 것이 가까이 없을 때 행동 버튼 → 지도를 편다(편 동안은 서서 읽는다). 한 번 더 → 접는다.
 //   선물을 든 요정은 손이 차서 지도를 펴지 못한다 → 한 명은 지도를 읽고 한 명은 찾아 걷게 된다.
 // - 유나네 앞마당(낮은 담 안)에 처음 들어서면 "찾았다"(한 번만).
@@ -20,6 +22,7 @@ import {
   LOOKOUT_R,
   LOOKOUTS,
   OUTSIDE_GATE,
+  PORCH,
   W,
   YUNA_EYE,
   ch1Colliders,
@@ -29,6 +32,10 @@ import {
 } from '../data/chapter1';
 
 export const CAMERA_YAW = Math.PI / 4;
+/** 물고기 자루(아이템 id) */
+export const SACK = 'sack';
+/** 자루에서 꺼낸 선물이 놓이는 자리(현관 발판 위, 왼쪽·오른쪽) */
+const UNPACK_OFF = [-0.55, 0.55];
 
 export interface Ch1Player extends PlayerState {
   id: string;
@@ -51,6 +58,8 @@ export interface Ch1State {
   seed: number;
   /** 현관에 놓은 선물 */
   placed: string[];
+  /** 스케치북·색연필 통이 아직 자루 속에 있다 */
+  packed: boolean;
   /** 둘 다 놓고 물러났다 */
   complete: boolean;
 }
@@ -111,6 +120,7 @@ export type Ch1Event =
   | { type: 'signal'; playerId: string; up: boolean }
   | { type: 'caught'; playerId: string }
   | { type: 'placed'; itemId: string }
+  | { type: 'unpack'; playerId: string }
   | { type: 'complete' };
 
 export type Ch1Action =
@@ -132,7 +142,12 @@ export function createChapter1(playerIds: readonly string[], seed = 1): Ch1State
       // 시작은 골목 쪽(화면 위)을 본다
       return { id, x: sp.x, z: sp.z, facing: Math.PI + Math.PI / 4, moving: false, connected: true, mapOpen: false, handUp: false, lastCover: null };
     }),
-    items: CH1_START.items.map((it) => ({ id: it.id, x: it.x, z: it.z, light: true, carriedBy: null })),
+    items: [
+      // 자루(1P가 멘다) + 자루 속 선물 둘(꺼내기 전에는 숨어 있고 집을 수 없다)
+      { id: SACK, x: CH1_START.spawns[0]!.x, z: CH1_START.spawns[0]!.z, light: true, carriedBy: playerIds[0] ?? null },
+      ...CH1_START.items.map((it) => ({ id: it.id, x: it.x, z: it.z, light: true, carriedBy: null })),
+    ],
+    packed: true,
     found: false,
     time: 0,
     seed,
@@ -152,7 +167,7 @@ export function planAction(s: Ch1State, playerId: string): Ch1Action {
     if (a.kind === 'drop') return inPorch(a) ? { kind: 'place', itemId: a.itemId } : { kind: 'drop', itemId: a.itemId };
     return { kind: 'blocked', itemId: held.id };
   }
-  const t = chooseTarget(p, s.items.filter((i) => !s.placed.includes(i.id)));
+  const t = chooseTarget(p, s.items.filter((i) => !s.placed.includes(i.id) && !(s.packed && i.id !== SACK)));
   if (t && Math.hypot(t.x - p.x, t.z - p.z) <= PICK_RANGE) return { kind: 'pick', itemId: t.id };
   // 망보는 자리: 손 들기/내리기
   if (lookoutAt(p)) return { kind: 'signal', up: !p.handUp };
@@ -174,6 +189,25 @@ export function step(state: Ch1State, inputs: Record<string, SewingInput>, dt: n
     } else if (a.kind === 'drop' || a.kind === 'place') {
       const me = s.players.find((q) => q.id === p.id)!;
       const plan = planCarry(p.id, me, s.items, COLLIDERS, CH1_BOUNDS);
+      if (a.kind === 'place' && a.itemId === SACK && plan.kind === 'drop') {
+        // 현관 발판: 자루에서 두 선물을 꺼내 발판 위에 나란히 놓는다(빈 자루는 그대로 멘다)
+        if (s.packed) {
+          const gifts = CH1_START.items.map((it) => it.id);
+          const at = (k: number) => W(PORCH.s, PORCH.t + UNPACK_OFF[k]!);
+          s = {
+            ...s,
+            packed: false,
+            items: s.items.map((i) => {
+              const k = gifts.indexOf(i.id as (typeof gifts)[number]);
+              return k >= 0 ? { ...i, ...at(k), carriedBy: null } : i;
+            }),
+            placed: [...new Set([...s.placed, ...gifts])],
+          };
+          fx.push({ type: 'unpack', playerId: p.id });
+          for (const id of gifts) fx.push({ type: 'placed', itemId: id });
+        }
+        continue;
+      }
       if (plan.kind === 'drop') {
         s = { ...s, items: applyAction(p.id, s.items, plan) as Item[] };
         fx.push({ type: 'drop', playerId: p.id, itemId: a.itemId });

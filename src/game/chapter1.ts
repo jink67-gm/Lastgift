@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { isAdmin } from '../ui/admin';
 import { addHaze, createBackdrop } from '../scene/backdrop';
 import { baseViewH, deadZone, frameFor, type Pt } from '../core/framing';
-import { createChapter1, gazeAt, lookoutAt, planAction, step, CAMERA_YAW, type Ch1Action, type Ch1Event, type Ch1State } from '../core/chapter1';
+import { createChapter1, gazeAt, lookoutAt, planAction, step, CAMERA_YAW, SACK, type Ch1Action, type Ch1Event, type Ch1State } from '../core/chapter1';
 import { AutoQuality, effectiveQuality, snowCount, type Quality } from '../core/quality';
 import type { SewingInput } from '../core/sewing';
 import { chapter } from '../data/chapters';
@@ -19,6 +19,7 @@ import { browserStorage, CheckpointStore, loadSettings, saveSettings } from '../
 import { createChapter1Scene, FROST_LAYER } from '../scene/chapter1';
 import { createElfAvatar } from '../scene/elfAvatar';
 import { createGift, createTargetRing } from '../scene/gifts';
+import { createSack } from '../scene/chapter0';
 import { createHoldTween, giftScale, holdSpan, placeOnGround, placeOnHands } from '../scene/hold';
 import type { Models } from '../scene/models';
 import { createOcclusionFader } from '../scene/occlusionFade';
@@ -292,6 +293,13 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     scene.add(r);
     return r;
   });
+  // 물고기 자루(0장에서 나눠 담은 것): 메면 등에(자루 목을 어깨에), 내려놓으면 땅에. 꺼낸 뒤에는 납작한 빈 자루
+  const sackRoot = new THREE.Group();
+  const sackBody = createSack('#2f6fd0', 1);
+  sackRoot.add(sackBody);
+  setShadows(sackRoot, true);
+  scene.add(sackRoot);
+  let sackOn = -1; // 자루를 멘 요정 번호(-1 = 땅)
   const gifts = new Map(
     CH1_START.items.map((g) => {
       const v = createGift(g.kind);
@@ -302,7 +310,8 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
       const span = holdSpan(v, ELF_SCALE);
       return [g.id, { v, span, outline: createOutline(v, 0.035) }] as const;
     }),
-  );
+  );  gifts.set(SACK, { v: sackRoot, span: 0.5, outline: createOutline(sackBody, 0.035) });
+
   // 지도를 편 요정의 손에 든 종이 지도(작게 접힌 종이 + 빨간 길)
   const paperMaps = PLAYERS.map(() => {
     const g = new THREE.Group();
@@ -429,10 +438,10 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
       const held = state.items.find((it) => it.carriedBy === p.id);
       const since = elapsed - (actAt.get(p.id) ?? -9);
       e.animate(elapsed, p.moving, {
-        carry: held || p.mapOpen ? 'light' : 'none',
+        carry: (held && held.id !== SACK) || p.mapOpen ? 'light' : 'none',
         act: since >= 0 && since < 0.35 ? since / 0.35 : 0,
         tired: false,
-        span: held ? gifts.get(held.id)!.span : p.mapOpen ? 0.42 / ELF_SCALE : undefined,
+        span: held && held.id !== SACK ? gifts.get(held.id)!.span : p.mapOpen ? 0.42 / ELF_SCALE : undefined,
       });
       e.root.updateMatrixWorld(true);
       // 지도: 편 요정 손 위 종이 + 화면 아래 모서리 그림
@@ -460,6 +469,23 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     for (const it of state.items) {
       const g = gifts.get(it.id)!;
       const idx = it.carriedBy ? state.players.findIndex((q) => q.id === it.carriedBy) : -1;
+      if (it.id === SACK) {
+        // 자루: 멘 요정이 바뀌면 그 요정 등으로(내려놓으면 땅으로). 꺼낸 뒤에는 납작한 빈 자루
+        if (idx !== sackOn) {
+          if (sackOn >= 0) elves[sackOn]!.backpack?.(null);
+          if (idx >= 0 && elves[idx]!.backpack?.(sackRoot) !== false) sackOn = idx;
+          else {
+            sackOn = -1;
+            scene.add(sackRoot);
+            sackRoot.quaternion.identity();
+            sackRoot.scale.setScalar(1);
+          }
+        }
+        if (sackOn < 0) placeOnGround(sackRoot, it.x, it.z);
+        sackBody.scale.set(state.packed ? 1 : 1.1, state.packed ? 1 : 0.5, state.packed ? 1 : 1.1);
+        continue;
+      }
+      g.v.visible = !state.packed; // 자루 속 선물은 꺼내기 전까지 보이지 않는다
       if (idx >= 0) {
         const e = elves[idx]!;
         const ps = shown.get(state.players[idx]!.id)!;
@@ -557,12 +583,13 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
   }
 
   /**
-   * 끝 장면(약 10초): 성에가 걷히고 사진기가 창가로 → 현관 선물이 사라진다(유나가 들여감) → 유나가 창가로 돌아와
-   * 새 스케치북을 펼치고 고래를 꼬리까지 그린다 → 번쩍 들어 올린다. 그리면 true(이번 프레임은 끝 장면으로 그렸다)
+   * 끝 장면(약 9초): 성에가 걷히고 사진기가 창가로 → 현관 선물이 사라진다(유나가 들여감) → 유나가 창가로 돌아와
+   * 새 스케치북에 다 그린 고래(꼬리까지)를 펼쳐 보이고 → 번쩍 들어 올린다(그리는 과정은 보여 주지 않는다: 2026-11-28 사용자).
+   * 그리면 true(이번 프레임은 끝 장면으로 그렸다)
    */
   function updateEnding(frame: number): boolean {
     ending += frame;
-    if (ending > 11) sto.next(); // 이야기 모드: 끝 장면 뒤 2장으로
+    if (ending > 9) sto.next(); // 이야기 모드: 끝 장면 뒤 2장으로
     const t = ending;
     const sg = (a: number, b: number) => Math.min(1, Math.max(0, (t - a) / (b - a)));
     const ez = (x: number) => x * x * (3 - 2 * x);
@@ -571,16 +598,15 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     (frost.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - sg(0, 1.2));
     // 현관 선물: 사라진다(들여감)
     const take = sg(0.8, 1.6);
-    for (const g of gifts.values()) g.v.scale.setScalar(Math.max(0.001, (1 - take) * (g.v.userData.baseScale as number)));
+    for (const [id, g] of gifts) if (id !== SACK) g.v.scale.setScalar(Math.max(0.001, (1 - take) * (g.v.userData.baseScale as number)));
     peekFrame.style.display = 'none';
     for (const h of hands) h.visible = false;
     document.body.classList.add('cutscene');
     // 유나: 창가로 돌아와 앉는다 → 그린다 → 든다
     space.setGaze(t < 1.6 ? 'away' : t < 2.4 ? 'turn' : 'look', t < 1.6 ? 0 : sg(1.6, 2.4), t);
     book.visible = t > 2.0;
-    const draw = ez(sg(2.6, 6.6));
-    drawBook(draw);
-    const lift = ez(sg(6.9, 7.8));
+    drawBook(1); // 다 그린 고래
+    const lift = ez(sg(3.6, 4.4));
     const base = space.yunaPlaceholder.position;
     book.position.set(0, base.y + 0.35 + lift * 1.15, 1.5 * 0.75 + 0.05);
     book.rotation.set(-1.0 * (1 - lift), 0, 0);

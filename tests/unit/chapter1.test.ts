@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createChapter1, planAction, step, type Ch1State } from '../../src/core/chapter1';
+import { createChapter1, planAction, SACK, step, type Ch1State } from '../../src/core/chapter1';
 import { ARCH, CH1_HOUSES, LANE_HALF, MAP_FEATURES, W, YARD, mailboxOf, toLane } from '../../src/data/chapter1';
 
 const DT = 1 / 60;
@@ -62,27 +62,30 @@ describe('1장 규칙', () => {
     const s = walkTo(createChapter1(['p0', 'p1']), 10, -12, 6).state;
     expect(toLane(s.players[0]!).t).toBeGreaterThan(-LANE_HALF);
   });
-  it('빈손이고 집을 것이 없을 때만 지도를 편다. 편 동안은 움직이지 않고, 한 번 더 누르면 접는다', () => {
+  it('빈손 요정(2P)은 지도를 편다. 편 동안은 움직이지 않고, 한 번 더 누르면 접는다', () => {
     let s = createChapter1(['p0', 'p1']);
-    // 시작 자리 발치에 선물이 있다 → 먼저 줍는다
-    expect(planAction(s, 'p0').kind).toBe('pick');
-    s = walkTo(s, 0, 0, 8).state; // 선물에서 멀리
-    expect(planAction(s, 'p0')).toEqual({ kind: 'map', open: true });
-    let r = step(s, { p0: { ...idle, actionDown: true }, p1: idle }, DT);
-    expect(r.events).toEqual([{ type: 'map', playerId: 'p0', open: true }]);
+    // 자루 속 선물은 집을 수 없다 → 2P는 빈손이라 지도를 편다
+    expect(planAction(s, 'p1')).toEqual({ kind: 'map', open: true });
+    let r = step(s, { p0: idle, p1: { ...idle, actionDown: true } }, DT);
+    expect(r.events).toEqual([{ type: 'map', playerId: 'p1', open: true }]);
     s = r.state;
-    const before = { ...s.players[0]! };
-    for (let i = 0; i < 30; i++) s = step(s, { p0: { ...idle, move: { x: 0, y: 1 } }, p1: idle }, DT).state;
-    expect(s.players[0]!.x).toBeCloseTo(before.x);
-    r = step(s, { p0: { ...idle, actionDown: true }, p1: idle }, DT);
-    expect(r.state.players[0]!.mapOpen).toBe(false);
+    const before = { ...s.players[1]! };
+    for (let i = 0; i < 30; i++) s = step(s, { p0: idle, p1: { ...idle, move: { x: 0, y: 1 } } }, DT).state;
+    expect(s.players[1]!.x).toBeCloseTo(before.x);
+    r = step(s, { p0: idle, p1: { ...idle, actionDown: true } }, DT);
+    expect(r.state.players[1]!.mapOpen).toBe(false);
   });
-  it('선물을 든 요정은 지도를 펴지 못한다(놓기만)', () => {
+  it('1P는 물고기 자루를 멘 채 시작하고, 자루를 멘 요정은 지도를 펴지 못한다(내려놓기만). 내려놓은 자루는 누구든 다시 멘다', () => {
     let s = createChapter1(['p0', 'p1']);
+    expect(s.packed).toBe(true);
+    expect(s.items.find((i) => i.id === SACK)!.carriedBy).toBe('p0');
+    expect(['drop', 'blocked']).toContain(planAction(s, 'p0').kind);
     s = step(s, { p0: { ...idle, actionDown: true }, p1: idle }, DT).state;
-    expect(s.items.some((i) => i.carriedBy === 'p0')).toBe(true);
-    const a = planAction(s, 'p0');
-    expect(['drop', 'blocked']).toContain(a.kind);
+    const sack = s.items.find((i) => i.id === SACK)!;
+    expect(sack.carriedBy).toBeNull();
+    s = at(s, 'p1', toLane(sack).s - 0.6, toLane(sack).t, 0);
+    s = { ...s, players: s.players.map((q) => (q.id === 'p1' ? { ...q, facing: Math.atan2(sack.x - q.x, sack.z - q.z) } : q)) };
+    expect(planAction(s, 'p1')).toEqual({ kind: 'pick', itemId: SACK });
   });
 });
 
@@ -126,9 +129,8 @@ describe('1장 망보기(04-4b)', () => {
     // 망보는 자리 둘 다 창에서 안 보인다
     for (const l of LOOKOUTS) expect(hiddenFromWindow(W(l.s, l.t))).toBe(true);
   });
-  it('창밖을 볼 때 드러난 요정은 마지막 엄폐물 뒤로(숨은 적 없으면 대문 밖), 든 선물도 같이. 시각은 계속 간다', () => {
+  it('창밖을 볼 때 드러난 요정은 마지막 엄폐물 뒤로(숨은 적 없으면 대문 밖), 멘 자루도 같이. 시각은 계속 간다', () => {
     let s = createChapter1(['p0', 'p1'], 7);
-    s = step(s, { p0: { ...idle, actionDown: true }, p1: idle }, DT).state; // 스케치북 들기
     const L = firstLook(7);
     s = { ...s, time: L - 0.2 };
     s = at(s, 'p0', 46, 0);
@@ -167,21 +169,21 @@ describe('1장 망보기(04-4b)', () => {
     for (let i = 0; i < 60; i++) s = step(s, { p0: idle, p1: { ...idle, move: { x: -1, y: 0 } } }, DT).state;
     expect(s.players[1]!.handUp).toBe(false);
   });
-  it('현관 발판에 놓으면 고정(다시 못 집음), 둘 다 놓고 모두 앞마당 밖으로 물러나면 완료(한 번만)', () => {
+  it('현관 발판에서 자루를 열면 두 선물을 꺼내 놓고(다시 못 집음, 빈 자루는 그대로 멘다), 모두 앞마당 밖으로 물러나면 완료(한 번만)', () => {
     let s = createChapter1(['p0', 'p1'], 7);
-    // 두 요정이 하나씩 들고 현관 앞에(유나가 보지 않는 동안)
-    s = step(s, { p0: { ...idle, actionDown: true }, p1: { ...idle, actionDown: true } }, DT).state;
-    expect(s.items.every((i) => i.carriedBy)).toBe(true);
     s = { ...s, time: 0 };
     const facePorch = Math.PI * 1.25; // 화면 위(집 쪽)를 본다
-    s = at(s, 'p0', PORCH.s - 0.75, PORCH.t - 0.6, facePorch);
-    s = at(s, 'p1', PORCH.s - 0.75, PORCH.t + 0.6, facePorch);
-    expect(planAction(s, 'p0').kind).toBe('place');
-    let r = step(s, { p0: { ...idle, actionDown: true }, p1: { ...idle, actionDown: true } }, DT);
+    s = at(s, 'p0', PORCH.s - 0.75, PORCH.t, facePorch);
+    expect(planAction(s, 'p0')).toEqual({ kind: 'place', itemId: SACK });
+    let r = step(s, { p0: { ...idle, actionDown: true }, p1: idle }, DT);
     s = r.state;
+    expect(r.events.filter((e) => e.type === 'unpack').length).toBe(1);
     expect(r.events.filter((e) => e.type === 'placed').length).toBe(2);
-    expect(s.items.every((i) => inPorch(i))).toBe(true);
-    expect(planAction(s, 'p0').kind).not.toBe('pick');
+    expect(s.packed).toBe(false);
+    expect(s.items.filter((i) => i.id !== SACK).every((i) => inPorch(i) && i.carriedBy === null)).toBe(true);
+    expect(s.items.find((i) => i.id === SACK)!.carriedBy).toBe('p0');
+    // 한 번 더 눌러도 다시 꺼내지 않는다
+    expect(step(s, { p0: { ...idle, actionDown: true }, p1: idle }, DT).events.some((e) => e.type === 'placed')).toBe(false);
     expect(s.complete).toBe(false); // 아직 앞마당 안
     s = at(s, 'p0', 40, 8);
     s = at(s, 'p1', 40, 9.5);
