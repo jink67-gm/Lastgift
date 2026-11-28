@@ -16,7 +16,7 @@ import {
   COVERS,
   GARDEN_PATH,
   SNOW_BUCKET,
-  CANS,
+  BELL_TARGET,
   GATES,
   GATE_HALF,
   LANDMARKS,
@@ -774,66 +774,81 @@ function snowBucket(): THREE.Group {
   return g;
 }
 
-/** 깡통 탑: 그루터기 위 깡통 여섯(3-2-1) + 꼭대기 빨간 리본. down(k): 무너지는 정도(0 쌓임 ~ 1 다 흩어짐) */
-function canTower(): { group: THREE.Group; topple(k: number): void } {
+/** 눈뭉치로 맞히는 종: 나무 기둥 둘 + 지붕 얹은 가로대 + 매달린 큰 금색 종(+ 빨간 리본·호랑가시). ring(k): 울린 뒤 지난 비율 0~1 */
+function bellFrame(): { group: THREE.Group; ring(k: number): void } {
   const g = new THREE.Group();
-  const bark = std('#6b4428', { roughness: 0.95 });
-  const ring = std('#d9b07a', { roughness: 0.9 });
-  const stump = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.65, 0.7, 14), bark);
-  stump.position.y = 0.35;
-  g.add(stump);
-  const top = new THREE.Mesh(new THREE.CircleGeometry(0.54, 18), ring);
-  top.rotation.x = -Math.PI / 2;
-  top.position.y = 0.705;
-  g.add(top);
-  const snowTop = new THREE.Mesh(new THREE.CircleGeometry(0.3, 14), snowMat);
-  snowTop.rotation.x = -Math.PI / 2;
-  snowTop.position.set(0.28, 0.71, 0.2);
-  g.add(snowTop);
-  const colors = ['#c8282e', '#2f8a4a', '#d9dde5', '#2f6fd0', '#e0b64e', '#c8282e'];
-  const rim = std('#b8bcc6', { roughness: 0.3, metalness: 0.8 });
-  const H = 0.36, R = 0.13;
-  const slots: [number, number][] = [[-0.29, 0], [0, 0], [0.29, 0], [-0.145, 1], [0.145, 1], [0, 2]];
-  const cans: { m: THREE.Group; home: THREE.Vector3; to: THREE.Vector3; spin: THREE.Vector3 }[] = [];
-  let r0 = 3;
-  const rnd = () => ((r0 = (r0 * 16807) % 2147483647) / 2147483647);
-  slots.forEach(([x, row], i) => {
-    const c = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(R, R, H, 14), std(colors[i]!, { roughness: 0.45, metalness: 0.35 }));
-    c.add(body);
-    for (const y of [H / 2, -H / 2]) {
-      const r = new THREE.Mesh(new THREE.TorusGeometry(R, 0.012, 5, 16), rim);
-      r.rotation.x = Math.PI / 2;
-      r.position.y = y;
-      c.add(r);
-    }
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.004, R + 0.004, 0.08, 14), std('#fffdf3', { roughness: 0.8 }));
-    c.add(band);
-    const home = new THREE.Vector3(x, 0.71 + H / 2 + row * H, 0);
-    c.position.copy(home);
-    g.add(c);
-    const a = rnd() * Math.PI * 2;
-    const d = 0.9 + rnd() * 0.9;
-    cans.push({ m: c, home, to: new THREE.Vector3(Math.cos(a) * d, R, Math.sin(a) * d), spin: new THREE.Vector3((rnd() - 0.5) * 6, rnd() * 4, Math.PI / 2) });
-  });
-  const bow = new THREE.Mesh(new THREE.TorusKnotGeometry(0.06, 0.02, 32, 5, 2, 3), std('#c8282e', { roughness: 0.5 }));
-  const topCan = cans[5]!.m;
-  bow.position.y = H / 2 + 0.05;
-  topCan.add(bow);
-  g.add(contactShadow(1.8, 1.8, 0.32));
+  const wood = std('#7a4a2a', { roughness: 0.9 });
+  const dark = std('#5a3620', { roughness: 0.9 });
+  const gold = std('#e0b64e', { roughness: 0.3, metalness: 0.75 });
+  const H = 3.2, half = 0.85;
+  for (const sx of [-1, 1]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, H, 0.2), wood);
+    post.position.set(sx * half, H / 2, 0);
+    g.add(post);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.12, 0.5), dark);
+    foot.position.set(sx * half, 0.06, 0);
+    g.add(foot);
+    // 비스듬한 버팀대
+    const brace = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.7, 0.1), dark);
+    brace.position.set(sx * (half - 0.22), H - 0.38, 0);
+    brace.rotation.z = sx * 0.6;
+    g.add(brace);
+  }
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(half * 2 + 0.5, 0.2, 0.26), wood);
+  beam.position.y = H;
+  g.add(beam);
+  // 작은 박공 지붕 + 눈
+  for (const sx of [-1, 1]) {
+    const roof = new THREE.Mesh(roundedBox(0.62, 0.07, half * 2 + 0.8), std('#b8322e', { roughness: 0.7 }));
+    roof.position.set(0, H + 0.3, sx * 0.24);
+    roof.rotation.order = 'YXZ';
+    roof.rotation.set(sx * 0.55, Math.PI / 2, 0);
+    g.add(roof);
+    const sn = new THREE.Mesh(roundedBox(0.5, 0.04, half * 2 + 0.6), snowMat);
+    sn.rotation.order = 'YXZ';
+    sn.rotation.set(sx * 0.55, Math.PI / 2, 0);
+    sn.position.set(0, H + 0.36, sx * 0.22);
+    g.add(sn);
+  }
+  // 매단 종(흔들리는 축 = 가로대 아래)
+  const swing = new THREE.Group();
+  swing.position.y = H - 0.1;
+  const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3, 6), dark);
+  rope.position.y = -0.15;
+  swing.add(rope);
+  const shape = new THREE.LatheGeometry(
+    [new THREE.Vector2(0.0, 0.0), new THREE.Vector2(0.5, 0.0), new THREE.Vector2(0.47, 0.08), new THREE.Vector2(0.34, 0.32), new THREE.Vector2(0.28, 0.6), new THREE.Vector2(0.16, 0.74), new THREE.Vector2(0.0, 0.76)],
+    22,
+  );
+  const bell = new THREE.Mesh(shape, gold);
+  bell.position.y = -1.06;
+  swing.add(bell);
+  const lip = new THREE.Mesh(new THREE.TorusGeometry(0.49, 0.035, 6, 22), gold);
+  lip.rotation.x = Math.PI / 2;
+  lip.position.y = -1.05;
+  swing.add(lip);
+  const clapper = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), dark);
+  clapper.position.y = -1.08;
+  swing.add(clapper);
+  // 빨간 리본 + 호랑가시 잎
+  const bow = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.04, 6, 12), std('#c8282e', { roughness: 0.5 }));
+  bow.scale.set(1.7, 1, 1);
+  bow.position.set(0, -0.36, 0.17);
+  swing.add(bow);
+  for (const sx of [-1, 1]) {
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), std('#2f7a4a'));
+    leaf.scale.set(1.6, 0.5, 0.4);
+    leaf.position.set(sx * 0.2, -0.42, 0.16);
+    leaf.rotation.z = sx * 0.4;
+    swing.add(leaf);
+  }
+  g.add(swing);
+  g.add(contactShadow(2.4, 1.2, 0.32));
   return {
     group: g,
-    topple(k) {
-      for (const c of cans) {
-        const u = Math.min(1, Math.max(0, k));
-        // 위로 튀었다가 떨어져 옆으로 누운다
-        c.m.position.set(
-          c.home.x + (c.to.x - c.home.x) * u,
-          c.home.y + (c.to.y - c.home.y) * u + Math.sin(u * Math.PI) * 0.6,
-          c.home.z + (c.to.z - c.home.z) * u,
-        );
-        c.m.rotation.set(c.spin.x * u * (u < 1 ? 1 : 0) + (u >= 1 ? 0 : 0), c.spin.y * u, c.spin.z * u);
-      }
+    ring(k) {
+      const a = k >= 1 || k < 0 ? 0 : Math.sin(k * Math.PI * 6) * 0.55 * (1 - k);
+      swing.rotation.x = a;
     },
   };
 }
@@ -853,8 +868,8 @@ export interface Ch1Scene {
   windowCenter: THREE.Vector3;
   /** 현관 계단 위 선물 두 자리(월드) */
   doorstep: THREE.Vector3[];
-  /** 깡통 탑 무너짐 정도(0 쌓임 ~ 1 흩어짐) */
-  toppleCans(k: number): void;
+  /** 종 흔들림(맞은 뒤 지난 비율 0~1, 1이면 멈춤) */
+  ringBell(k: number): void;
   /** 유나네 대문 열림 정도(0 닫힘 ~ 1 활짝) */
   setGateOpen(k: number): void;
   /** 잠긴 대문 덜컹(k: 0~1, 지난 비율) */
@@ -1047,15 +1062,15 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
       root.add(o);
     }
   }
-  // 눈뭉치 양동이(담 밖, 윗길 왼쪽)와 마당 왼쪽 구석 그루터기 위 깡통 탑
+  // 눈뭉치 양동이(담 밖, 윗길 왼쪽)와 마당 왼쪽 구석 나무틀에 매단 종
   const bucket = snowBucket();
   bucket.position.copy(at(SNOW_BUCKET.s, SNOW_BUCKET.t));
   root.add(bucket);
-  const cans = canTower();
-  cans.group.position.copy(at(CANS.s, CANS.t));
-  cans.group.rotation.y = YAW.back;
-  cans.group.userData.fadeable = true;
-  root.add(cans.group);
+  const bellT = bellFrame();
+  bellT.group.position.copy(at(BELL_TARGET.s, BELL_TARGET.t));
+  bellT.group.rotation.y = YAW.back; // 종 앞면이 사진기 쪽(대문 밖에서 던지는 쪽)
+  bellT.group.userData.fadeable = true;
+  root.add(bellT.group);
   // 현관 계단 위 선물 자리: 집 모델의 계단 윗면 높이를 아래로 쏘아 재고, 문 앞 왼쪽·오른쪽 두 자리
   const yunaHouse = CH1_HOUSES.find((h) => h.yuna)!;
   const door = doorOf(yunaHouse);
@@ -1084,8 +1099,8 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
   return {
     root,
     doorstep,
-    toppleCans(k) {
-      cans.topple(k);
+    ringBell(k) {
+      bellT.ring(k);
     },
     yunaSeat,
     yunaPlaceholder: sil,

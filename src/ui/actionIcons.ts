@@ -27,7 +27,7 @@ const SVG: Record<ActionIcon, string> = {
   mapClose: `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 10l14-4 14 4 14-4v30l-14 4-14-4-14 4z" fill="#fffdf3" stroke="#1b2433" stroke-width="2.5" stroke-linejoin="round" opacity="0.8"/><path d="M32 40v16m-7-7 7 7 7-7" fill="none" stroke="#ffd84a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   // 손 들기(망보기 신호 "지금 가"): 초록 동그라미 안 손
   signal: `<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="27" fill="#2f9a4a" stroke="#fff" stroke-width="3"/><g transform="translate(8 6) scale(0.75)">${HAND}</g></svg>`,
-  // 눈뭉치 만들기: 손 위 하얀 눈뭉치(1장: 깡통 탑을 맞혀 유나의 눈길을 끈다)
+  // 눈뭉치 만들기: 손 위 하얀 눈뭉치(1장: 매단 종을 맞혀 유나의 눈길을 끈다)
   snowball: `<svg viewBox="0 0 64 64" aria-hidden="true">${HAND}<circle cx="44" cy="16" r="11" fill="#fbfdff" stroke="#1b2433" stroke-width="2.5"/><path d="M38 13c2-2 5-3 8-2" fill="none" stroke="#9fb6d6" stroke-width="2" stroke-linecap="round"/></svg>`,
   // 던지기: 공 + 포물선 화살표(손 든 친구에게)
   throw: `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M14 46C20 14 44 10 54 30" fill="none" stroke="#ffd84a" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 7"/><path d="M47 28l7 3 2-8" fill="none" stroke="#ffd84a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14" cy="46" r="10" fill="#fff" stroke="#1b2433" stroke-width="2.5"/><path d="M14 36v20M5 43h18" stroke="#d23a3a" stroke-width="3"/></svg>`,

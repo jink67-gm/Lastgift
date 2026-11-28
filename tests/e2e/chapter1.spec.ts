@@ -138,11 +138,11 @@ test('1장 들키지 않기: 유나가 창밖을 볼 때 움직이면 화면이 
   await page.keyboard.down('Enter');
   await page.waitForTimeout(500);
   await page.keyboard.up('Enter');
-  await page.waitForFunction(() => (window as unknown as { __lastgift: Hook }).__lastgift.ch1Events().some((e) => e.type === 'cansHit' || e.type === 'splat'), null, { timeout: 10_000 });
+  await page.waitForFunction(() => (window as unknown as { __lastgift: Hook }).__lastgift.ch1Events().some((e) => e.type === 'bellHit' || e.type === 'splat'), null, { timeout: 10_000 });
   expect((await H(page, (h) => h.ch1Events())).some((e) => e.type === 'throw' && e.playerId === 'p1')).toBe(true);
   // 맞히면 유나가 창가를 떠난다(시험 창구로 바로 맞힌 경우도 확인)
   const ev = await H(page, (h) => h.ch1Events());
-  if (ev.some((e) => e.type === 'cansHit')) expect((await H(page, (h) => h.gaze())).phase).toBe('gone');
+  if (ev.some((e) => e.type === 'bellHit')) expect((await H(page, (h) => h.gaze())).phase).toBe('gone');
   expect(errors).toEqual([]);
 });
 

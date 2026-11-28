@@ -11,7 +11,7 @@ import { createChapter1, gazeOf, planAction, step, throwTarget, CAMERA_YAW, CAUG
 import { AutoQuality, effectiveQuality, snowCount, type Quality } from '../core/quality';
 import type { SewingInput } from '../core/sewing';
 import { chapter } from '../data/chapters';
-import { CANS as CANS_AT, CH1_BOUNDS, CH1_START, THROW, W, YARD, YUNA_WINDOW, toLane } from '../data/chapter1';
+import { BELL_TARGET, CH1_BOUNDS, CH1_START, THROW, W, YARD, YUNA_WINDOW, toLane } from '../data/chapter1';
 import { ELF_LOOKS } from '../data/elves';
 import { attachKeyboard, KeyState, KEYMAP_P1, KEYMAP_P2 } from '../input/keyboard';
 import { mergeIntents } from '../input/merge';
@@ -325,7 +325,7 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
   let foundAt = -1;
   let gateK = 0;
   let lastPhase: GazePhase = 'away';
-  let cansAt = -9;
+  let bellAt = -9;
   // 눈뭉치: 손에 쥔 것(요정마다), 날아가는 것, 떨어질 자리 표시(힘 모을 때), 떨어진 자국
   const snowMat = new THREE.MeshStandardMaterial({ color: '#fbfdff', roughness: 0.9 });
   const ballGeo = new THREE.SphereGeometry(0.16, 12, 9);
@@ -412,7 +412,7 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     if (e.type === 'pick' || e.type === 'drop') actAt.set(e.playerId, elapsed);
     if (e.type === 'found') foundAt = elapsed;
     if (e.type === 'gateLocked') rattles.set(e.gateId, elapsed);
-    if (e.type === 'cansHit') cansAt = elapsed;
+    if (e.type === 'bellHit') bellAt = elapsed;
     if (e.type === 'splat') {
       const m = new THREE.Mesh(new THREE.CircleGeometry(0.45, 14), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9, depthWrite: false }));
       m.rotation.x = -Math.PI / 2;
@@ -528,8 +528,8 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     // 유나가 일어나 돌아서기 시작하면 짧은 소리(무궁화 꽃이… 의 "피었습니다")
     if (gz.phase === 'turn' && lastPhase !== 'turn' && ending < 0) playSfx('tick');
     lastPhase = gz.phase;
-    // 깡통 탑: 맞으면 와르르(0.7초), 유나가 돌아오면 다시 쌓여 있다
-    space.toppleCans(state.cansDown ? Math.min(1, (elapsed - cansAt) / 0.7) : 0);
+    // 종: 눈뭉치에 맞으면 크게 흔들리다 잦아든다(1.6초)
+    space.ringBell(Math.min(1, (elapsed - bellAt) / 1.6));
     // 눈뭉치: 손에 쥔 것 · 힘 모을 때 떨어질 자리 · 날아가는 것 · 떨어진 자국
     state.players.forEach((p, i) => {
       const e = elves[i]!;
@@ -561,7 +561,9 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
       if (!b) return;
       const u = Math.min(1, b.t / b.dur);
       const dist = Math.hypot(b.x1 - b.x0, b.z1 - b.z0);
-      m.position.set(b.x0 + (b.x1 - b.x0) * u, 1.3 * ELF_SCALE * (1 - u) + 4 * (1 + dist * 0.12) * u * (1 - u), b.z0 + (b.z1 - b.z0) * u);
+      // 종에 맞는 눈뭉치는 종 높이에서 끝난다(빗나가면 땅까지)
+      const endY = b.hit ? BELL_TARGET.y : 0;
+      m.position.set(b.x0 + (b.x1 - b.x0) * u, 1.3 * ELF_SCALE * (1 - u) + endY * u + 4 * (1 + dist * 0.12) * u * (1 - u), b.z0 + (b.z1 - b.z0) * u);
     });
     for (let k = splats.length - 1; k >= 0; k--) {
       const sp = splats[k]!;
@@ -706,10 +708,10 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
       },
       gaze: () => gazeOf(state),
       fade: () => Number(fade.style.opacity),
-      /** 시험·촬영: 깡통 탑을 맞힌 것으로(유나가 창가를 떠난다) */
-      hitCans: () => {
-        const c = W(CANS_AT.s, CANS_AT.t);
-        state = { ...state, balls: [...(state.balls ?? []), { from: PLAYERS[1] ?? 'p0', x0: c.x, z0: c.z, x1: c.x, z1: c.z, t: 0, dur: 0.01 }] };
+      /** 시험·촬영: 종을 맞힌 것으로(유나가 창가를 떠난다) */
+      hitBell: () => {
+        const c = W(BELL_TARGET.s, BELL_TARGET.t);
+        state = { ...state, balls: [...(state.balls ?? []), { from: PLAYERS[1] ?? 'p0', x0: c.x, z0: c.z, x1: c.x, z1: c.z, t: 0, dur: 0.01, hit: true }] };
       },
       doorstep: () => space.doorstep.map((v) => ({ ...toLane({ x: v.x, z: v.z }), y: v.y })),
       setTime: (t: number) => {

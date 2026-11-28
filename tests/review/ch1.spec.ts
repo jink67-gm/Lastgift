@@ -68,7 +68,7 @@ test('1장 장면', async ({ page }) => {
   await page.screenshot({ path: `${OUT}/g3_crouch.png` });
   await page.keyboard.up('KeyC');
   await page.keyboard.up('ShiftRight');
-  // 눈뭉치: 2P가 담 밖 양동이에서 쥐고, 힘 모으기(떨어질 자리 표시) → 던지기 → 깡통 와르르
+  // 눈뭉치: 2P가 담 밖 양동이에서 쥐고, 힘 모으기(떨어질 자리 표시) → 던지기 → 종 댕그랑
   await hook(page, 'debugPlace', 'p0', 40.2, -4.6, Math.PI);
   await hook(page, 'debugPlace', 'p1', 40.8, -8.6, Math.PI * 1.25);
   await page.waitForTimeout(800);
@@ -83,10 +83,10 @@ test('1장 장면', async ({ page }) => {
   await page.screenshot({ path: `${OUT}/h2b_flying.png` });
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `${OUT}/h3_afterThrow.png` });
-  // (빗나갔어도 촬영용으로 깡통을 쓰러뜨린 장면: 시험 창구 cansHit)
-  await page.evaluate(() => (window as unknown as { __lastgift: { hitCans?(): void } }).__lastgift.hitCans?.());
-  await page.waitForTimeout(1200);
-  await page.screenshot({ path: `${OUT}/h3b_cansDown.png` });
+  // (빗나갔어도 촬영용으로 종을 맞힌 장면: 시험 창구 hitBell)
+  await page.evaluate(() => (window as unknown as { __lastgift: { hitBell?(): void } }).__lastgift.hitBell?.());
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${OUT}/h3b_bellRing.png` });
   await page.waitForTimeout(7000);
   // 들킴: 유나가 창밖을 볼 때 앞마당에서 걷는다 → 검은 화면
   await page.waitForTimeout(7000);
