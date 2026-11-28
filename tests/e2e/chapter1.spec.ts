@@ -90,22 +90,14 @@ test('1장 시작 그림책: 그동안 시계가 멈춰 있고, 건너뛰면 바
   expect((await H(page, (h) => h.run())).phase).toBe('play');
 });
 
-test('1장 망보기: 망보는 자리에서만 창을 엿보는 작은 화면, 손 신호, 창밖을 볼 때 드러나면 대문 밖으로', async ({ page }) => {
+test('1장 들키지 않기: 유나가 창밖을 볼 때 움직이면 화면이 까매졌다가 대문 앞, 담 밖 종을 울리면 유나가 자리를 비운다', async ({ page }) => {
   test.setTimeout(90_000);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/?chapter=1&test&noshadow&noestablish');
   await page.waitForFunction(() => !!(window as unknown as { __lastgift?: { ch1?: unknown } }).__lastgift?.ch1, null, { timeout: 30_000 });
-  await H(page, (h) => h.setTime(0.1));
-  await expect(page.locator('#peek')).toBeHidden();
-  // 2P가 담 밖 망보는 자리 → 작은 화면, Enter로 손 들기
-  await page.evaluate(() => (window as unknown as { __lastgift: Hook }).__lastgift.debugPlace('p1', 41.4, -5.2, Math.PI * 1.25));
-  await page.waitForTimeout(500);
-  await expect(page.locator('#peek')).toBeVisible();
-  await page.keyboard.press('Enter');
-  await page.waitForTimeout(300);
-  expect((await H(page, (h) => h.ch1())).players[1]!).toMatchObject({ handUp: true });
-  // 유나가 창밖을 보기 직전, 1P를 앞마당 한가운데에 → 들켜서 대문 밖으로
+  await expect(page.locator('#peek')).toHaveCount(0); // 예전 엿보기 작은 화면은 없다
+  // 유나가 창밖을 보기 시작한 직후로 시각을 맞추고, 앞마당 한가운데에서 1P가 오른쪽(D)으로 걷는다
   const look = await H(page, (h) => {
     for (let t = 0; t < 40; t += 0.02) {
       h.setTime(t);
@@ -116,15 +108,25 @@ test('1장 망보기: 망보는 자리에서만 창을 엿보는 작은 화면, 
   expect(look).toBeGreaterThan(0);
   await page.evaluate((t) => {
     const h = (window as unknown as { __lastgift: Hook }).__lastgift;
-    h.setTime(t - 0.3);
-    h.debugPlace('p0', 46.5, 1, Math.PI * 1.25);
+    h.setTime(t + 0.4);
+    h.debugPlace('p0', 46.5, 0, Math.PI * 1.25);
   }, look);
-  await page.waitForTimeout(900);
-  const ev = await H(page, (h) => h.ch1Events());
-  expect(ev.some((e) => e.type === 'caught' && e.playerId === 'p0')).toBe(true);
+  await page.keyboard.down('KeyD');
+  await page.waitForFunction(() => (window as unknown as { __lastgift: Hook }).__lastgift.ch1Events().some((e) => e.type === 'caught'), null, { timeout: 10_000 });
+  await page.keyboard.up('KeyD');
+  await page.waitForFunction(() => (window as unknown as { __lastgift: Hook & { fade(): number } }).__lastgift.fade() > 0.6, null, { timeout: 5_000 });
+  await page.waitForFunction(() => (window as unknown as { __lastgift: Hook & { fade(): number } }).__lastgift.fade() === 0, null, { timeout: 10_000 });
   const p0 = (await H(page, (h) => h.ch1())).players[0]!;
   const l = await page.evaluate(([x, z]) => (window as unknown as { __lastgift: Hook }).__lastgift.lane(x, z), [p0.x, p0.z] as const);
-  expect(l.s).toBeLessThan(42.5); // 대문 밖
+  expect(l.s).toBeLessThan(42.5); // 대문 앞(담 밖)
+  expect((await H(page, (h) => h.gaze())).phase).toBe('away');
+  // 2P가 담 밖 종 앞에서 Enter → 유나가 창가를 떠난다
+  await page.evaluate(() => (window as unknown as { __lastgift: Hook }).__lastgift.debugPlace('p1', 41.3, -7.2, Math.PI * 1.25));
+  await page.waitForTimeout(400);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(400);
+  expect((await H(page, (h) => h.ch1Events())).some((e) => e.type === 'bell' && e.playerId === 'p1')).toBe(true);
+  expect((await H(page, (h) => h.gaze())).phase).toBe('gone');
   expect(errors).toEqual([]);
 });
 

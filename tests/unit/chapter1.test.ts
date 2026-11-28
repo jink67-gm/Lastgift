@@ -140,8 +140,8 @@ describe('1장 규칙', () => {
   });
 });
 
-import { gazeAt, hiddenFromWindow, lookoutAt, GAZE } from '../../src/core/chapter1';
-import { COVERS, GARDEN_PATH, LOOKOUTS, OUTSIDE_GATE, PORCH, YUNA_EYE, inPorch } from '../../src/data/chapter1';
+import { atBell, gazeAt, gazeOf, hiddenFromWindow, CAUGHT_PAUSE, GAZE, LOOK_GRACE, YUNA_AWAY } from '../../src/core/chapter1';
+import { BELL, COVERS, GARDEN_PATH, OUTSIDE_GATE, PORCH, YUNA_EYE, inPorch } from '../../src/data/chapter1';
 
 /** 골목 좌표에 요정을 세운 상태 */
 function at(s: Ch1State, id: string, ls: number, lt: number, facing = Math.PI * 1.25): Ch1State {
@@ -153,9 +153,19 @@ function firstLook(seed: number): number {
   for (let t = 0; t < 30; t += 0.01) if (gazeAt(t, seed).phase === 'look') return t;
   return -1;
 }
+/** 대문을 열고, 창밖을 본 지 봐주는 시간이 지난 때로 맞춘 상태 */
+function looking(seed = 7): Ch1State {
+  const s = createChapter1(['p0', 'p1'], seed);
+  return { ...s, gateOpen: true, time: firstLook(seed) + LOOK_GRACE + 0.05 };
+}
+const walkRight = { ...idle, move: { x: 1, y: 0 } };
+const behind = (c: (typeof COVERS)[number]) => {
+  const ds = c.s - YUNA_EYE.s, dt = c.t - YUNA_EYE.t, l = Math.hypot(ds, dt);
+  return { s: c.s + (ds / l) * (c.r + 0.5), t: c.t + (dt / l) * (c.r + 0.5) };
+};
 
-describe('1장 망보기(04-4b)', () => {
-  it('유나 시선: 그림 → 몸 돌리기(예고 1초) → 창밖 보기 → 다시 그림, 시드마다 같은 순서', () => {
+describe('1장 들키지 않기(무궁화 꽃이 피었습니다 + 종)', () => {
+  it('유나 시선: 그림 → 일어나 돌아서기(예고 1초) → 창밖 보기 → 다시 그림, 시드마다 같은 순서', () => {
     const seen: string[] = [];
     for (let t = 0; t < 20; t += 0.05) {
       const p = gazeAt(t, 7).phase;
@@ -165,70 +175,79 @@ describe('1장 망보기(04-4b)', () => {
     const L = firstLook(7);
     expect(gazeAt(L - 0.5, 7).phase).toBe('turn');
     expect(GAZE.turn).toBeGreaterThanOrEqual(0.8);
-    expect(firstLook(7)).toBeCloseTo(firstLook(7));
     expect(firstLook(7)).not.toBeCloseTo(firstLook(8), 1);
   });
-  it('대문 → 현관 정원길은 비어 있다: 길 위 어느 점도 엄폐물(눈사람·나무·덤불·장작)에 막히지 않는다', () => {
-    for (let i = 0; i + 1 < GARDEN_PATH.length; i++) {
-      const a = GARDEN_PATH[i]!, b = GARDEN_PATH[i + 1]!;
-      for (let k = 0; k <= 10; k++) {
-        const ps = a.s + ((b.s - a.s) * k) / 10, pt = a.t + ((b.t - a.t) * k) / 10;
-        // 길목에 두지 않는다: 엄폐물 가장자리에서 길까지 1 m 넘게
-        for (const c of COVERS) expect(Math.hypot(ps - c.s, pt - c.t) - c.r, `${c.id} @${ps.toFixed(1)},${pt.toFixed(1)}`).toBeGreaterThan(1.0);
-      }
-    }
-  });
   it('창에서 보이는가: 엄폐물 바로 뒤·창 바로 아래·앞마당 밖은 안 보이고, 앞마당 한가운데는 보인다', () => {
-    const behind = (c: (typeof COVERS)[number]) => {
-      const ds = c.s - YUNA_EYE.s, dt = c.t - YUNA_EYE.t, l = Math.hypot(ds, dt);
-      return W(c.s + (ds / l) * (c.r + 0.5), c.t + (dt / l) * (c.r + 0.5));
-    };
-    for (const c of COVERS) expect(hiddenFromWindow(behind(c))).toBe(true);
+    for (const c of COVERS) {
+      const b = behind(c);
+      expect(hiddenFromWindow(W(b.s, b.t)), c.id).toBe(true);
+    }
     expect(hiddenFromWindow(W(46, 0))).toBe(false);
     expect(hiddenFromWindow(W(YUNA_EYE.s - 0.9, YUNA_EYE.t + 0.5))).toBe(true);
     expect(hiddenFromWindow(W(40, 0))).toBe(true);
-    // 망보는 자리 둘 다 창에서 안 보인다
-    for (const l of LOOKOUTS) expect(hiddenFromWindow(W(l.s, l.t))).toBe(true);
+    expect(hiddenFromWindow(W(BELL.s, BELL.t))).toBe(true); // 종은 담 밖
   });
-  it('창밖을 볼 때 드러난 요정은 마지막 엄폐물 뒤로(숨은 적 없으면 대문 밖), 멘 자루도 같이. 시각은 계속 간다', () => {
+  it('창밖을 보는 동안: 앞마당에서 움직이면 들키고, 멈춰 있으면 괜찮다', () => {
+    let s = at(looking(), 'p0', 46, 0);
+    s = at(s, 'p1', 46, 2);
+    const r = step(s, { p0: walkRight, p1: idle }, DT);
+    expect(r.events.filter((e) => e.type === 'caught').map((e) => (e as { playerId: string }).playerId)).toEqual(['p0']);
+    expect(r.state.caughtPause).toBeCloseTo(CAUGHT_PAUSE);
+  });
+  it('돌아본 첫 순간(봐주는 시간)에는 움직여도 괜찮다 — 돌아서는 걸 보고 멈출 틈', () => {
     let s = createChapter1(['p0', 'p1'], 7);
-    const L = firstLook(7);
-    s = { ...s, time: L - 0.2 };
-    s = at(s, 'p0', 46, 0);
-    let caught = false;
-    for (let i = 0; i < 30 && !caught; i++) {
-      const r = step(s, { p0: idle, p1: idle }, DT);
+    s = at({ ...s, gateOpen: true, time: firstLook(7) + 0.05 }, 'p0', 46, 0);
+    expect(step(s, { p0: walkRight, p1: idle }, DT).events.some((e) => e.type === 'caught')).toBe(false);
+  });
+  it('엄폐물 뒤에서는 움직여도 괜찮다, 앞마당 밖도 괜찮다', () => {
+    const c = COVERS[1]!;
+    const b = behind(c);
+    let s = at(looking(), 'p0', b.s, b.t);
+    s = at(s, 'p1', 40, -2);
+    const tiny = { ...idle, move: { x: 0.05, y: 0 } };
+    const r = step(s, { p0: tiny, p1: walkRight }, DT);
+    expect(r.events.some((e) => e.type === 'caught')).toBe(false);
+  });
+  it('들키면 검은 화면 동안 모두 멈추고, 가장 깜깜할 때 들킨 요정은 (멘 자루와 함께) 대문 앞으로. 밝아지면 유나는 다시 그림부터', () => {
+    let s = at(looking(), 'p0', 46, 0);
+    let r = step(s, { p0: walkRight, p1: idle }, DT);
+    s = r.state;
+    const p1Before = { ...s.players[1]! };
+    let t = 0;
+    let moved = false;
+    while (s.caughtPause > 0 && t < 5) {
+      r = step(s, { p0: walkRight, p1: walkRight }, DT);
       s = r.state;
-      caught = r.events.some((e) => e.type === 'caught' && e.playerId === 'p0');
+      t += DT;
+      if (Math.hypot(s.players[1]!.x - p1Before.x, s.players[1]!.z - p1Before.z) > 1e-6) moved = true;
     }
-    expect(caught).toBe(true);
+    expect(t).toBeGreaterThan(CAUGHT_PAUSE - 0.05);
+    expect(moved).toBe(false); // 암전 동안은 다른 요정도 멈춘다
     const back = W(OUTSIDE_GATE.s, OUTSIDE_GATE.t);
     expect(Math.hypot(s.players[0]!.x - back.x, s.players[0]!.z - back.z)).toBeLessThan(0.3);
     expect(s.items.find((i) => i.carriedBy === 'p0')!.x).toBeCloseTo(s.players[0]!.x);
-    expect(s.time).toBeGreaterThanOrEqual(L - 0.02);
+    expect(gazeOf(s).phase).toBe('away');
+    expect(s.caughtIds).toEqual([]);
   });
-  it('엄폐물 뒤에 숨었던 적이 있으면 그 자리로 돌아간다', () => {
-    let s = createChapter1(['p0', 'p1'], 7);
-    const c = COVERS[1]!;
-    const ds = c.s - YUNA_EYE.s, dt = c.t - YUNA_EYE.t, l = Math.hypot(ds, dt);
-    s = at(s, 'p0', c.s + (ds / l) * (c.r + 0.5), c.t + (dt / l) * (c.r + 0.5));
-    s = { ...s, time: 0.1 };
-    s = step(s, { p0: idle, p1: idle }, DT).state;
-    const hide = { ...s.players[0]!.lastCover! };
+  it('담 밖 종을 울리면 유나가 창가를 떠나(창이 빈다) 그동안은 움직여도 안 들킨다. 떠나 있는 동안은 다시 울려도 소용없고, 돌아오면 그림부터', () => {
+    let s = at(looking(), 'p1', BELL.s - 0.6, BELL.t);
+    expect(atBell(s.players[1]!)).toBe(true);
+    expect(planAction(s, 'p1')).toEqual({ kind: 'bell' });
+    const r = step(s, { p0: idle, p1: { ...idle, actionDown: true } }, DT);
+    expect(r.events).toEqual([{ type: 'bell', playerId: 'p1' }]);
+    s = r.state;
+    expect(gazeOf(s).phase).toBe('gone');
+    expect(planAction(s, 'p1').kind).not.toBe('bell');
     s = at(s, 'p0', 46, 0);
-    s = { ...s, time: firstLook(7) + 0.05 };
-    s = step(s, { p0: idle, p1: idle }, DT).state;
-    expect(Math.hypot(s.players[0]!.x - hide.x, s.players[0]!.z - hide.z)).toBeLessThan(0.05);
-  });
-  it('망보는 자리의 빈손 요정: 행동 버튼으로 손 들기·내리기, 자리를 떠나면 손을 내린다', () => {
-    let s = createChapter1(['p0', 'p1'], 7);
-    s = at(s, 'p1', LOOKOUTS[0].s, LOOKOUTS[0].t);
-    expect(lookoutAt(s.players[1]!)).not.toBeNull();
-    expect(planAction(s, 'p1')).toEqual({ kind: 'signal', up: true });
-    s = step(s, { p0: idle, p1: { ...idle, actionDown: true } }, DT).state;
-    expect(s.players[1]!.handUp).toBe(true);
-    for (let i = 0; i < 60; i++) s = step(s, { p0: idle, p1: { ...idle, move: { x: -1, y: 0 } } }, DT).state;
-    expect(s.players[1]!.handUp).toBe(false);
+    let caught = false;
+    for (let i = 0; i < Math.round((YUNA_AWAY - 0.2) / DT); i++) {
+      const q = step(s, { p0: { ...idle, move: { x: i % 120 < 60 ? 1 : -1, y: 0 } }, p1: idle }, DT);
+      s = q.state;
+      if (q.events.some((e) => e.type === 'caught')) caught = true;
+    }
+    expect(caught).toBe(false);
+    for (let i = 0; i < 30; i++) s = step(s, { p0: idle, p1: idle }, DT).state;
+    expect(gazeOf(s).phase).toBe('away');
   });
   it('현관 발판에서 자루를 열면 두 선물을 꺼내 놓고(다시 못 집음, 빈 자루는 그대로 멘다), 모두 앞마당 밖으로 물러나면 완료(한 번만)', () => {
     let s = createChapter1(['p0', 'p1'], 7);

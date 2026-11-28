@@ -7,16 +7,16 @@ import * as THREE from 'three';
 import { isAdmin } from '../ui/admin';
 import { addHaze, createBackdrop } from '../scene/backdrop';
 import { baseViewH, deadZone, frameFor, type Pt } from '../core/framing';
-import { createChapter1, gazeAt, lookoutAt, planAction, step, CAMERA_YAW, SACK, type Ch1Action, type Ch1Event, type Ch1State } from '../core/chapter1';
+import { createChapter1, gazeOf, planAction, step, CAMERA_YAW, CAUGHT_PAUSE, SACK, type Ch1Action, type Ch1Event, type Ch1State, type GazePhase } from '../core/chapter1';
 import { AutoQuality, effectiveQuality, snowCount, type Quality } from '../core/quality';
 import type { SewingInput } from '../core/sewing';
 import { chapter } from '../data/chapters';
-import { CH1_BOUNDS, CH1_START, W, YARD, toLane } from '../data/chapter1';
+import { CH1_BOUNDS, CH1_START, W, YARD, YUNA_WINDOW, toLane } from '../data/chapter1';
 import { ELF_LOOKS } from '../data/elves';
 import { attachKeyboard, KeyState, KEYMAP_P1, KEYMAP_P2 } from '../input/keyboard';
 import { mergeIntents } from '../input/merge';
 import { browserStorage, CheckpointStore, loadSettings, saveSettings } from '../save/store';
-import { createChapter1Scene, FROST_LAYER } from '../scene/chapter1';
+import { createChapter1Scene, FROST_LAYER, FROST_OPACITY } from '../scene/chapter1';
 import { createElfAvatar } from '../scene/elfAvatar';
 import { createGift, createTargetRing } from '../scene/gifts';
 import { createSack } from '../scene/chapter0';
@@ -28,7 +28,7 @@ import { createSnowfall } from '../scene/snowfall';
 import { createWinterLight, setShadows } from '../scene/winterLight';
 import { LocalRun } from '../session/localRun';
 import { createPlayMeter } from '../session/playMeter';
-import { sfxEvent } from '../audio/sfx';
+import { playSfx, sfxEvent } from '../audio/sfx';
 import type { TeamRun } from '../session/mirrorRun';
 import { playerBack, playerGone } from '../core/presence';
 import { IDLE_INTENT } from '../input/intent';
@@ -48,6 +48,8 @@ const ELF_SCALE = 1.2;
 /** 1장 화면 넓이 배율(광장 기준 구도 대비) */
 const VIEW_K = 1.3;
 const SIM_DT = 1 / 60;
+/** 사진기 쪽을 보는 방향(선물 앞면이 보이게) */
+const YAW_BACK = Math.PI / 4;
 /** 처음 몇 초: 갈림길 동네 전체를 한 화면(어느 집인지는 지도를 보고 가까이 가서 고른다) */
 const ESTABLISH = { ...W(19, -2), viewH: 52, sec: 3.6 };
 
@@ -69,10 +71,10 @@ export function chapter1Checkpoint(roomId: string) {
 function iconOf(a: Ch1Action): ActionIcon {
   if (a.kind === 'pick') return 'pick';
   if (a.kind === 'drop' || a.kind === 'place') return 'drop';
-  if (a.kind === 'signal') return a.up ? 'signal' : 'none';
   if (a.kind === 'blocked') return 'blocked';
   if (a.kind === 'map') return a.open ? 'map' : 'mapClose';
-  if (a.kind === 'gate') return 'latch'; // 유나네든 가짜 집이든 같은 그림(열어 봐야 안다)
+  if (a.kind === 'gate') return 'latch';
+  if (a.kind === 'bell') return 'bell'; // 유나네든 가짜 집이든 같은 그림(열어 봐야 안다)
   return 'none';
 }
 
@@ -101,16 +103,12 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
   addHaze(scene);
 
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 700);
-  camera.layers.enable(FROST_LAYER); // 큰 화면은 창 성에가 보인다(유나가 어디를 보는지 모른다)
-  // 망보는 자리에서 창을 들여다보는 작은 화면(성에 층을 빼고 그린다)
-  const peekCam = new THREE.PerspectiveCamera(34, 4 / 3, 0.1, 700);
-  const peekFrame = document.createElement('div');
-  peekFrame.id = 'peek';
-  peekFrame.style.cssText =
-    'position:fixed;z-index:14;pointer-events:none;display:none;border:5px solid #fff;border-radius:16px;box-shadow:0 6px 20px rgba(0,0,0,0.45);box-sizing:border-box';
-  peekFrame.innerHTML =
-    '<svg viewBox="0 0 64 40" style="position:absolute;left:-14px;top:-14px;width:44px;height:28px;background:#1b2433;border-radius:14px;border:3px solid #fff;padding:2px"><ellipse cx="32" cy="20" rx="26" ry="14" fill="#fff"/><circle cx="32" cy="20" r="8" fill="#1b2433"/></svg>';
-  document.body.appendChild(peekFrame);
+  camera.layers.enable(FROST_LAYER); // 창 성에(옅게): 유나가 일어나 돌아서는 모습은 누구나 보인다
+  // 들킴 암전(검은 화면): 상태의 caughtPause로 그린다(여러 기기에서도 같은 때 어두워진다)
+  const fade = document.createElement('div');
+  fade.id = 'caught-fade';
+  fade.style.cssText = 'position:fixed;inset:0;z-index:40;background:#000;opacity:0;pointer-events:none;transition:none';
+  document.body.appendChild(fade);
   const camOffset = new THREE.Vector3(Math.sin(CAMERA_YAW) * Math.cos(CAMERA_PITCH), Math.sin(CAMERA_PITCH), Math.cos(CAMERA_YAW) * Math.cos(CAMERA_PITCH)).multiplyScalar(60);
   // 기기 설정(동작 줄이기) 또는 게임 설정 「움직임 줄이기」
   const reduceMotion = (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false) || loadSettings(browserStorage()).noShake;
@@ -145,35 +143,6 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     t.colorSpace = THREE.SRGBColorSpace;
     return t;
   };
-  const handTex = signTex((g) => {
-    g.fillStyle = '#2f9a4a';
-    g.strokeStyle = '#fff';
-    g.lineWidth = 8;
-    g.beginPath();
-    g.arc(64, 64, 56, 0, Math.PI * 2);
-    g.fill();
-    g.stroke();
-    g.fillStyle = '#fff';
-    // 손바닥 + 손가락 넷 + 엄지
-    g.beginPath();
-    g.roundRect(42, 58, 44, 40, 12);
-    g.fill();
-    for (const [x, h] of [[44, 30], [55, 38], [66, 36], [77, 28]] as const) {
-      g.beginPath();
-      g.roundRect(x, 64 - h, 9, h + 6, 4.5);
-      g.fill();
-    }
-    g.beginPath();
-    g.roundRect(30, 66, 18, 9, 4.5);
-    g.fill();
-  });
-  const hands = PLAYERS.map(() => {
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: handTex, depthTest: false }));
-    sp.scale.setScalar(1.1);
-    sp.renderOrder = 30;
-    sp.visible = false;
-    return sp;
-  });
   const bangTex = signTex((g) => {
     g.fillStyle = '#e0342f';
     g.strokeStyle = '#fff';
@@ -276,7 +245,6 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
   net?.onEvents((evs) => {
     for (const e of evs as Ch1Event[]) onEvent(e);
   });
-  for (const h of hands) scene.add(h);
   scene.add(bang);
   space.yunaPlaceholder.parent?.add(book);
 
@@ -352,6 +320,8 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
   let elapsed = 0;
   let foundAt = -1;
   let gateK = 0;
+  let lastPhase: GazePhase = 'away';
+  let bellAt = -9;
   const rattles = new Map<string, number>();
   applyQuality();
 
@@ -418,7 +388,8 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     if (e.type === 'pick' || e.type === 'drop') actAt.set(e.playerId, elapsed);
     if (e.type === 'found') foundAt = elapsed;
     if (e.type === 'gateLocked') rattles.set(e.gateId, elapsed);
-    if (e.type === 'gateOpened' || e.type === 'gateLocked') {
+    if (e.type === 'bell') bellAt = elapsed;
+    if (e.type === 'gateOpened' || e.type === 'gateLocked' || e.type === 'bell') {
       const i = PLAYERS.indexOf(e.playerId);
       elves[i]?.act?.('Interact', { once: true });
     }
@@ -460,12 +431,7 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
         pm.rotateX(-0.6);
       }
       maps.set(i, p.mapOpen && (!net || p.id === ME), ELF_LOOKS[i]!.hat); // 여러 기기: 내 지도만 내 화면에
-      // 손 신호: 망보는 요정이 손을 흔들어 든다 + 머리 위 초록 손
-      const hs = hands[i]!;
-      hs.visible = p.handUp;
-      hs.position.set(ps.x, 2.25 * ELF_SCALE + Math.sin(elapsed * 6) * 0.05, ps.z);
-      if (p.handUp) e.act?.('Wave');
-      else if (elapsed - caughtAt > 0.7 || i !== caughtWho) e.act?.(null);
+      if (elapsed - caughtAt > 0.7 || i !== caughtWho) e.act?.(null);
       const a = run.canPlay ? planAction(state, p.id) : ({ kind: 'none' } as const);
       if (p.id === ME) mine = a;
       const ring = rings[i]!;
@@ -498,6 +464,13 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
         const e = elves[idx]!;
         const ps = shown.get(state.players[idx]!.id)!;
         placeOnHands(g.v, e.carryFrame?.(cf.pos, cf.quat) ? cf : null, ps, ELF_SCALE);
+      } else if (state.placed.includes(it.id)) {
+        // 현관에 놓은 선물: 계단 윗단, 문 바로 앞(눈밭 바닥이 아니라)
+        const k = CH1_START.items.findIndex((q) => q.id === it.id);
+        const d = space.doorstep[Math.max(0, k)]!;
+        placeOnGround(g.v, d.x, d.z);
+        g.v.position.y = d.y;
+        g.v.rotation.y = YAW_BACK + (k ? -0.25 : 0.2);
       } else placeOnGround(g.v, it.x, it.z);
       holdTween.apply(it.id, g.v, idx >= 0, elapsed);
     }
@@ -511,7 +484,11 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
       space.rattleGate(id, Math.min(1, rk));
       if (rk >= 1) rattles.delete(id);
     }
-    const gz = gazeAt(state.time, state.seed);
+    const gz = gazeOf(state);
+    // 유나가 일어나 돌아서기 시작하면 짧은 소리(무궁화 꽃이… 의 "피었습니다")
+    if (gz.phase === 'turn' && lastPhase !== 'turn' && ending < 0) playSfx('tick');
+    lastPhase = gz.phase;
+    space.ringBell(Math.min(1, (elapsed - bellAt) / 0.9));
     if (ending < 0) space.setGaze(gz.phase, gz.k, elapsed);
     else if (updateEnding(frame)) return;
     // 들킴: 창 위 빨간 느낌표
@@ -572,30 +549,9 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     for (const p of state.players) if (p.connected) pts.push(new THREE.Vector3(p.x, 0.5 * ELF_SCALE, p.z), new THREE.Vector3(p.x, 1.05 * ELF_SCALE, p.z));
     fader.update(pts, frame);
     renderer.render(scene, camera);
-    // 망보는 자리에 선 요정이 있으면: 그 자리에서 창을 들여다본 작은 화면(화면 위쪽 가운데)
-    const lookIdx = state.players.findIndex((p) => p.connected && lookoutAt(p));
-    if (lookIdx >= 0) {
-      const p = state.players[lookIdx]!;
-      const W0 = host.clientWidth, H0 = host.clientHeight;
-      const w = Math.round(Math.min(W0 * 0.34, 360));
-      const h = Math.round(w * 0.72);
-      const x = W0 - w - 14;
-      const top = 76;
-      const spot = lookoutAt(p)!;
-      const eye = W(spot.peek.s, spot.peek.t);
-      peekCam.aspect = w / h;
-      peekCam.position.set(eye.x, spot.peek.y, eye.z);
-      peekCam.lookAt(space.windowCenter);
-      peekCam.updateProjectionMatrix();
-      renderer.setScissorTest(true);
-      renderer.setScissor(x, H0 - top - h, w, h);
-      renderer.setViewport(x, H0 - top - h, w, h);
-      renderer.render(scene, peekCam);
-      renderer.setScissorTest(false);
-      renderer.setViewport(0, 0, W0, H0);
-      peekFrame.style.display = 'block';
-      Object.assign(peekFrame.style, { left: `${x}px`, top: `${top}px`, width: `${w}px`, height: `${h}px`, borderColor: ELF_LOOKS[lookIdx]!.hat });
-    } else peekFrame.style.display = 'none';
+    // 들킴 암전: 어두워짐(0.5초) → 깜깜(이때 대문 앞으로) → 밝아짐
+    const ct = state.caughtPause > 0 ? CAUGHT_PAUSE - state.caughtPause : -1;
+    fade.style.opacity = String(ct < 0 ? 0 : ct < 0.5 ? ct / 0.5 : ct < 0.9 ? 1 : Math.max(0, (CAUGHT_PAUSE - ct) / (CAUGHT_PAUSE - 0.9)));
   }
 
   /**
@@ -611,12 +567,11 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
     const ez = (x: number) => x * x * (3 - 2 * x);
     // 성에 걷힘
     const frost = space.frost as THREE.Mesh;
-    (frost.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - sg(0, 1.2));
+    (frost.material as THREE.MeshBasicMaterial).opacity = FROST_OPACITY * (1 - sg(0, 1.2));
     // 현관 선물: 사라진다(들여감)
     const take = sg(0.8, 1.6);
     for (const [id, g] of gifts) if (id !== SACK) g.v.scale.setScalar(Math.max(0.001, (1 - take) * (g.v.userData.baseScale as number)));
-    peekFrame.style.display = 'none';
-    for (const h of hands) h.visible = false;
+    fade.style.opacity = '0';
     fader.update([], frame); // 놀이 중 흐려 둔 담·집을 되돌린다(끝 장면 화면 옆에 반투명 유령이 남지 않게)
     document.body.classList.add('cutscene');
     // 유나: 창가로 돌아와 앉는다 → 그린다 → 든다
@@ -646,7 +601,7 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
   /** 앞세워 보여 줄 곳: 골목 끝 유나네 담(아직 못 찾았으면), 찾았으면 앞마당 */
   function goalOf(): Pt | null {
     // 찾기 전에는 사진기가 유나네 쪽을 앞세우지 않는다(어느 집인지 화면이 알려 주면 안 된다)
-    if (state.found) return W((YARD.front + YARD.back) / 2, 0);
+    if (state.found) return W(YARD.back + 2.2, YUNA_WINDOW.t + 2); // 유나 창가가 늘 화면에(무궁화 꽃: 돌아서는 게 보여야 한다)
     return null;
   }
 
@@ -666,9 +621,9 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
         onEvent(e);
         net?.emit([e]);
       },
-      gaze: () => gazeAt(state.time, state.seed),
-      peek: () => peekFrame.style.display === 'block',
-      peekInfo: () => ({ window: space.windowCenter.toArray(), lane: toLane({ x: space.windowCenter.x, z: space.windowCenter.z }), cam: peekCam.position.toArray() }),
+      gaze: () => gazeOf(state),
+      fade: () => Number(fade.style.opacity),
+      doorstep: () => space.doorstep.map((v) => ({ ...toLane({ x: v.x, z: v.z }), y: v.y })),
       setTime: (t: number) => {
         state = { ...state, time: t };
       },

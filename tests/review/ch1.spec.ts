@@ -34,7 +34,7 @@ test('1장 장면', async ({ page }) => {
     ['e5_rightB', 33, 22],
     ['f_yunaGate', 40.4, 7.4],
     ['g_inyard', 46, 8],
-    ['h_lookout_logs', 44.0, -3.3],
+    ['h_bell', 41.0, -6.0],
     ['i_porch', 50.2, 2.4],
   ];
   for (const [name, s, t] of spots) {
@@ -58,6 +58,37 @@ test('1장 장면', async ({ page }) => {
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `${OUT}/j_map.png` });
   await page.keyboard.press('Enter');
+  // 종: 2P가 담 밖 종 앞에서 Enter → 유나가 창가를 떠난다
+  await hook(page, 'debugPlace', 'p0', 40.2, -4.6, Math.PI);
+  await hook(page, 'debugPlace', 'p1', 41.3, -7.2, Math.PI * 1.25);
+  await page.waitForTimeout(800);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${OUT}/h2_bellRing.png` });
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `${OUT}/h3_yunaGone.png` });
+  // 들킴: 유나가 창밖을 볼 때 앞마당에서 걷는다 → 검은 화면
+  await page.waitForTimeout(7000);
+  const look = await page.evaluate(() => {
+    const h = (window as unknown as { __lastgift: { setTime(t: number): void; gaze(): { phase: string }; ch1(): { time: number } } }).__lastgift;
+    const t0 = h.ch1().time;
+    for (let t = t0; t < t0 + 40; t += 0.02) {
+      h.setTime(t);
+      if (h.gaze().phase === 'look') return t;
+    }
+    return -1;
+  });
+  await hook(page, 'setTime', look - 0.6);
+  await hook(page, 'debugPlace', 'p0', 46.5, 0, Math.PI);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${OUT}/h4_yunaLooks.png` });
+  await page.keyboard.down('KeyD');
+  await page.waitForFunction(() => (window as unknown as { __lastgift: { fade(): number } }).__lastgift.fade() > 0.9, null, { timeout: 15_000, polling: 16 });
+  await page.keyboard.up('KeyD');
+  await page.screenshot({ path: `${OUT}/h5_caughtFade.png` });
+  await page.waitForFunction(() => (window as unknown as { __lastgift: { fade(): number } }).__lastgift.fade() === 0, null, { timeout: 10_000 });
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${OUT}/h6_backAtGate.png` });
   // 현관 발판에서 자루를 풀어 두 선물을 꺼낸다
   await hook(page, 'setTime', 0.1);
   await hook(page, 'debugPlace', 'p0', 49.4, 0.2, Math.PI * 1.25);

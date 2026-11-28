@@ -169,6 +169,15 @@ export const LANDMARKS = {
   cornerTree: { s: 30.5, t: -18.5 },
 };
 
+/**
+ * 유나를 창가에서 떼어 놓는 종(2026-11-28 사용자: "유나의 시선을 돌릴 만한 미션을 하게 하자"):
+ * 유나네 앞 담 왼쪽 바깥(윗길 쪽) 기둥에 매단 썰매 방울 종. 담 밖에서 울리면 유나가 소리 나는 쪽(옆방)으로 가 창이 잠시 빈다.
+ * 한 명이 담 밖에서 울리고 나머지가 그 틈에 현관까지 — 혼자서도 울리고 뛰면 닿는 거리.
+ */
+export const BELL = { s: YARD.front - 0.6, t: -7.2 };
+/** 종 앞에서 행동 버튼이 닿는 거리 */
+export const BELL_REACH = 1.7;
+
 /** 시작: 아치 아래쪽 눈길(광장에서 걸어 들어온 자리). 두 선물은 요정 발치에 */
 export const CH1_START = {
   spawns: [W(-11, -1.1), W(-11, 1.1), W(-12.6, -1.6), W(-12.6, 1.6)],
@@ -289,6 +298,8 @@ function buildWalls(): Collider[] {
     const p = W(m.s, m.t);
     c.push({ kind: 'circle', x: p.x, z: p.z, r: 0.35 });
   }
+  const bp = W(BELL.s, BELL.t);
+  c.push({ kind: 'circle', x: bp.x, z: bp.z, r: 0.28 }); // 종 기둥
   const pb = W(LANDMARKS.postBox.s, LANDMARKS.postBox.t);
   c.push({ kind: 'circle', x: pb.x, z: pb.z, r: 0.6 });
   return c;
@@ -349,15 +360,6 @@ export const COVERS: readonly { id: 'snowman' | 'tree' | 'bush' | 'logs'; s: num
 
 /** 창 바로 아래(유나가 내려다보지 못하는 곳) */
 export const BLIND = { s0: YARD.back - 1.5, t0: YUNA_WINDOW.t - 2.0, t1: YUNA_WINDOW.t + 2.0 };
-
-/** 망보는 자리: 창이 정면으로 보이는 두 곳(담 밖 앞쪽, 앞마당 안 장작 더미 뒤) */
-export const LOOKOUTS = [
-  // peek: 그 자리에서 창을 엿보는 눈(담 위로 / 눈사람 옆으로 고개를 내민다)
-  { id: 'wall', s: 41.4, t: -5.2, peek: { s: 42.0, t: -5.0, y: 2.3 } },
-  { id: 'logs', s: 44.0, t: -3.3, peek: { s: 44.3, t: -3.35, y: 2.0 } },
-] as const;
-/** 망보는 자리로 보는 거리 */
-export const LOOKOUT_R = 1.1;
 
 /** 현관 발판(선물을 놓는 곳): 문 앞 */
 export const PORCH = { s: YARD.back - 0.9, t: 0.8 * HOUSE_SCALE, hs: 1.0, ht: 1.5 };

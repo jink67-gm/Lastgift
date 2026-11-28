@@ -228,6 +228,8 @@ export function sfxForEvent(e: { type: string; event?: { type: string } }): SfxN
     case 'gateOpened':
     case 'map':
       return 'click';
+    case 'bell':
+      return 'chime';
     case 'stockingChecked':
     case 'opened':
     case 'handover':

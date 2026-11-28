@@ -15,7 +15,7 @@ import {
   YUNA_WINDOW,
   COVERS,
   GARDEN_PATH,
-  LOOKOUTS,
+  BELL,
   GATES,
   GATE_HALF,
   LANDMARKS,
@@ -485,7 +485,7 @@ function bayWindow(): { group: THREE.Group; seat: THREE.Vector3; silhouette: THR
   rail.position.set(0, sill + 0.02, depth + 0.02);
   g.add(rail);
   // 성에: 멀리(큰 화면)서는 유리가 뿌옇게 보여 유나가 어디를 보는지 모른다. 망보는 자리의 작은 화면(층 0만)에서는 보이지 않는다
-  const frost = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.05, h - 0.05), new THREE.MeshBasicMaterial({ map: frostTexture(), transparent: true, opacity: 0.9, depthWrite: false }));
+  const frost = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.05, h - 0.05), new THREE.MeshBasicMaterial({ map: frostTexture(), transparent: true, opacity: FROST_OPACITY, depthWrite: false }));
   frost.position.set(0, sill + h / 2, depth + 0.03);
   frost.layers.set(FROST_LAYER);
   frost.renderOrder = 4;
@@ -532,6 +532,8 @@ function frostTexture(): THREE.CanvasTexture {
   return t;
 }
 
+/** 창 성에 진하기: 옅게(유나가 일어나 돌아서는 모습은 누구나 보인다) */
+export const FROST_OPACITY = 0.3;
 /** 큰 화면에만 보이는 층(창 성에) */
 export const FROST_LAYER = 1;
 
@@ -673,34 +675,53 @@ function logs(): THREE.Group {
   return g;
 }
 
-/** 망보는 자리 바닥 표시: 눈 모양(여기 서면 창 안이 보인다) */
-function eyeMark(): THREE.Mesh {
-  const c = document.createElement('canvas');
-  c.width = c.height = 128;
-  const g = c.getContext('2d')!;
-  g.fillStyle = 'rgba(255,255,255,0.0)';
-  g.fillRect(0, 0, 128, 128);
-  g.strokeStyle = 'rgba(60,90,140,0.7)';
-  g.lineWidth = 6;
-  g.setLineDash([10, 8]);
-  g.beginPath();
-  g.arc(64, 64, 56, 0, Math.PI * 2);
-  g.stroke();
-  g.setLineDash([]);
-  g.fillStyle = 'rgba(60,90,140,0.75)';
-  g.beginPath();
-  g.ellipse(64, 64, 34, 18, 0, 0, Math.PI * 2);
-  g.fill();
-  g.fillStyle = 'rgba(255,255,255,0.95)';
-  g.beginPath();
-  g.arc(64, 64, 11, 0, Math.PI * 2);
-  g.fill();
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false }));
-  m.rotation.x = -Math.PI / 2;
-  m.userData.flat = true;
-  return m;
+/** 종 기둥: 나무 기둥 + 위에서 앞으로 휜 쇠 팔 + 매달린 썰매 방울 다발(흔들림: swing) + 빨간 리본. 원점 = 기둥 밑 */
+function bellPost(): { group: THREE.Group; swing: THREE.Group } {
+  const g = new THREE.Group();
+  const wood = std('#6b4428', { roughness: 0.9 });
+  const iron = std('#2a2a2e', { roughness: 0.5, metalness: 0.5 });
+  const gold = std('#e0b64e', { roughness: 0.3, metalness: 0.75 });
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.14, 2.6, 10), wood);
+  post.position.y = 1.3;
+  g.add(post);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), snowMat);
+  cap.position.y = 2.6;
+  g.add(cap);
+  // 휜 팔(앞 = +z, 골목 쪽)
+  const arm = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.03, 6, 16, Math.PI / 2), iron);
+  arm.rotation.y = -Math.PI / 2;
+  arm.position.set(0, 2.15, 0.35);
+  g.add(arm);
+  const swing = new THREE.Group();
+  swing.position.set(0, 2.5, 0.7);
+  const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.4, 5), std('#c8282e'));
+  rope.position.y = -0.2;
+  swing.add(rope);
+  // 큰 종 하나 + 둘레 방울
+  const bellShape = new THREE.LatheGeometry(
+    [new THREE.Vector2(0.0, 0.0), new THREE.Vector2(0.26, 0.0), new THREE.Vector2(0.24, 0.06), new THREE.Vector2(0.17, 0.2), new THREE.Vector2(0.14, 0.36), new THREE.Vector2(0.08, 0.44), new THREE.Vector2(0.0, 0.46)],
+    18,
+  );
+  const big = new THREE.Mesh(bellShape, gold);
+  big.position.y = -0.88;
+  swing.add(big);
+  const clapper = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), iron);
+  clapper.position.y = -0.9;
+  swing.add(clapper);
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const j = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), gold);
+    j.position.set(Math.cos(a) * 0.2, -0.36 - (i % 2) * 0.06, Math.sin(a) * 0.2);
+    swing.add(j);
+  }
+  const bow = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.035, 6, 12), std('#c8282e'));
+  bow.position.y = -0.4;
+  bow.scale.set(1.6, 1, 1);
+  swing.add(bow);
+  g.add(swing);
+  g.add(contactShadow(0.9, 0.9, 0.3));
+  g.userData.fadeable = true;
+  return { group: g, swing };
 }
 
 export interface Ch1Scene {
@@ -713,9 +734,13 @@ export interface Ch1Scene {
   /** 창 성에(끝 장면에서 걷는다) */
   frost: THREE.Object3D;
   /** 창가 유나 자리 모습(사용자 에셋이 오기 전 실루엣): 유나 시선 단계 */
-  setGaze(phase: 'away' | 'turn' | 'look' | 'back', k: number, t: number): void;
+  setGaze(phase: 'away' | 'turn' | 'look' | 'back' | 'gone', k: number, t: number): void;
   /** 창 가운데(월드, 망보는 작은 화면이 보는 곳) */
   windowCenter: THREE.Vector3;
+  /** 현관 계단 위 선물 두 자리(월드) */
+  doorstep: THREE.Vector3[];
+  /** 종 흔들림(울린 뒤 지난 비율 0~1, 1이면 멈춤) */
+  ringBell(k: number): void;
   /** 유나네 대문 열림 정도(0 닫힘 ~ 1 활짝) */
   setGateOpen(k: number): void;
   /** 잠긴 대문 덜컹(k: 0~1, 지난 비율) */
@@ -768,10 +793,12 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
 
   // 집·우편함·화분
   const pots: Pot[] = [];
+  const houseMeshes: THREE.Object3D[] = [];
   for (const h of CH1_HOUSES) {
     const c = at(h.s, h.t);
     const house = alleyHouse(models, { x: c.x, z: c.z, rotY: faceYaw(h), scale: HOUSE_SCALE });
-    if (!h.yuna) house.userData.fadeable = true; // 앞쪽 집이 뒤 길의 요정을 가리면 흐려진다
+    if (!h.yuna) house.userData.fadeable = true;
+    else houseMeshes.push(house); // 앞쪽 집이 뒤 길의 요정을 가리면 흐려진다
     root.add(house);
     const m = mailboxOf(h);
     const mb = mailbox(models, h.mail);
@@ -910,21 +937,58 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
       root.add(o);
     }
   }
-  for (const l of LOOKOUTS) {
-    const m = eyeMark();
-    m.position.copy(at(l.s, l.t, 0.015));
-    root.add(m);
-  }
+  // 종 기둥(담 밖, 윗길 쪽): 나무 기둥 + 휜 팔 + 썰매 방울 다발 + 빨간 리본
+  const bell = bellPost();
+  bell.group.position.copy(at(BELL.s, BELL.t));
+  bell.group.rotation.y = YAW.back;
+  bell.group.scale.setScalar(1.45); // 멀리서도 보이게(담보다 높이 솟은 금색 종)
+  root.add(bell.group);
+  // 현관 계단 위 선물 자리: 집 모델의 계단 윗면 높이를 아래로 쏘아 재고, 문 앞 왼쪽·오른쪽 두 자리
+  const yunaHouse = CH1_HOUSES.find((h) => h.yuna)!;
+  const door = doorOf(yunaHouse);
+  root.updateMatrixWorld(true);
+  const ray = new THREE.Raycaster();
+  const stepTop = (s0: number, t0: number) => {
+    const p = at(s0, t0, 6);
+    ray.set(p, new THREE.Vector3(0, -1, 0));
+    // 처마·지붕은 건너뛰고 계단 윗면(낮은 곳)만
+    const hit = ray.intersectObjects(houseMeshes, true).find((h) => h.point.y < 1.6);
+    return hit ? hit.point.y : 0;
+  };
+  // 계단 윗단(집 모델에서 잰 높이 약 0.8)은 문 앞 t 약 -0.5 ~ 1.6에 걸쳐 있다 → 그 가운데 두 자리
+  const doorstep = [-0.5, 0.5].map((k) => {
+    const s0 = door.s - 0.8;
+    const t0 = 0.6 + k;
+    return at(s0, t0, stepTop(s0, t0) + 0.01);
+  });
   const windowCenter = win.group.localToWorld(new THREE.Vector3(0, YUNA_WINDOW.sill + YUNA_WINDOW.height / 2, 1.5));
   const sil = win.silhouette;
   const baseY = sil.position.y;
+  const baseX = sil.position.x;
   return {
     root,
+    doorstep,
+    ringBell(k) {
+      // 울린 직후 크게 흔들리다 잦아든다
+      const a = k >= 1 ? 0 : Math.sin(k * Math.PI * 7) * 0.5 * (1 - k);
+      bell.swing.rotation.z = a;
+    },
     yunaSeat,
     yunaPlaceholder: sil,
     frost: win.frost,
     windowCenter,
     setGaze(phase, k, t) {
+      // gone: 종 소리에 일어나 옆으로 걸어 나가 창이 빈다(처음 0.08·끝 0.08 동안 나가고 들어온다)
+      if (phase === 'gone') {
+        const out = Math.min(1, k / 0.08, (1 - k) / 0.08);
+        sil.rotation.y = Math.PI * 0.5;
+        sil.position.x = baseX + out * YUNA_WINDOW.width * 0.8;
+        sil.position.y = baseY;
+        sil.visible = out < 0.98;
+        return;
+      }
+      sil.visible = true;
+      sil.position.x = baseX;
       // away: 등을 보이고 고개 숙여 그림(살짝 들썩) / turn: 일어나며 돌아선다 / look: 창밖을 본다 / back: 다시 돌아앉는다
       const e = k * k * (3 - 2 * k);
       const turn = phase === 'away' ? 0 : phase === 'turn' ? e : phase === 'look' ? 1 : 1 - e;
