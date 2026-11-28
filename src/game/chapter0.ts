@@ -567,6 +567,13 @@ export function startChapter0(models: Models, opts?: StoryOptions): void {
       want = frameFor(sw.players.filter((p) => p.connected), goalOf(), aspect, CAMERA_YAW, CAMERA_PITCH);
       const held = deadZone(camTarget, want);
       want = { ...want, x: held.x, z: held.z };
+      if (ending) {
+        // 끝 장면: 자루를 메는 요정을 가까이(썰매·도토 뒤에 묻히지 않게), 출발하면 골목 쪽으로 조금 물러난다
+        const cr = elves[ending.carrier]!.root.position;
+        const go = Math.min(1, Math.max(0, (ending.clock - ENDING.go) / 1.2));
+        const mouth = PLAZA_DRESSING.alleyMouth;
+        want = { x: cr.x + (mouth.x - cr.x) * 0.25 * go, z: cr.z + (mouth.z - cr.z) * 0.25 * go, viewH: 6.5 + 4 * go };
+      }
       if (TEST_ZOOM !== 1) {
         // 확대 확인: 1P 몸 가운데(키 절반 높이)를 화면 가운데에
         const p0 = sw.players[0]!;
