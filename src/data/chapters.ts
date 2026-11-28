@@ -21,7 +21,7 @@ export const RUN_MS = 30 * MIN;
 
 export const CHAPTERS: readonly ChapterDef[] = [
   { id: 0, floorMs: 3 * MIN, memory: null, lightResetKeys: [] },
-  { id: 1, floorMs: 4 * MIN, memory: 1, lightResetKeys: [] },
+  { id: 1, floorMs: 5 * MIN, memory: 1, lightResetKeys: [] },
   { id: 2, floorMs: 5 * MIN, memory: 2, lightResetKeys: [] },
   { id: 3, floorMs: 5 * MIN, memory: 3, lightResetKeys: [] },
   // 4장: 시간 초과 시 스위치 쌍만 풀리고 전선·충전은 유지된다

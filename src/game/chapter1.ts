@@ -99,7 +99,7 @@ export function startChapter1(models: Models, opts?: StoryOptions): void {
   setShadows(space.root, true);
   scene.add(space.root);
   // 배경: 밤하늘·달·먼 언덕·숲·이웃집(놀이 공간과 사진기 쪽은 비운다)
-  scene.add(createBackdrop(models, { center: W(25, 0), forest: [16, 95], trees: 460, keepOut: (p) => { const l = toLane(p); return l.s > -48 && l.s < 75 && l.t > -40 && l.t < 36; } })); // 갈림길 동네 전체(먼 집·숲이 길을 덮지 않게)
+  scene.add(createBackdrop(models, { center: W(25, 0), forest: [16, 95], trees: 460, keepOut: (p) => { const l = toLane(p); return l.s > -48 && l.s < 85 && l.t > -40 && l.t < 36; } })); // 갈림길 동네 전체(먼 집·숲이 길을 덮지 않게)
   addHaze(scene);
 
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 700);

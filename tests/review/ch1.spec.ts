@@ -33,9 +33,10 @@ test('1장 장면', async ({ page }) => {
     ['e4_neighborC', 39.5, -17],
     ['e5_rightB', 33, 22],
     ['f_yunaGate', 40.4, 7.4],
-    ['g_inyard', 46, 8],
+    ['g_inyard', 47.5, 11.4],
+    ['g2_midyard', 52, 5],
     ['h_bell', 41.0, -6.0],
-    ['i_porch', 50.2, 2.4],
+    ['i_porch', 56.6, 3.0],
   ];
   for (const [name, s, t] of spots) {
     await hook(page, 'debugPlace', 'p0', s, t, Math.PI);
@@ -91,8 +92,8 @@ test('1장 장면', async ({ page }) => {
   await page.screenshot({ path: `${OUT}/h6_backAtGate.png` });
   // 현관 발판에서 자루를 풀어 두 선물을 꺼낸다
   await hook(page, 'setTime', 0.1);
-  await hook(page, 'debugPlace', 'p0', 49.4, 0.2, Math.PI * 1.25);
-  await hook(page, 'debugPlace', 'p1', 47.6, 2.2, Math.PI * 1.25);
+  await hook(page, 'debugPlace', 'p0', 56.8, 2.1, Math.PI * 1.25);
+  await hook(page, 'debugPlace', 'p1', 55.4, 6.0, Math.PI * 1.25);
   await page.waitForTimeout(1200);
   await page.keyboard.press('KeyE');
   await page.waitForTimeout(1500);

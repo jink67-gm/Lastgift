@@ -41,8 +41,13 @@ export const HOUSE_SCALE = TT_HOUSE_SCALE;
 export const HOUSE_HALF = { w: (5.9 * HOUSE_SCALE) / 2, d: (6.0 * HOUSE_SCALE) / 2 };
 /** 문: 집 모델 기준 +x(집을 마주 본 사람의 오른쪽)로 0.8 */
 const DOOR_OFF = 0.8 * HOUSE_SCALE;
+/** 유나네 집은 이웃보다 크다(2026-11-28 사용자: "집과 앞마당 크기를 키워서 더 스릴 있고 긴 콘텐츠로") */
+export const YUNA_HOUSE_K = 1.35;
+const YUNA_HALF = { w: HOUSE_HALF.w * YUNA_HOUSE_K, d: HOUSE_HALF.d * YUNA_HOUSE_K };
+/** 유나네 앞마당 깊이(담 ~ 집 앞면) */
+const YUNA_YARD_DEPTH = 17;
 /** 유나네 집 가운데(골목 좌표 s) */
-const YUNA_S = 57;
+const YUNA_S = 42.5 + YUNA_YARD_DEPTH + YUNA_HALF.d;
 
 /** 앞마당 깊이(집 앞면 ~ 골목 울타리). 사람 집 지붕이 골목을 덮지 않게 넉넉히 */
 export const YARD_DEPTH = 5;
@@ -83,7 +88,7 @@ export interface YardGate {
 }
 
 /** 유나네 앞마당: 낮은 담(사람 허리, 요정 키보다 높다) 앞면 s=front, 왼쪽 t=left ~ 오른쪽 t=right, 나무 대문 t=gate */
-export const YARD = { front: 42.5, back: YUNA_S - HOUSE_HALF.d, left: -9.5, right: 10.5, gate: [7.3, 9.9] as const };
+export const YARD = { front: 42.5, back: YUNA_S - YUNA_HALF.d, left: -11, right: 15, gate: [7.3, 9.9] as const };
 export const LOW_WALL_H = 1.6 * ELF_H;
 
 export const GATES: readonly YardGate[] = [
@@ -113,6 +118,11 @@ export const CH1_HOUSES: readonly Ch1House[] = [
   { id: 'yuna', s: YUNA_S, t: 0, faces: 'back', mail: 'fish', mailSide: 'left', pot: 'windmill', potSide: 'right', lowWall: true, yuna: true },
 ];
 
+/** 집 배율·반 크기·문 위치(유나네만 크다) */
+export const houseScaleOf = (h: Ch1House): number => HOUSE_SCALE * (h.yuna ? YUNA_HOUSE_K : 1);
+export const halfOf = (h: Ch1House): { w: number; d: number } => (h.yuna ? YUNA_HALF : HOUSE_HALF);
+const doorOff = (h: Ch1House): number => DOOR_OFF * (h.yuna ? YUNA_HOUSE_K : 1);
+
 export function houseById(id: string): Ch1House {
   return CH1_HOUSES.find((h) => h.id === id)!;
 }
@@ -129,7 +139,7 @@ export function housePoint(h: Ch1House, ahead: number, side: number): { s: numbe
 
 /** 집 앞면 바로 앞, 문 가운데(골목 좌표) */
 export function doorOf(h: Ch1House): { s: number; t: number } {
-  return housePoint(h, HOUSE_HALF.d, DOOR_OFF);
+  return housePoint(h, halfOf(h).d, doorOff(h));
 }
 
 /** 대문 가운데: 낮은 담 집은 담의 나무 대문, 아니면 골목 울타리의 작은 대문 */
@@ -157,11 +167,11 @@ export function mailboxOf(h: Ch1House): { s: number; t: number } {
 
 /** 화분 자리: 문 왼쪽·오른쪽 1.7, 앞면에서 0.7 앞 */
 export function potOf(h: Ch1House): { s: number; t: number } {
-  return housePoint(h, HOUSE_HALF.d + 0.7, DOOR_OFF + (h.potSide === 'left' ? -1.7 : 1.7));
+  return housePoint(h, halfOf(h).d + 0.7, doorOff(h) + (h.potSide === 'left' ? -1.7 : 1.7) * (h.yuna ? 1.6 : 1));
 }
 
 /** 유나 창가(돌출 창): 문 왼쪽, 사진기 쪽 앞면 */
-export const YUNA_WINDOW = { s: YUNA_S - HOUSE_HALF.d, t: -4.2, width: 3.4, sill: 2.3 * ELF_H, height: 2.6 * ELF_H };
+export const YUNA_WINDOW = { s: YUNA_S - YUNA_HALF.d, t: -4.2 * YUNA_HOUSE_K, width: 4.0, sill: 2.5 * ELF_H, height: 2.9 * ELF_H };
 
 /** 길잡이: 갈림길의 빨간 우체통(울타리 앞), 윗길 모퉁이의 큰 트리(빈 땅 안) */
 export const LANDMARKS = {
@@ -216,7 +226,7 @@ const P = (s: number, t: number): LP => ({ s, t });
 function houseBox(h: Ch1House): Collider {
   const c = W(h.s, h.t);
   const yaw = h.faces === 'back' ? YAW.back : h.faces === 'left' ? YAW.left : YAW.right;
-  return { kind: 'obb', x: c.x, z: c.z, yaw, ha: HOUSE_HALF.d + 0.2, hb: HOUSE_HALF.w + 0.2 };
+  return { kind: 'obb', x: c.x, z: c.z, yaw, ha: halfOf(h).d + 0.2, hb: halfOf(h).w + 0.2 };
 }
 
 /** 길 둘레 울타리(그리기·판정 공용): [시작, 끝, 바깥 방향 부호(울타리 바깥 눈둑)] */
@@ -245,7 +255,7 @@ export const STREET_FENCES: readonly [LP, LP][] = [
   [P(RU.s0, RU.t0), P(RU.s1, RU.t0)],
   // 윗길 위쪽: 이웃집 C 담과 유나네 담 사이, 유나네 담 오른쪽 끝 ~ 윗길 끝
   [P(U.s1, -12), P(U.s1, YARD.left)],
-  [P(U.s1, YARD.right), P(U.s1, U.t1)],
+  // (유나네 담이 윗길 오른쪽 끝보다 넓어 담 오른쪽 ~ 윗길 끝 사이 울타리는 없다)
 ];
 
 /** 낮은 돌담 조각(대문 자리는 비운다): [시작, 끝] */
@@ -340,29 +350,36 @@ export const YUNA_EYE = { s: YARD.back + 0.2, t: YUNA_WINDOW.t };
  */
 export const GARDEN_PATH: readonly { s: number; t: number }[] = [
   { s: YARD.front - 0.4, t: 8.6 },
-  { s: 45.0, t: 8.4 },
-  { s: 47.6, t: 6.4 },
-  { s: 49.3, t: 3.8 },
-  { s: YARD.back - 0.9, t: 1.8 },
+  { s: 45.6, t: 11.2 },
+  { s: 50.0, t: 11.8 },
+  { s: 54.0, t: 11.0 },
+  { s: 56.6, t: 8.0 },
+  { s: YARD.back - 2.6, t: 3.4 },
 ];
 
+/** 엄폐물 생김새 */
+export type CoverKind = 'snowman' | 'tree' | 'bush' | 'logs' | 'doghouse';
 /**
- * 앞마당 엄폐물(골목 좌표, 반지름). 정원길에서 2 m 넘게 떨어진 마당 안쪽에 선다: 숨으려면 길에서 벗어나 그 뒤(창 반대쪽)로 간다.
- * 눈사람(대문에서 비스듬히 안쪽) → 장식 나무(마당 가운데) → 덤불(현관 오른쪽 집 벽 밑), 창 앞 왼쪽 장작 더미. 요정보다 크다
+ * 앞마당 엄폐물(골목 좌표, 반지름). 정원길 옆 창 쪽에 띄엄띄엄(길 위는 비운다): 눈사람 → 개집 → 장식 나무 → 덤불 → 현관.
+ * 마당 가운데·왼쪽에도 몇 개(장식 나무·덤불·장작)(눈 더미는 어색해 뺐다): 길을 벗어나 숨어 가는 다른 길. 요정보다 크다.
+ * 넓은 마당(깊이 17 m): 유나가 한 번 그리는 동안 다 못 건넌다 → 숨었다 뛰었다를 되풀이하거나 종으로 유나를 떼어 놓는다.
  */
-export const COVERS: readonly { id: 'snowman' | 'tree' | 'bush' | 'logs'; s: number; t: number; r: number }[] = [
-  { id: 'snowman', s: 45.2, t: 5.6, r: 0.85 },
-  { id: 'tree', s: 47.2, t: 3.4, r: 0.95 },
-  { id: 'bush', s: 50.4, t: 6.0, r: 0.9 },
-  // 창 앞 왼쪽 장작 더미: 그 뒤가 앞마당 안 망보는 자리(창을 정면에서 엿본다)
-  { id: 'logs', s: 45.4, t: -3.6, r: 0.85 },
+export const COVERS: readonly { id: string; kind: CoverKind; s: number; t: number; r: number }[] = [
+  { id: 'snowman', kind: 'snowman', s: 46.4, t: 8.7, r: 0.85 },
+  { id: 'doghouse', kind: 'doghouse', s: 50.2, t: 9.2, r: 1.05 },
+  { id: 'treeA', kind: 'tree', s: 53.4, t: 8.0, r: 0.95 },
+  { id: 'bushA', kind: 'bush', s: 54.6, t: 4.6, r: 0.9 },
+  { id: 'treeB', kind: 'tree', s: 50.0, t: 3.0, r: 0.95 },
+  { id: 'bushB', kind: 'bush', s: 45.4, t: 3.4, r: 0.9 },
+  { id: 'logs', kind: 'logs', s: 47.4, t: -6.4, r: 0.85 },
+  { id: 'bushC', kind: 'bush', s: 53.8, t: -1.6, r: 0.95 },
 ];
 
 /** 창 바로 아래(유나가 내려다보지 못하는 곳) */
 export const BLIND = { s0: YARD.back - 1.5, t0: YUNA_WINDOW.t - 2.0, t1: YUNA_WINDOW.t + 2.0 };
 
 /** 현관 발판(선물을 놓는 곳): 문 앞 */
-export const PORCH = { s: YARD.back - 0.9, t: 0.8 * HOUSE_SCALE, hs: 1.0, ht: 1.5 };
+export const PORCH = { s: YARD.back - 1.9, t: DOOR_OFF * YUNA_HOUSE_K, hs: 1.2, ht: 1.8 };
 
 /** 들킨 요정이 돌아가는 곳: 엄폐물에 숨은 적이 없으면 대문 밖 */
 export const OUTSIDE_GATE = { s: YARD.front - 1.4, t: (YARD.gate[0] + YARD.gate[1]) / 2 };

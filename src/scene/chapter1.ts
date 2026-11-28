@@ -6,11 +6,11 @@ import {
   ARCH,
   CH1_HOUSES,
   HOUSE_HALF,
-  HOUSE_SCALE,
+  YUNA_HOUSE_K,
+  houseScaleOf,
   LANE_HALF,
   LOW_WALL_H,
   W,
-  YARD,
   YAW,
   YUNA_WINDOW,
   COVERS,
@@ -574,6 +574,72 @@ function gardenSnowman(models: Models): THREE.Group {
   return g;
 }
 
+/** 마당 개집: 판자 벽(두 가지 나무색 줄무늬) + 빨간 박공지붕 + 둥근 문 + 문패(뼈다귀) + 밥그릇. 요정보다 높다 */
+function doghouse(): THREE.Group {
+  const g = new THREE.Group();
+  const woodA = std('#b07a4a', { roughness: 0.85 });
+  const woodB = std('#9c6a3f', { roughness: 0.85 });
+  const roofM = std('#b8322e', { roughness: 0.7 });
+  const W0 = 1.7, D0 = 1.5, H0 = 1.15;
+  // 판자 벽: 가로 판자 줄을 번갈아
+  const rows = 6;
+  for (let i = 0; i < rows; i++) {
+    const p = new THREE.Mesh(roundedBox(W0, H0 / rows - 0.015, D0), i % 2 ? woodA : woodB);
+    p.position.y = 0.06 + (i + 0.5) * (H0 / rows);
+    g.add(p);
+  }
+  // 박공(앞뒤 삼각 벽)
+  const tri = new THREE.Shape();
+  tri.moveTo(-W0 / 2, 0);
+  tri.lineTo(W0 / 2, 0);
+  tri.lineTo(0, 0.62);
+  tri.closePath();
+  for (const z of [D0 / 2 - 0.04, -D0 / 2 - 0.04]) {
+    const gab = new THREE.Mesh(new THREE.ExtrudeGeometry(tri, { depth: 0.08, bevelEnabled: false }), woodA);
+    gab.position.set(0, 0.06 + H0, z);
+    g.add(gab);
+  }
+  // 지붕 두 판(처마가 살짝 나온다) + 그 위 얇게 앉은 눈
+  const slope = Math.atan2(0.62, W0 / 2);
+  const len = Math.hypot(W0 / 2, 0.62) + 0.22;
+  for (const sx of [-1, 1]) {
+    const r = new THREE.Mesh(roundedBox(len, 0.1, D0 + 0.35), roofM);
+    r.position.set(sx * (W0 / 4 + 0.04), 0.06 + H0 + 0.33, 0);
+    r.rotation.z = -sx * slope;
+    g.add(r);
+    const sn = new THREE.Mesh(roundedBox(len - 0.12, 0.05, D0 + 0.2), snowMat);
+    sn.position.set(sx * (W0 / 4 + 0.02), 0.06 + H0 + 0.4, 0);
+    sn.rotation.z = -sx * slope;
+    g.add(sn);
+  }
+  // 둥근 문(어두운 안쪽)
+  const door = new THREE.Mesh(new THREE.CircleGeometry(0.34, 20, 0, Math.PI), std('#2a1c14', { roughness: 1 }));
+  door.position.set(0, 0.5, D0 / 2 + 0.005);
+  g.add(door);
+  const doorLow = new THREE.Mesh(new THREE.PlaneGeometry(0.68, 0.44), std('#2a1c14', { roughness: 1 }));
+  doorLow.position.set(0, 0.28, D0 / 2 + 0.005);
+  g.add(doorLow);
+  // 문패: 하얀 뼈다귀
+  const bone = new THREE.Group();
+  const boneM = std('#f4efe2', { roughness: 0.6 });
+  const shaft = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.22, 4, 8), boneM);
+  shaft.rotation.z = Math.PI / 2;
+  bone.add(shaft);
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), boneM);
+    knob.position.set(sx * 0.15, sy * 0.035, 0);
+    bone.add(knob);
+  }
+  bone.position.set(0, 1.0, D0 / 2 + 0.05);
+  g.add(bone);
+  // 밥그릇
+  const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.15, 0.12, 16), std('#3f6fd1', { roughness: 0.5 }));
+  bowl.position.set(0.55, 0.06, D0 / 2 + 0.35);
+  g.add(bowl);
+  g.add(contactShadow(2.4, 2.2, 0.32));
+  return g;
+}
+
 /** 정원의 작은 장식 나무(Kenney CC0) */
 function gardenTree(models: Models): THREE.Group {
   const m = models.clone('treeDecorated');
@@ -796,7 +862,7 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
   const houseMeshes: THREE.Object3D[] = [];
   for (const h of CH1_HOUSES) {
     const c = at(h.s, h.t);
-    const house = alleyHouse(models, { x: c.x, z: c.z, rotY: faceYaw(h), scale: HOUSE_SCALE });
+    const house = alleyHouse(models, { x: c.x, z: c.z, rotY: faceYaw(h), scale: houseScaleOf(h) });
     if (!h.yuna) house.userData.fadeable = true;
     else houseMeshes.push(house); // 앞쪽 집이 뒤 길의 요정을 가리면 흐려진다
     root.add(house);
@@ -908,15 +974,15 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
 
   // 앞마당: 대문 → 현관 디딤돌 정원길(비워 둔다), 길옆 엄폐물(눈사람·장식 나무·덤불), 장작 더미, 현관 등
   root.add(steppingStones(GARDEN_PATH));
-  const makers = { snowman: () => gardenSnowman(models), tree: () => gardenTree(models), bush: gardenBush, logs } as const;
+  const makers = { snowman: () => gardenSnowman(models), tree: () => gardenTree(models), bush: gardenBush, logs, doghouse } as const;
   for (const c of COVERS) {
-    const o = makers[c.id]();
+    const o = makers[c.kind]();
     o.position.copy(at(c.s, c.t));
-    o.rotation.y = YAW.back + (c.id === 'snowman' ? -0.5 : 0);
+    o.rotation.y = YAW.back + (c.kind === 'snowman' ? -0.5 : c.kind === 'doghouse' ? -0.35 : 0);
     o.userData.fadeable = true;
     root.add(o);
   }
-  // 현관 양옆 등(Kenney CC0), 담 밑 눈더미
+  // 현관 양옆 등(Kenney CC0)
   {
     const yuna = CH1_HOUSES.find((h) => h.yuna)!;
     const d = doorOf(yuna);
@@ -924,16 +990,7 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
       const l = models.clone('lantern');
       if (!l) break;
       const o = fitHeight(l, 0.9);
-      o.position.copy(at(d.s - 0.5, d.t + k));
-      root.add(o);
-    }
-    for (const [ps, pt, sc] of [[43.3, -8.3, 1.3], [46.5, 9.8, 1.0], [43.2, 3.5, 1.1], [YARD.back - 1.2, -8.6, 1.2]] as const) {
-      const sp = models.clone('snowPile');
-      if (!sp) break;
-      const o = fitHeight(sp, 0.55 * sc);
-      o.scale.multiplyScalar(1);
-      o.position.copy(at(ps, pt));
-      o.rotation.y = ps * 1.7;
+      o.position.copy(at(d.s - 0.5 * YUNA_HOUSE_K, d.t + k * YUNA_HOUSE_K));
       root.add(o);
     }
   }
@@ -956,9 +1013,10 @@ export function createChapter1Scene(models: Models, base: string, detail: Detail
     return hit ? hit.point.y : 0;
   };
   // 계단 윗단(집 모델에서 잰 높이 약 0.8)은 문 앞 t 약 -0.5 ~ 1.6에 걸쳐 있다 → 그 가운데 두 자리
-  const doorstep = [-0.5, 0.5].map((k) => {
-    const s0 = door.s - 0.8;
-    const t0 = 0.6 + k;
+  const kk = YUNA_HOUSE_K;
+  const doorstep = [-0.55, 0.55].map((k) => {
+    const s0 = door.s - 0.8 * kk;
+    const t0 = 0.6 * kk + k;
     return at(s0, t0, stepTop(s0, t0) + 0.01);
   });
   const windowCenter = win.group.localToWorld(new THREE.Vector3(0, YUNA_WINDOW.sill + YUNA_WINDOW.height / 2, 1.5));

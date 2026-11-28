@@ -83,7 +83,7 @@ test('1장 시작 그림책: 그동안 시계가 멈춰 있고, 건너뛰면 바
   await page.waitForTimeout(2500);
   expect(await H(page, (h) => h.story())).toBeGreaterThan(1);
   expect((await H(page, (h) => h.run())).phase).toBe('lobby');
-  await expect(page.locator('#hud .timer .t')).toHaveText('04:00');
+  await expect(page.locator('#hud .timer .t')).toHaveText('05:00');
   await page.locator('#storybook button').click();
   await page.waitForFunction(() => (window as unknown as { __lastgift: Hook }).__lastgift.story() === null);
   await expect(page.locator('#storybook')).toHaveCount(0);
@@ -140,8 +140,8 @@ test('1장 배달: 현관에서 자루를 풀어 두 선물을 놓고 모두 물
   await page.evaluate(() => {
     const h = (window as unknown as { __lastgift: Hook }).__lastgift;
     h.setTime(0.1);
-    h.debugPlace('p0', 49.4, 0.2, Math.PI * 1.25);
-    h.debugPlace('p1', 49.4, 1.6, Math.PI * 1.25);
+    h.debugPlace('p0', 56.8, 1.6, Math.PI * 1.25);
+    h.debugPlace('p1', 56.8, 3.0, Math.PI * 1.25);
   });
   await page.waitForTimeout(500);
   await page.keyboard.press('KeyE');
